@@ -18,23 +18,21 @@ class EquidistantAxis:
             return self._coords[idx % self._num_points]
         return self._coords[idx]
 
+    def get_coordinate(self, idx):
+        return self[idx]
+
     @property
     def coords(self):
         return self._coords
 
 
-class Grid:
+class ChebyshevAxis:
 
-    def __init__(self, *axes):
-        self.axes = axes
-        self.ndims = len(axes)
+    def __init__(self):
+        raise NotImplementedError
 
-    def get_axis(self, idx=0):
-        return self.axes[idx]
 
-    def __getitem__(self, inds):
-        if self.ndims == 1:
-            return self.axes[0][inds]
-        return np.array(
-            tuple(self.axes[k][inds[k]] for k in range(self.ndims))
-        )
+class LogAxis:
+
+    def __init__(self):
+        raise NotImplementedError

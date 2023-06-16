@@ -3,9 +3,8 @@ import unittest
 import numpy as np
 import numpy.testing as npt
 
-from numgrids.equidistant import Grid, EquidistantAxis
-
-nx = 11
+from numgrids.grids import Grid
+from numgrids.axes import EquidistantAxis
 
 
 class TestEquidistantAxis(unittest.TestCase):
@@ -16,6 +15,7 @@ class TestEquidistantAxis(unittest.TestCase):
         self.assertEqual(11, len(axis))
         self.assertEqual(-3, axis[0])
         self.assertEqual(-2, axis[1])
+        self.assertEqual(axis[1], axis.get_coordinate(1))
         npt.assert_array_almost_equal(np.linspace(-3, 7, 11), axis.coords)
 
         with self.assertRaises(IndexError):
@@ -32,8 +32,6 @@ class TestEquidistantAxis(unittest.TestCase):
 
         self.assertEqual(axis[0], axis[11])
         self.assertEqual(axis[1], axis[12])
-
-
 
 
 class TestGridEquidistant(unittest.TestCase):
@@ -85,3 +83,22 @@ class TestGridEquidistant(unittest.TestCase):
         with self.assertRaises(IndexError):
             npt.assert_array_almost_equal(grid[0, 0], grid[0, 11])
 
+    def test_use_a_grid(self):
+        nx = ny = 11
+        x_axis = EquidistantAxis(nx, -3, 7, periodic=True)
+        y_axis = EquidistantAxis(ny, -3, 7)
+        grid = Grid(x_axis, y_axis)
+        x, y = grid.coords
+
+        X, Y = grid.meshed_coords
+
+        f = X**2 + Y**2
+
+        npt.assert_array_almost_equal(x_axis.coords, x)
+        npt.assert_array_almost_equal(y_axis.coords, y)
+
+        X_, Y_ = np.meshgrid(x, y, indexing="ij")
+        npt.assert_array_almost_equal(X, X_)
+        npt.assert_array_almost_equal(Y, Y_)
+
+        npt.assert_array_almost_equal(f, X_**2 + Y_**2)
