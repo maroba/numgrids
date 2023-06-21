@@ -6,7 +6,7 @@ class EquidistantAxis:
     def __init__(self, num_points, low=0, high=1, periodic=False):
         assert high > low
         self._num_points = num_points
-        self._coords_internal = np.linspace(0, 1, num_points)
+        self._coords_internal = np.linspace(0, 1, num_points, endpoint=not periodic)
         self._coords = self._coords_internal * (high - low) + low
         self.periodic = bool(periodic)
 

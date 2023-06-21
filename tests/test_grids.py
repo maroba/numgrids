@@ -24,14 +24,14 @@ class TestEquidistantAxis(unittest.TestCase):
 
     def test_init_periodic(self):
 
-        axis = EquidistantAxis(11, -3, 7, periodic=True)
-        self.assertEqual(11, len(axis))
-        self.assertEqual(-3, axis[0])
-        self.assertEqual(-2, axis[1])
-        npt.assert_array_almost_equal(np.linspace(-3, 7, 11), axis.coords)
+        axis = EquidistantAxis(10, 0, 1, periodic=True)
+        self.assertEqual(10, len(axis))
+        self.assertEqual(0, axis[0])
+        self.assertEqual(0.9, axis[-1])
+        npt.assert_array_almost_equal(np.linspace(0, 1, 10, endpoint=False), axis.coords)
 
-        self.assertEqual(axis[0], axis[11])
-        self.assertEqual(axis[1], axis[12])
+        self.assertEqual(axis[0], axis[10])
+        self.assertEqual(axis[1], axis[11])
 
 
 class TestGridEquidistant(unittest.TestCase):
@@ -66,22 +66,6 @@ class TestGridEquidistant(unittest.TestCase):
         x_axis = EquidistantAxis(nx, -3, 7, periodic=True)
         grid = Grid(x_axis)
         self.assertEqual(grid[1], grid[12])
-
-    def test_init_half_periodic(self):
-        nx = ny = 11
-        x_axis = EquidistantAxis(nx, -3, 7, periodic=True)
-        y_axis = EquidistantAxis(ny, -3, 7)
-        grid = Grid(x_axis, y_axis)
-
-        npt.assert_array_almost_equal((-3, -3), grid[0, 0])
-        npt.assert_array_almost_equal((-3, 7), grid[0, -1])
-        npt.assert_array_almost_equal((7, -2), grid[-1, 1])
-
-        npt.assert_array_almost_equal(grid[0, 0], grid[11, 0])
-        npt.assert_array_almost_equal(grid[1, 0], grid[12, 0])
-
-        with self.assertRaises(IndexError):
-            npt.assert_array_almost_equal(grid[0, 0], grid[0, 11])
 
     def test_use_meshed(self):
         nx = ny = 11

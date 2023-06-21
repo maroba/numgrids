@@ -1,10 +1,10 @@
 import unittest
-
+import matplotlib.pyplot as plt
 import numpy as np
 import numpy.testing as npt
 
 from numgrids.axes import EquidistantAxis
-from numgrids.diff import FiniteDifferenceDiff
+from numgrids.diff import FiniteDifferenceDiff, FFTDiff
 from numgrids.grids import Grid
 
 
@@ -37,5 +37,72 @@ class TestEquidistantGridDiff(unittest.TestCase):
         npt.assert_array_almost_equal(6*(X+Y), laplace(f))
 
 
+class TestFFTDiff(unittest.TestCase):
 
+    def test_fftdiff_1d_order_1_even_grid(self):
+        axis = EquidistantAxis(100, 0, 2*np.pi, periodic=True)
+        x = axis.coords
+        f = np.exp(np.sin(x))
+        grid = Grid(axis)
 
+        d_dx = FFTDiff(grid, 1, 0)
+
+        actual = d_dx(f)
+        expected = np.cos(x) * f
+
+#        plt.plot(x, expected, "r-")
+#        plt.plot(x, actual)
+#        plt.show()
+
+        npt.assert_array_almost_equal(actual, expected)
+
+    def test_fftdiff_1d_order_2_even_grid(self):
+        axis = EquidistantAxis(100, 0, 2 * np.pi, periodic=True)
+        x = axis.coords
+        f = np.exp(np.sin(x))
+        grid = Grid(axis)
+
+        d2_dx2 = FFTDiff(grid, 2, 0)
+
+        actual = d2_dx2(f)
+        expected = np.cos(x)**2 * f - np.sin(x) * f
+
+#        plt.plot(x, expected, "r-")
+#        plt.plot(x, actual)
+#        plt.show()
+
+        npt.assert_array_almost_equal(actual, expected)
+
+    def test_fftdiff_1d_order_1_odd_grid(self):
+        axis = EquidistantAxis(21, 0, 2*np.pi, periodic=True)
+        x = axis.coords
+        f = np.exp(np.sin(x))
+        grid = Grid(axis)
+
+        d_dx = FFTDiff(grid, 1, 0)
+
+        actual = d_dx(f)
+        expected = np.cos(x) * f
+
+#        plt.plot(x, expected, "r-")
+#        plt.plot(x, actual)
+#        plt.show()
+
+        npt.assert_array_almost_equal(actual, expected)
+
+    def test_fftdiff_1d_order_2_odd_grid(self):
+        axis = EquidistantAxis(21, 0, 2*np.pi, periodic=True)
+        x = axis.coords
+        f = np.exp(np.sin(x))
+        grid = Grid(axis)
+
+        d2_dx2 = FFTDiff(grid, 2, 0)
+
+        actual = d2_dx2(f)
+        expected = np.cos(x) ** 2 * f - np.sin(x) * f
+
+        #        plt.plot(x, expected, "r-")
+        #        plt.plot(x, actual)
+        #        plt.show()
+
+        npt.assert_array_almost_equal(actual, expected)
