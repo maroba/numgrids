@@ -11,6 +11,7 @@ class EquidistantAxis:
         self.periodic = bool(periodic)
 
     def __len__(self):
+        """Returns the number of grid points on the axis."""
         return self._num_points
 
     def __getitem__(self, idx):
@@ -25,6 +26,9 @@ class EquidistantAxis:
     def coords(self):
         return self._coords
 
+    @property
+    def spacing(self):
+        return self._coords[1] - self._coords[0]
 
 class ChebyshevAxis:
 

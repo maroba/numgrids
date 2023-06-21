@@ -67,7 +67,7 @@ class TestGridEquidistant(unittest.TestCase):
         grid = Grid(x_axis)
         self.assertEqual(grid[1], grid[12])
 
-    def test_init_torus(self):
+    def test_init_half_periodic(self):
         nx = ny = 11
         x_axis = EquidistantAxis(nx, -3, 7, periodic=True)
         y_axis = EquidistantAxis(ny, -3, 7)
@@ -83,7 +83,7 @@ class TestGridEquidistant(unittest.TestCase):
         with self.assertRaises(IndexError):
             npt.assert_array_almost_equal(grid[0, 0], grid[0, 11])
 
-    def test_use_a_grid(self):
+    def test_use_meshed(self):
         nx = ny = 11
         x_axis = EquidistantAxis(nx, -3, 7, periodic=True)
         y_axis = EquidistantAxis(ny, -3, 7)
