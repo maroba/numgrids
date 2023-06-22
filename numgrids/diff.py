@@ -17,21 +17,19 @@ class GridDiff:
         return self.operator(f)
 
 
-class FiniteDifferenceDiff:
+class FiniteDifferenceDiff(GridDiff):
     """Partial derivative based on finite difference approximations.
 
         Used for equidistant, non-periodic grids.
     """
 
     def __init__(self, grid, order, axis_index):
-        self.order = order
-        self.axis = axis_index
-
-        axis = grid.get_axis(axis_index)
-        if not isinstance(axis, EquidistantAxis):
+        super(FiniteDifferenceDiff, self).__init__(grid, order, axis_index)
+        if not isinstance(self.axis, EquidistantAxis):
             raise TypeError("Axis must be of type EquidistantAxis. Got: {}".format(type(axis)))
 
-        self.operator = FinDiff(axis_index, axis.spacing, order, acc=4)
+        # TODO make the accuracy order flexible:
+        self.operator = FinDiff(axis_index, self.axis.spacing, order, acc=4)
 
 
 class FFTDiff(GridDiff):
