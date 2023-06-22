@@ -1,5 +1,5 @@
 from numgrids.axes import EquidistantAxis
-from numgrids.diff import FiniteDifferenceDiff
+from numgrids.diff import FiniteDifferenceDiff, FFTDiff
 
 
 class Diff:
@@ -14,9 +14,11 @@ class Diff:
         axis = grid.get_axis(axis_index)
         if isinstance(axis, EquidistantAxis):
             if axis.periodic:
-                # TODO implement FFT derivative
-                raise NotImplementedError
-            self.operator = FiniteDifferenceDiff(grid, order, axis_index)
+                self.operator = FFTDiff(grid, order, axis_index)
+            else:
+                self.operator = FiniteDifferenceDiff(grid, order, axis_index)
+        else:
+            raise NotImplementedError
 
     def __call__(self, f):
         """Apply the derivative to the array f."""
