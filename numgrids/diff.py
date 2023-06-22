@@ -38,22 +38,23 @@ class FFTDiff:
         self.axis_index = axis_index
         self.axis = grid.get_axis(axis_index)
 
+        self._W = self._setup_kvec(grid)
+
     def __call__(self, f):
         F = fft(f, axis=self.axis_index)
-        n = len(self.axis)
+        dF = self._W * F
+        return np.real(ifft(dF, axis=self.axis_index))
 
+    def _setup_kvec(self, grid):
+        n = len(self.axis)
         W = 1j * np.hstack((
             np.arange(n // 2),
             np.array([0]),
             np.arange(-n // 2 + 1, 0)
         ))
         if self.order % 2:
-            W[n//2] = 0
-
-        W = np.swapaxes(np.ones_like(f) * W, self.axis_index, -1)
-
+            W[n // 2] = 0
         if self.order > 1:
             W **= self.order
-        W *= F
+        return np.swapaxes(np.ones(grid.shape) * W, self.axis_index, -1)
 
-        return np.real(ifft(W, axis=self.axis_index))
