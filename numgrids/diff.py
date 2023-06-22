@@ -35,20 +35,25 @@ class FFTDiff:
             raise TypeError("Spectral FFT differentiation requires periodic boundary conditions.")
         self.order = order
         self.grid = grid
+        self.axis_index = axis_index
         self.axis = grid.get_axis(axis_index)
 
     def __call__(self, f):
-        F = fft(f)
+        F = fft(f, axis=self.axis_index)
         n = len(self.axis)
+
         W = 1j * np.hstack((
             np.arange(n // 2),
             np.array([0]),
             np.arange(-n // 2 + 1, 0)
         ))
+        if self.order % 2:
+            W[n//2] = 0
+
+        W = np.swapaxes(np.ones_like(f) * W, self.axis_index, -1)
+
         if self.order > 1:
             W **= self.order
         W *= F
-        if self.order % 2:
-            W[n//2] = 0
-        w = np.real(ifft(W))
-        return w
+
+        return np.real(ifft(W, axis=self.axis_index))

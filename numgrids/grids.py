@@ -23,4 +23,6 @@ class Grid:
     def coords(self):
         return tuple(a.coords for a in self.axes)
 
-
+    @property
+    def shape(self):
+        return tuple(len(axis) for axis in self.axes)

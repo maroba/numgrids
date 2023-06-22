@@ -106,3 +106,31 @@ class TestFFTDiff(unittest.TestCase):
         #        plt.show()
 
         npt.assert_array_almost_equal(actual, expected)
+
+    def test_fftdiff_2d_order_1_even_grid(self):
+        axis = EquidistantAxis(30, 0, 2*np.pi, periodic=True)
+
+        grid = Grid(axis, axis)
+        X, Y = grid.meshed_coords
+        f = np.exp(np.sin(X))
+
+        d_dx = FFTDiff(grid, 1, 0)
+
+        actual = d_dx(f)
+        expected = np.cos(X) * f
+
+#        plt.plot(x, expected, "r-")
+#        plt.plot(x, actual)
+#        plt.show()
+
+        npt.assert_array_almost_equal(actual, expected)
+
+        d_dy = FFTDiff(grid, 1, 1)
+        actual = d_dy(f)
+        expected = np.zeros_like(f)
+        npt.assert_array_almost_equal(actual, expected)
+
+        f = np.exp(np.sin(Y))
+        actual = d_dy(f)
+        expected = np.cos(Y) * f
+        npt.assert_array_almost_equal(actual, expected)
