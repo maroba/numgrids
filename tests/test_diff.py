@@ -172,7 +172,62 @@ class TestChebyshevDiff(unittest.TestCase):
 
         npt.assert_array_almost_equal(actual, expected)
 
-    def test_diff_matrix(self):
+    def test_diff_2d_df_dx(self):
+        axis = ChebyshevAxis(25, -1, 1)
+        grid = Grid(axis, axis)
+        X, Y = grid.meshed_coords
+
+        f = np.exp(X) * np.sin(5 * X)
+        d_dx = ChebyshevDiff(grid, 1, 0)
+        actual = d_dx(f)
+        expected = f + 5 * np.cos(5 * X) * np.exp(X)
+        npt.assert_array_almost_equal(actual, expected)
+
+    def test_diff_2d_df_dy(self):
+        axis = ChebyshevAxis(25, -1, 1)
+        grid = Grid(axis, axis)
+        X, Y = grid.meshed_coords
+
+        f = np.exp(Y) * np.sin(5 * Y)
+        d_dy = ChebyshevDiff(grid, 1, 1)
+        actual = d_dy(f)
+        expected = f + 5 * np.cos(5 * Y) * np.exp(Y)
+        npt.assert_array_almost_equal(actual, expected)
+
+    def test_diff_3d_df_dy(self):
+        axis = ChebyshevAxis(25, -1, 1)
+        grid = Grid(axis, axis, axis)
+        X, Y, Z = grid.meshed_coords
+
+        f = np.exp(Y) * np.sin(5 * Y)
+        d_dy = ChebyshevDiff(grid, 1, 1)
+        actual = d_dy(f)
+        expected = f + 5 * np.cos(5 * Y) * np.exp(Y)
+        npt.assert_array_almost_equal(actual, expected)
+
+    def test_diff_3d_df_dz(self):
+        axis = ChebyshevAxis(25, -1, 1)
+        grid = Grid(axis, axis, axis)
+        X, Y, Z = grid.meshed_coords
+
+        f = np.exp(Z) * np.sin(5 * Z)
+        d_dy = ChebyshevDiff(grid, 1, 2)
+        actual = d_dy(f)
+        expected = f + 5 * np.cos(5 * Z) * np.exp(Z)
+        npt.assert_array_almost_equal(actual, expected)
+
+    def test_diff_3d_df_dz_scaled_shifted(self):
+        axis = ChebyshevAxis(25, 0, 1)
+        grid = Grid(axis, axis, axis)
+        X, Y, Z = grid.meshed_coords
+
+        f = np.exp(Z) * np.sin(5 * Z)
+        d_dy = ChebyshevDiff(grid, 1, 2)
+        actual = d_dy(f)
+        expected = f + 5 * np.cos(5 * Z) * np.exp(Z)
+        npt.assert_array_almost_equal(actual, expected)
+
+    def test_diff_matrix_1d(self):
         grid = Grid(ChebyshevAxis(3, -1, 1))
 
         d_dx = ChebyshevDiff(grid, 1, 0)
@@ -181,6 +236,38 @@ class TestChebyshevDiff(unittest.TestCase):
                                [0.5, 0, -0.5],
                                [-0.5, 2, -1.5]])
 
+        npt.assert_array_almost_equal(d_dx.as_matrix().toarray(),
+                                      expected
+                                      )
+
+    def test_diff_matrix_2d_x(self):
+        axis = ChebyshevAxis(3, -1, 1)
+        grid = Grid(axis, axis)
+
+        d_dx = ChebyshevDiff(grid, 1, 0)
+
+        D = - np.array([[1.5, -2, 0.5],
+                               [0.5, 0, -0.5],
+                               [-0.5, 2, -1.5]])
+
+        expected = np.kron(D, np.eye(3))
+        #print(expected)
+        npt.assert_array_almost_equal(d_dx.as_matrix().toarray(),
+                                      expected
+                                      )
+
+    def test_diff_matrix_2d_y(self):
+        axis = ChebyshevAxis(3, -1, 1)
+        grid = Grid(axis, axis)
+
+        d_dx = ChebyshevDiff(grid, 1, 1)
+
+        D = - np.array([[1.5, -2, 0.5],
+                               [0.5, 0, -0.5],
+                               [-0.5, 2, -1.5]])
+
+        expected = np.kron(np.eye(3), D)
+        #print(d_dx.as_matrix().toarray())
         npt.assert_array_almost_equal(d_dx.as_matrix().toarray(),
                                       expected
                                       )
