@@ -23,7 +23,6 @@ class TestEquidistantAxis(unittest.TestCase):
 
 
     def test_init_periodic(self):
-
         axis = EquidistantAxis(10, 0, 1, periodic=True)
         self.assertEqual(10, len(axis))
         self.assertEqual(0, axis[0])

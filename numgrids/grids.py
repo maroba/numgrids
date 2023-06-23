@@ -21,6 +21,8 @@ class Grid:
 
     @property
     def coords(self):
+        if self.ndims == 1:
+            return self.axes[0].coords
         return tuple(a.coords for a in self.axes)
 
     @property
