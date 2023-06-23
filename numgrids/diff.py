@@ -31,7 +31,7 @@ class FiniteDifferenceDiff(GridDiff):
     def __init__(self, grid, order, axis_index):
         super(FiniteDifferenceDiff, self).__init__(grid, order, axis_index)
         if not isinstance(self.axis, EquidistantAxis):
-            raise TypeError("Axis must be of type EquidistantAxis. Got: {}".format(type(axis)))
+            raise TypeError("Axis must be of type EquidistantAxis. Got: {}".format(type(self.axis)))
 
         # TODO make the accuracy order flexible:
         self.operator = FinDiff(axis_index, self.axis.spacing, order, acc=4)
@@ -75,6 +75,10 @@ class FFTDiff(GridDiff):
 
 
 class ChebyshevDiff(GridDiff):
+    """Partial derivative based on Chebyshev spectral method.
+
+        Used for grids with non-equidistant Chebyshev axes.
+    """
 
     def __init__(self, grid, order, axis_index):
         super(ChebyshevDiff, self).__init__(grid, order, axis_index)
