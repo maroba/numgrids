@@ -6,11 +6,13 @@ class Axis:
     def __init__(self, num_points, low, high, periodic):
         assert high > low
         self._num_points = num_points
+        self._low = low
+        self._high = high
         self.periodic = bool(periodic)
         self._coords_internal = self.setup_internal_coords()
         self._coords = self.setup_external_coords(low, high)
 
-    def setup_internal_coords(self):
+    def setup_internal_coords(self, low, high):
         raise NotImplementedError("Must be implemented by child class.")
 
     def setup_external_coords(self, low, high):
@@ -62,7 +64,7 @@ class EquidistantAxis(Axis):
     def __init__(self, num_points, low=0, high=1, periodic=False):
         super(EquidistantAxis, self).__init__(num_points, low, high, periodic)
 
-    def setup_internal_coords(self):
+    def setup_internal_coords(self, *args):
         return np.linspace(0, 1, len(self), endpoint=not self.periodic)
 
     @property
@@ -104,7 +106,7 @@ class ChebyshevAxis(Axis):
     def __init__(self, num_points, low=0, high=1):
         super(ChebyshevAxis, self).__init__(num_points, low, high, periodic=False)
 
-    def setup_internal_coords(self):
+    def setup_internal_coords(self, *args):
         n = len(self)
         return np.cos(np.arange(n) * np.pi / (n - 1))
 
@@ -113,7 +115,16 @@ class ChebyshevAxis(Axis):
         return coords * (high - low) + low
 
 
-class LogAxis:
+class LogAxis(Axis):
 
-    def __init__(self):
-        raise NotImplementedError
+    def __init__(self, num_points, low, high):
+        if low <= 0:
+            raise ValueError("LogAxis requires positive lower boundary.")
+        super(LogAxis, self).__init__(num_points, low, high)
+
+    def setup_internal_coords(self, low, high):
+        return np.linspace(np.log10(low), np.log10(high), len(self))
+
+    def setup_external_coords(self, low, high):
+        x_int = self.coords_internal
+        return np.logspace(x_int[0], x_int[-1], len(self))

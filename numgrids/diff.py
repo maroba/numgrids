@@ -3,7 +3,7 @@ import scipy.sparse
 from numpy.fft import fft, ifft
 from findiff import FinDiff
 
-from numgrids.axes import EquidistantAxis
+from numgrids.axes import EquidistantAxis, LogAxis
 
 
 class GridDiff:
@@ -87,8 +87,9 @@ class ChebyshevDiff(GridDiff):
 
         def operator(f):
             f = f.reshape(-1)
-            for i in range(self.order):
-                df = self._diff_matrix * f.reshape(-1) * (2 / self._scale)
+            for _ in range(self.order):
+                # apply the diff matrix and the chain rule:
+                df = self._diff_matrix * f * (2 / self._scale)
                 f = df
             return df.reshape(self.grid.shape)
 
@@ -119,6 +120,8 @@ class ChebyshevDiff(GridDiff):
         if self.grid.ndims == 1:
             return D
 
+        # In multiple dimensions, we need a Kronecker product of
+        # the 1D diff matrix and identity matrices:
         for i in range(self.grid.ndims):
             if i == self.axis_index:
                 D_i = D
@@ -131,3 +134,18 @@ class ChebyshevDiff(GridDiff):
                 D_mult = scipy.sparse.kron(D_mult, D_i)
 
         return D_mult
+
+
+class LogDiff(GridDiff):
+
+    def __init__(self, grid, order, axis_index):
+        super(LogDiff, self).__init__(grid, order, axis_index)
+        if not isinstance(self.axis, LogAxis):
+            raise TypeError("Axis must be of type LogAxis. Got: {}".format(type(self.axis)))
+
+        # TODO make the accuracy order flexible:
+
+        def operator(f):
+            x = self.axis.coords_internal
+            fd = FinDiff(axis_index, x[1] - x[0], order, acc=4)
+

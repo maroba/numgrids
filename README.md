@@ -1,6 +1,6 @@
 # numgrids
 
-Working with numerical grids made easy.
+Working with numerical grids made easy in any number of dimensions.
 
 ## Installation
 
