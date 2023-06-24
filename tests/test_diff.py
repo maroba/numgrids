@@ -1,5 +1,5 @@
 import unittest
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import numpy as np
 import numpy.testing as npt
 
@@ -150,6 +150,18 @@ class TestChebyshevDiff(unittest.TestCase):
 
         npt.assert_array_almost_equal(actual, expected)
 
+    def test_diff_1d_order_2(self):
+        grid = Grid(ChebyshevAxis(21, -1, 1))
+        x = grid.coords
+        f = np.exp(x) * np.sin(5 * x)
+
+        d2_dx2 = ChebyshevDiff(grid, 2, 0)
+        actual = d2_dx2(f)
+        expected = 2*np.exp(x)*(5*np.cos(5*x) - 12*np.sin(5*x))
+
+        npt.assert_array_almost_equal(actual, expected)
+
+
     def test_diff_1d_shifted(self):
         grid = Grid(ChebyshevAxis(21, 0, 2))
         x = grid.coords
@@ -251,7 +263,6 @@ class TestChebyshevDiff(unittest.TestCase):
                                [-0.5, 2, -1.5]])
 
         expected = np.kron(D, np.eye(3))
-        #print(expected)
         npt.assert_array_almost_equal(d_dx.as_matrix().toarray(),
                                       expected
                                       )
@@ -267,7 +278,6 @@ class TestChebyshevDiff(unittest.TestCase):
                                [-0.5, 2, -1.5]])
 
         expected = np.kron(np.eye(3), D)
-        #print(d_dx.as_matrix().toarray())
         npt.assert_array_almost_equal(d_dx.as_matrix().toarray(),
                                       expected
                                       )

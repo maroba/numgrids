@@ -86,7 +86,10 @@ class ChebyshevDiff(GridDiff):
         self._diff_matrix = self._setup_diff_matrix()
 
         def operator(f):
-            df = self._diff_matrix * f.reshape(-1) * (2 / self._scale)
+            f = f.reshape(-1)
+            for i in range(self.order):
+                df = self._diff_matrix * f.reshape(-1) * (2 / self._scale)
+                f = df
             return df.reshape(self.grid.shape)
 
         self.operator = operator
@@ -97,20 +100,20 @@ class ChebyshevDiff(GridDiff):
     def _setup_diff_matrix(self):
         N = len(self.axis) - 1
         x = self.axis.coords_internal
-        D = np.zeros((N+1, N+1))
-        D[0, 0] = (2*N**2 + 1) / 6
+        D = np.zeros((N + 1, N + 1))
+        D[0, 0] = (2 * N ** 2 + 1) / 6
         D[N, N] = -D[0, 0]
 
         for j in range(1, N):
-            D[j, j] = - 0.5 * x[j] / (1-x[j]**2)
+            D[j, j] = - 0.5 * x[j] / (1 - x[j] ** 2)
 
-        for i in range(0, N+1):
+        for i in range(0, N + 1):
             c_i = 2 if i == 0 or i == N else 1
-            for j in range(0, N+1):
+            for j in range(0, N + 1):
                 if i == j:
                     continue
                 c_j = 2 if j == 0 or j == N else 1
-                D[i, j] = c_i / c_j * (-1)**(i+j) / (x[i] - x[j])
+                D[i, j] = c_i / c_j * (-1) ** (i + j) / (x[i] - x[j])
 
         D = scipy.sparse.csr_matrix(-D)
         if self.grid.ndims == 1:

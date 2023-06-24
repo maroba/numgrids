@@ -1,5 +1,5 @@
-from numgrids.axes import EquidistantAxis
-from numgrids.diff import FiniteDifferenceDiff, FFTDiff
+from numgrids.axes import EquidistantAxis, ChebyshevAxis
+from numgrids.diff import FiniteDifferenceDiff, FFTDiff, ChebyshevDiff
 
 
 class Diff:
@@ -17,9 +17,31 @@ class Diff:
                 self.operator = FFTDiff(grid, order, axis_index)
             else:
                 self.operator = FiniteDifferenceDiff(grid, order, axis_index)
+        elif isinstance(axis, ChebyshevAxis):
+            self.operator = ChebyshevDiff(grid, order, axis_index)
         else:
             raise NotImplementedError
 
     def __call__(self, f):
         """Apply the derivative to the array f."""
         return self.operator(f)
+
+
+class AxisType:
+    EQUIDISTANT = "equidistant"
+    EQUIDISTANT_PERIODIC = "equidistant_periodic"
+    CHEBYSHEV = "chebyshev"
+
+
+class Axis:
+
+    @classmethod
+    def of_type(self, axis_type, num_points, low, high):
+        if axis_type == AxisType.EQUIDISTANT:
+            return EquidistantAxis(num_points, low, high)
+        elif axis_type == AxisType.EQUIDISTANT_PERIODIC:
+            return EquidistantAxis(num_points, low, high, periodic=True)
+        elif axis_type == AxisType.CHEBYSHEV:
+            return ChebyshevAxis(num_points, low, high)
+        else:
+            raise NotImplementedError(f"No such axis type: {axis_type}")

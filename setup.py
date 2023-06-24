@@ -7,7 +7,7 @@ author = 'Matthias Baer'
 email = 'matthias.r.baer@googlemail.com'
 description = ''
 name = 'numgrids'
-year = '2022'
+year = '2023'
 url = ''
 version = '0.0.1'
 
@@ -24,7 +24,7 @@ setup(
     description=description,
     long_description=open('README.md').read() if exists('README.md') else '',
     long_description_content_type="text/markdown",
-    install_requires=['sphinx', 'numpy'
+    install_requires=['numpy', 'scipy', 'matplotlib'
                       ],
     python_requires=">=3.6",
     classifiers=['Operating System :: OS Independent',

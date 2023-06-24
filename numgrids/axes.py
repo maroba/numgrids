@@ -36,6 +36,26 @@ class Axis:
     def coords_internal(self):
         return self._coords_internal
 
+    def __str__(self):
+        return "{}({} points from {} to {}.".format(str(type(self)), len(self), self.coords[0], self.coords[-1])
+
+    def __repr__(self):
+        """Enable nice representation in Jupyter"""
+        from matplotlib import pyplot as plt
+        fig, ax = plt.subplots(1, 1, figsize=(12, 2))
+        ax.set_ylim(-0.01, 0.01)
+        ax.set_axis_off()
+        ax.plot(self.coords, [0] * len(self), "o")
+        ax.plot(self.coords, [0] * len(self), "-k")
+        ax.annotate("$x_0 = {}$".format(self.coords[0]), xy=(self.coords[0], 0),
+                    arrowprops=dict(facecolor='black', shrink=0.05),
+                    xytext=(0, 30), textcoords='offset points')
+        ax.annotate("$x_{{{}}} = {}$".format(len(self)-1, self.coords[-1]), xy=(self.coords[-1], 0),
+                    arrowprops=dict(facecolor='black'),
+                    xytext=(0, 30), textcoords='offset points')
+
+        return ""
+
 
 class EquidistantAxis(Axis):
 
@@ -49,6 +69,35 @@ class EquidistantAxis(Axis):
     def spacing(self):
         return self._coords[1] - self._coords[0]
 
+    def __repr__(self):
+        if not self.periodic:
+            return super().__repr__()
+        from matplotlib import pyplot as plt
+        import matplotlib.patches as mp
+        fig, ax = plt.subplots(1, 1)
+        ax.set_aspect("equal")
+        ax.set_axis_off()
+        angles = np.linspace(0, 2*np.pi, len(self), endpoint=False)
+        xx = np.cos(angles)
+        yy = np.sin(angles)
+        ax.plot(xx, yy, "o")
+        ax.add_patch(mp.Circle((0, 0), 1, fill=False))
+
+        style = "Simple, tail_width=0.5, head_width=4, head_length=8"
+        kw = dict(arrowstyle=style, color="k")
+
+        arrow = mp.FancyArrowPatch((xx[1]*1.1, yy[1]*1.1), (xx[3]*1.1, yy[3]*1.1),
+                                     connectionstyle="arc3,rad=0.2", **kw)
+
+        ax.add_patch(arrow)
+        ax.annotate("$x_0 = {} = x_{{{}}}$".format(self.coords[0], len(self)), xy=(xx[0], yy[0]),
+                   arrowprops=dict(facecolor='black', shrink=0.05),
+                   xytext=(30, 30), textcoords='offset points')
+        ax.annotate("$x_{{{}}} = {}$".format(len(self) - 1, self.coords[-1]), xy=(xx[-1], yy[-1]),
+                   arrowprops=dict(facecolor='black'),
+                   xytext=(30, -30), textcoords='offset points')
+        return ""
+
 
 class ChebyshevAxis(Axis):
 
@@ -57,7 +106,7 @@ class ChebyshevAxis(Axis):
 
     def setup_internal_coords(self):
         n = len(self)
-        return np.cos(np.arange(n) * np.pi / (n-1))
+        return np.cos(np.arange(n) * np.pi / (n - 1))
 
     def setup_external_coords(self, low, high):
         coords = (self._coords_internal[::-1] + 1) / 2
