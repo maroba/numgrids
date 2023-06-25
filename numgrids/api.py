@@ -5,6 +5,17 @@ from numgrids.diff import FiniteDifferenceDiff, FFTDiff, ChebyshevDiff, LogDiff
 class Diff:
 
     def __init__(self, grid, order, axis_index=0):
+        """Constructor for partial derivative operator.
+
+        Parameters
+        ----------
+        grid: Grid
+            The numerical grid on which to apply the partial derivative.
+        order: positive int
+            The order of the derivative.
+        axis_index: int
+            The axis index (which axis in the grid).
+        """
         if order <= 0:
             raise ValueError("Derivative order must be positive integer.")
 
@@ -30,6 +41,14 @@ class Diff:
 
 
 class AxisType:
+    """Enumeration of the available axis types in this package.
+
+        Available constants:
+            EQUIDISTANT
+            EQUIDISTANT_PERIODIC
+            CHEBYSHEV
+            LOGARITHMIC
+    """
     EQUIDISTANT = "equidistant"
     EQUIDISTANT_PERIODIC = "equidistant_periodic"
     CHEBYSHEV = "chebyshev"
@@ -40,6 +59,24 @@ class Axis:
 
     @classmethod
     def of_type(self, axis_type, num_points, low, high):
+        """Creates an Axis object of a given type.
+
+        Parameters
+        ----------
+        axis_type: AxisType
+            The type of axis (equidistant, periodic, logarithmic, Chebyshev, etc.)
+        num_points: positive int
+            Number of grid points along this axis.
+        low: float
+            The lowest coordinate value on the axis.
+        high: float
+            The highest coordinate value on the axis.
+
+        Returns
+        -------
+        Axis object of specified type.
+
+        """
         if axis_type == AxisType.EQUIDISTANT:
             return EquidistantAxis(num_points, low, high)
         elif axis_type == AxisType.EQUIDISTANT_PERIODIC:
