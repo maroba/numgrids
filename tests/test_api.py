@@ -1,7 +1,7 @@
 import unittest
 
 from numgrids.api import Diff
-from numgrids.axes import EquidistantAxis, ChebyshevAxis
+from numgrids.axes import EquidistantAxis, ChebyshevAxis, LogAxis
 from numgrids.diff import FiniteDifferenceDiff, FFTDiff, ChebyshevDiff
 from numgrids.grids import Grid
 
@@ -26,6 +26,14 @@ class TestDiff(unittest.TestCase):
 
     def test_chebyshev_diff(self):
         axis = ChebyshevAxis(20, 0, 1)
+        grid = Grid(axis, axis)
+
+        d_dx = Diff(grid, 1, 0)
+
+        self.assertEqual(type(d_dx.operator), ChebyshevDiff)
+
+    def test_log_diff(self):
+        axis = LogAxis(20, 0.1, 1)
         grid = Grid(axis, axis)
 
         d_dx = Diff(grid, 1, 0)

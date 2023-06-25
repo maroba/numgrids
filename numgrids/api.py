@@ -1,5 +1,5 @@
-from numgrids.axes import EquidistantAxis, ChebyshevAxis
-from numgrids.diff import FiniteDifferenceDiff, FFTDiff, ChebyshevDiff
+from numgrids.axes import EquidistantAxis, ChebyshevAxis, LogAxis
+from numgrids.diff import FiniteDifferenceDiff, FFTDiff, ChebyshevDiff, LogDiff
 
 
 class Diff:
@@ -19,6 +19,8 @@ class Diff:
                 self.operator = FiniteDifferenceDiff(grid, order, axis_index)
         elif isinstance(axis, ChebyshevAxis):
             self.operator = ChebyshevDiff(grid, order, axis_index)
+        elif isinstance(axis, LogAxis):
+            self.operator = LogDiff(grid, order, axis_index)
         else:
             raise NotImplementedError
 
@@ -31,6 +33,7 @@ class AxisType:
     EQUIDISTANT = "equidistant"
     EQUIDISTANT_PERIODIC = "equidistant_periodic"
     CHEBYSHEV = "chebyshev"
+    LOGARITHMIC = "log"
 
 
 class Axis:
@@ -43,5 +46,7 @@ class Axis:
             return EquidistantAxis(num_points, low, high, periodic=True)
         elif axis_type == AxisType.CHEBYSHEV:
             return ChebyshevAxis(num_points, low, high)
+        elif axis_type == AxisType.LOGARITHMIC:
+            return LogAxis(num_points, low, high)
         else:
             raise NotImplementedError(f"No such axis type: {axis_type}")

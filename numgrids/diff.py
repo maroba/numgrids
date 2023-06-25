@@ -137,6 +137,10 @@ class ChebyshevDiff(GridDiff):
 
 
 class LogDiff(GridDiff):
+    """Partial derivative for a LogAxis.
+
+        Based on finite differences on the (equidistant) log-scale of coordinates.
+    """
 
     def __init__(self, grid, order, axis_index):
         super(LogDiff, self).__init__(grid, order, axis_index)
@@ -146,6 +150,6 @@ class LogDiff(GridDiff):
         def operator(f):
             x = self.axis.coords_internal
             fd = FinDiff(axis_index, x[1] - x[0], order, acc=6)
-            return fd(f) / self.axis.coords
+            return fd(f) / self.grid.meshed_coords[axis_index]
 
         self.operator = operator

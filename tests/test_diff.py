@@ -302,3 +302,21 @@ class TestLogDiff(unittest.TestCase):
 
         self.assertTrue(error < 1.E-3, msg=str(error))
 
+    def test_diff_2d(self):
+        r_axis = LogAxis(100, 1.E-3, 100)
+        phi_axis = EquidistantAxis(100, 0, 2*np.pi, periodic=True)
+        grid = Grid(r_axis, phi_axis)
+        R, Phi = grid.meshed_coords
+        f = np.cos(Phi) / R
+
+        d_dr = LogDiff(grid, 1, 0)
+        actual = d_dr(f)
+        expected = - f / R
+        error = np.max(np.abs((actual - expected)/expected))
+
+        #plt.plot(x, actual)
+        #plt.plot(x, expected)
+        #plt.show()
+
+        self.assertTrue(error < 1.E-5, msg=str(error))
+

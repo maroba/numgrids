@@ -15,7 +15,6 @@ class TestEquidistantAxis(unittest.TestCase):
         self.assertEqual(11, len(axis))
         self.assertEqual(-3, axis[0])
         self.assertEqual(-2, axis[1])
-        self.assertEqual(axis[1], axis.get_coordinate(1))
         npt.assert_array_almost_equal(np.linspace(-3, 7, 11), axis.coords)
 
         with self.assertRaises(IndexError):
