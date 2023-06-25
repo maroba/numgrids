@@ -143,9 +143,9 @@ class LogDiff(GridDiff):
         if not isinstance(self.axis, LogAxis):
             raise TypeError("Axis must be of type LogAxis. Got: {}".format(type(self.axis)))
 
-        # TODO make the accuracy order flexible:
-
         def operator(f):
             x = self.axis.coords_internal
-            fd = FinDiff(axis_index, x[1] - x[0], order, acc=4)
+            fd = FinDiff(axis_index, x[1] - x[0], order, acc=6)
+            return fd(f) / self.axis.coords
 
+        self.operator = operator

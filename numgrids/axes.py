@@ -9,7 +9,7 @@ class Axis:
         self._low = low
         self._high = high
         self.periodic = bool(periodic)
-        self._coords_internal = self.setup_internal_coords()
+        self._coords_internal = self.setup_internal_coords(low, high)
         self._coords = self.setup_external_coords(low, high)
 
     def setup_internal_coords(self, low, high):
@@ -120,11 +120,10 @@ class LogAxis(Axis):
     def __init__(self, num_points, low, high):
         if low <= 0:
             raise ValueError("LogAxis requires positive lower boundary.")
-        super(LogAxis, self).__init__(num_points, low, high)
+        super(LogAxis, self).__init__(num_points, low, high, periodic=False)
 
     def setup_internal_coords(self, low, high):
-        return np.linspace(np.log10(low), np.log10(high), len(self))
+        return np.linspace(np.log(low), np.log(high), len(self))
 
     def setup_external_coords(self, low, high):
-        x_int = self.coords_internal
-        return np.logspace(x_int[0], x_int[-1], len(self))
+        return np.logspace(np.log10(low), np.log10(high), len(self))

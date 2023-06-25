@@ -1,10 +1,11 @@
 import unittest
-#import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import numpy as np
 import numpy.testing as npt
+from matplotlib import pyplot as plt
 
-from numgrids.axes import EquidistantAxis, ChebyshevAxis
-from numgrids.diff import FiniteDifferenceDiff, FFTDiff, ChebyshevDiff
+from numgrids.axes import EquidistantAxis, ChebyshevAxis, LogAxis
+from numgrids.diff import FiniteDifferenceDiff, FFTDiff, ChebyshevDiff, LogDiff
 from numgrids.grids import Grid
 
 np.set_printoptions(linewidth=120)
@@ -157,10 +158,9 @@ class TestChebyshevDiff(unittest.TestCase):
 
         d2_dx2 = ChebyshevDiff(grid, 2, 0)
         actual = d2_dx2(f)
-        expected = 2*np.exp(x)*(5*np.cos(5*x) - 12*np.sin(5*x))
+        expected = 2 * np.exp(x) * (5 * np.cos(5 * x) - 12 * np.sin(5 * x))
 
         npt.assert_array_almost_equal(actual, expected)
-
 
     def test_diff_1d_shifted(self):
         grid = Grid(ChebyshevAxis(21, 0, 2))
@@ -259,8 +259,8 @@ class TestChebyshevDiff(unittest.TestCase):
         d_dx = ChebyshevDiff(grid, 1, 0)
 
         D = - np.array([[1.5, -2, 0.5],
-                               [0.5, 0, -0.5],
-                               [-0.5, 2, -1.5]])
+                        [0.5, 0, -0.5],
+                        [-0.5, 2, -1.5]])
 
         expected = np.kron(D, np.eye(3))
         npt.assert_array_almost_equal(d_dx.as_matrix().toarray(),
@@ -274,10 +274,31 @@ class TestChebyshevDiff(unittest.TestCase):
         d_dx = ChebyshevDiff(grid, 1, 1)
 
         D = - np.array([[1.5, -2, 0.5],
-                               [0.5, 0, -0.5],
-                               [-0.5, 2, -1.5]])
+                        [0.5, 0, -0.5],
+                        [-0.5, 2, -1.5]])
 
         expected = np.kron(np.eye(3), D)
         npt.assert_array_almost_equal(d_dx.as_matrix().toarray(),
                                       expected
                                       )
+
+
+class TestLogDiff(unittest.TestCase):
+
+    def test_diff_1d(self):
+        axis = LogAxis(300, 1.E-3, 2*np.pi)
+        grid = Grid(axis)
+        x = grid.coords
+        f = np.exp(np.sin(x))
+
+        d_dx = LogDiff(grid, 1, 0)
+        actual = d_dx(f)
+        expected = np.cos(x)*f
+        error = np.max(np.abs((actual - expected)/expected))
+
+        #plt.plot(x, actual)
+        #plt.plot(x, expected)
+        #plt.show()
+
+        self.assertTrue(error < 1.E-3, msg=str(error))
+
