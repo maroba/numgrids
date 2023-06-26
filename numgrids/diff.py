@@ -36,6 +36,9 @@ class FiniteDifferenceDiff(GridDiff):
         # TODO make the accuracy order flexible:
         self.operator = FinDiff(axis_index, self.axis.spacing, order, acc=4)
 
+    def as_matrix(self):
+        return self.operator.matrix(self.grid.shape)
+
 
 class FFTDiff(GridDiff):
     """Partial Derivative based on FFT spectral method.
@@ -84,13 +87,13 @@ class ChebyshevDiff(GridDiff):
         super(ChebyshevDiff, self).__init__(grid, order, axis_index)
         self._scale = (self.axis[-1] - self.axis[0])
         self._diff_matrix = self._setup_diff_matrix()
+        for _ in range(self.order - 1):
+            self._diff_matrix *= self._diff_matrix
+        self._diff_matrix *= (2 / self._scale) ** self.order
 
         def operator(f):
             f = f.reshape(-1)
-            for _ in range(self.order):
-                # apply the diff matrix and the chain rule:
-                df = self._diff_matrix * f * (2 / self._scale)
-                f = df
+            df = self._diff_matrix * f
             return df.reshape(self.grid.shape)
 
         self.operator = operator

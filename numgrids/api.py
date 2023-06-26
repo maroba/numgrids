@@ -39,6 +39,9 @@ class Diff:
         """Apply the derivative to the array f."""
         return self.operator(f)
 
+    def as_matrix(self):
+        return self.operator.as_matrix()
+    
 
 class AxisType:
     """Enumeration of the available axis types in this package.

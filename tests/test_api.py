@@ -2,7 +2,7 @@ import unittest
 
 from numgrids.api import Diff
 from numgrids.axes import EquidistantAxis, ChebyshevAxis, LogAxis
-from numgrids.diff import FiniteDifferenceDiff, FFTDiff, ChebyshevDiff
+from numgrids.diff import FiniteDifferenceDiff, FFTDiff, ChebyshevDiff, LogDiff
 from numgrids.grids import Grid
 
 
@@ -38,4 +38,4 @@ class TestDiff(unittest.TestCase):
 
         d_dx = Diff(grid, 1, 0)
 
-        self.assertEqual(type(d_dx.operator), ChebyshevDiff)
+        self.assertEqual(type(d_dx.operator), LogDiff)
