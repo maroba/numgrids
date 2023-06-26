@@ -28,3 +28,29 @@ class Grid:
     @property
     def shape(self):
         return tuple(len(axis) for axis in self.axes)
+
+    def __repr__(self):
+        import matplotlib.pyplot as plt
+
+        nplots = self.ndims * (self.ndims - 1) // 2
+        fig = plt.figure(figsize=(12, nplots*8))
+
+        ctr = 0
+        for i in range(self.ndims):
+            for j in range(i):
+                ctr += 1
+                ax = fig.add_subplot(nplots, 1, ctr)
+                X, Y = self.meshed_coords[i], self.meshed_coords[j]
+                ax.plot(X.reshape(-1), Y.reshape(-1), "o", ms=1)
+
+                if self.axes[i].name:
+                    ax.set_xlabel("${}$".format(self.axes[i].name))
+                else:
+                    ax.set_xlabel(f"axis-{i}")
+
+                if self.axes[j].name:
+                    ax.set_ylabel("${}$".format(self.axes[j].name))
+                else:
+                    ax.set_ylabel(f"axis-{j}")
+
+        return ""

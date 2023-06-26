@@ -1,3 +1,6 @@
+import numpy as np
+
+from numgrids.grids import Grid
 from numgrids.axes import EquidistantAxis, ChebyshevAxis, LogAxis
 from numgrids.diff import FiniteDifferenceDiff, FFTDiff, ChebyshevDiff, LogDiff
 
@@ -61,7 +64,7 @@ class AxisType:
 class Axis:
 
     @classmethod
-    def of_type(self, axis_type, num_points, low, high):
+    def of_type(self, axis_type, num_points, low, high, **kwargs):
         """Creates an Axis object of a given type.
 
         Parameters
@@ -81,12 +84,36 @@ class Axis:
 
         """
         if axis_type == AxisType.EQUIDISTANT:
-            return EquidistantAxis(num_points, low, high)
+            return EquidistantAxis(num_points, low, high, **kwargs)
         elif axis_type == AxisType.EQUIDISTANT_PERIODIC:
-            return EquidistantAxis(num_points, low, high, periodic=True)
+            return EquidistantAxis(num_points, low, high, periodic=True, **kwargs)
         elif axis_type == AxisType.CHEBYSHEV:
-            return ChebyshevAxis(num_points, low, high)
+            return ChebyshevAxis(num_points, low, high, **kwargs)
         elif axis_type == AxisType.LOGARITHMIC:
-            return LogAxis(num_points, low, high)
+            return LogAxis(num_points, low, high, **kwargs)
         else:
             raise NotImplementedError(f"No such axis type: {axis_type}")
+
+
+
+class SphericalGrid(Grid):
+
+    def __init__(self, raxis, theta_axis, phi_axis):
+        super(SphericalGrid, self).__init__(raxis, theta_axis, phi_axis)
+
+        dr2 = Diff(self, 2, 0)
+        dr = Diff(self, 1, 0)
+        dtheta = Diff(self, 1, 1)
+        dphi2 = Diff(self, 2, 2)
+
+        R, Phi, Theta = self.meshed_coords
+
+        def laplacian(f):
+            return dr2(f) + 2 / R * dr(f) + \
+                   1 / (R ** 2 * np.sin(Theta)) * dtheta(np.sin(Theta) * dtheta(f)) + \
+                   1 / (R ** 2 * np.sin(Theta) ** 2) * dphi2(f)
+
+        self._laplacian = laplacian
+
+    def laplacian(self, f):
+        return self._laplacian(f)

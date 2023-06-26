@@ -3,7 +3,7 @@ import numpy as np
 
 class Axis:
 
-    def __init__(self, num_points, low, high, periodic):
+    def __init__(self, num_points, low, high, periodic, **kwargs):
         """Base class constructor.
 
         Parameters
@@ -24,6 +24,7 @@ class Axis:
         self.periodic = bool(periodic)
         self._coords_internal = self.setup_internal_coords(low, high)
         self._coords = self.setup_external_coords(low, high)
+        self.name = kwargs.get("name")
 
     def setup_internal_coords(self, low, high):
         raise NotImplementedError("Must be implemented by child class.")
@@ -76,8 +77,8 @@ class EquidistantAxis(Axis):
         Can be specified as non-periodic or periodic.
     """
 
-    def __init__(self, num_points, low=0, high=1, periodic=False):
-        super(EquidistantAxis, self).__init__(num_points, low, high, periodic)
+    def __init__(self, num_points, low=0, high=1, periodic=False, **kwargs):
+        super(EquidistantAxis, self).__init__(num_points, low, high, periodic, **kwargs)
 
     def setup_internal_coords(self, *args):
         return np.linspace(0, 1, len(self), endpoint=not self.periodic)
@@ -123,8 +124,8 @@ class ChebyshevAxis(Axis):
         Allows using spectral methods even for non-periodic functions.
     """
 
-    def __init__(self, num_points, low=0, high=1):
-        super(ChebyshevAxis, self).__init__(num_points, low, high, periodic=False)
+    def __init__(self, num_points, low=0, high=1, **kwargs):
+        super(ChebyshevAxis, self).__init__(num_points, low, high, periodic=False, **kwargs)
 
     def setup_internal_coords(self, *args):
         n = len(self)
@@ -138,10 +139,10 @@ class ChebyshevAxis(Axis):
 class LogAxis(Axis):
     """Represents an axis with grid points spaced logarithmically."""
 
-    def __init__(self, num_points, low, high):
+    def __init__(self, num_points, low, high, **kwargs):
         if low <= 0:
             raise ValueError("LogAxis requires positive lower boundary.")
-        super(LogAxis, self).__init__(num_points, low, high, periodic=False)
+        super(LogAxis, self).__init__(num_points, low, high, periodic=False, **kwargs)
 
     def setup_internal_coords(self, low, high):
         return np.linspace(np.log(low), np.log(high), len(self))
