@@ -9,7 +9,7 @@ To get an idea how *numgrids* can be used, have a look at the following example 
 - [How to define grids](examples/how-to-define-grids.ipynb)
 - [Partial derivatives in any dimension](examples/partial-derivatives.ipynb)
 - [Polar coordinates on unit disk](examples/polar-cooordinates-on-unit-disk.ipynb)
-- [Spherical coordinates and their Laplacian](TODO)
+- [Spherical Grid and the Spherical Laplacian](examples/spherical-grid.ipynb)
 - [Solving the Schrödinger equation for the quantum harmonic oscillator](examples/quantum-harmonic-oscillator.ipynb)
 - [Solving the Schrödinger equation for the hydrogen atom](TODO)
 
