@@ -25,7 +25,11 @@ class Diff:
         if axis_index < 0:
             raise ValueError("axis must be nonnegative integer.")
 
+        if axis_index > grid.ndims - 1:
+            raise ValueError("No such axis index in this grid!")
+
         axis = grid.get_axis(axis_index)
+
         if isinstance(axis, EquidistantAxis):
             if axis.periodic:
                 self.operator = FFTDiff(grid, order, axis_index)
