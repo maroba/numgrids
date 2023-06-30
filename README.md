@@ -9,7 +9,9 @@
 
 - Quickly define numerical grids for any rectangular or curvilinear coordinate system
 - Partial differentiation and integration
+- Easy manipulate meshed functions
 - Using high precision spectral methods (FFT + Chebyshev) wherever possible
+- Fully compatible with *numpy*
 
 ## Usage / Example Notebooks
 
