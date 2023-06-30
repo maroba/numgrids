@@ -1,9 +1,11 @@
-# numgrids
+# numgrids 
 
 [![PyPI version](https://badge.fury.io/py/numgrids.svg)](https://badge.fury.io/py/numgrids)
 ![build](https://github.com/maroba/numgrids/actions/workflows/checks.yml/badge.svg)
 
 Spectral methods for numerical grids in any number of dimensions supporting both non-periodic and periodic boundaries.
+
+<img src="docs/assets/torus.png" height="200px"> <img src="docs/assets/disk320.png" height="250px">
 
 ## Usage / Example Notebooks
 
