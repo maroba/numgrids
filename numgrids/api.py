@@ -43,8 +43,13 @@ class Diff:
         return self.operator(f)
 
     def as_matrix(self):
+        """
+        Returns a matrix representation of the differential operator.
+
+        The data type is a scipy sparse matrix.
+        """
         return self.operator.as_matrix()
-    
+
 
 class AxisType:
     """Enumeration of the available axis types in this package.
@@ -62,6 +67,7 @@ class AxisType:
 
 
 class Axis:
+    """Interface for creating axis objects of any kind."""
 
     @classmethod
     def of_type(self, axis_type, num_points, low, high, **kwargs):
@@ -95,10 +101,22 @@ class Axis:
             raise NotImplementedError(f"No such axis type: {axis_type}")
 
 
-
 class SphericalGrid(Grid):
+    """A spherical grid in spherical coordinates (r, theta, phi)."""
 
     def __init__(self, raxis, theta_axis, phi_axis):
+        """
+        Constructor
+
+        Parameters
+        ----------
+        raxis: Axis
+            The radial axis.
+        theta_axis: Axis
+            The polar axis (theta).
+        phi_axis: Axis
+            The azimuthal axis (phi). Must be periodic.
+        """
         super(SphericalGrid, self).__init__(raxis, theta_axis, phi_axis)
 
         dr2 = Diff(self, 2, 0)
@@ -116,4 +134,5 @@ class SphericalGrid(Grid):
         self._laplacian = laplacian
 
     def laplacian(self, f):
+        """Returns the laplacian in spherical coordinates as a callable."""
         return self._laplacian(f)

@@ -1,7 +1,18 @@
+"""
+An Axis is the fundamental object in numgrids.
+
+Consider a coordinate system. An axis
+"""
+
+
 import numpy as np
 
 
 class Axis:
+    """
+    Base class for all axis types. An axis is an axis in a coordinate system.
+    May also be a curvilinear coordinate system.
+    """
 
     def __init__(self, num_points, low, high, periodic, **kwargs):
         """Base class constructor.
@@ -22,14 +33,14 @@ class Axis:
         assert high > low
         self._num_points = num_points
         self.periodic = bool(periodic)
-        self._coords_internal = self.setup_internal_coords(low, high)
-        self._coords = self.setup_external_coords(low, high)
+        self._coords_internal = self._setup_internal_coords(low, high)
+        self._coords = self._setup_external_coords(low, high)
         self.name = kwargs.get("name")
 
-    def setup_internal_coords(self, low, high):
+    def _setup_internal_coords(self, low, high):
         raise NotImplementedError("Must be implemented by child class.")
 
-    def setup_external_coords(self, low, high):
+    def _setup_external_coords(self, low, high):
         return self._coords_internal * (high - low) + low
 
     def __len__(self):
@@ -37,17 +48,21 @@ class Axis:
         return self._num_points
 
     def __getitem__(self, idx):
-        """Access coordinate value for given index."""
+        """Access coordinate value for given index. Is aware of periodic boundary conditions if applied."""
         if self.periodic:
             return self._coords[idx % self._num_points]
         return self._coords[idx]
 
     @property
     def coords(self):
+        """Returns a 1D array of the coordinate values of the axis, as specified by the user."""
         return self._coords
 
     @property
     def coords_internal(self):
+        """
+        Most Axis types use an internal coordinate system, typically scaled to some
+        standard interval. Refer to the child class implementation for details."""
         return self._coords_internal
 
     def __str__(self):
@@ -74,17 +89,23 @@ class Axis:
 class EquidistantAxis(Axis):
     """Represents an axis with grid points spaced equidistantly.
 
-        Can be specified as non-periodic or periodic.
+        Can be specified as non-periodic or periodic. Note that spectral methods on
+        an equidistant axis can only be applied for periodic boundary conditions.
     """
 
     def __init__(self, num_points, low=0, high=1, periodic=False, **kwargs):
+        """Constructor
+
+            Intended to be used only internally.
+        """
         super(EquidistantAxis, self).__init__(num_points, low, high, periodic, **kwargs)
 
-    def setup_internal_coords(self, *args):
+    def _setup_internal_coords(self, *args):
         return np.linspace(0, 1, len(self), endpoint=not self.periodic)
 
     @property
     def spacing(self):
+        """The grid spacing."""
         return self._coords[1] - self._coords[0]
 
     def __repr__(self):
@@ -125,27 +146,53 @@ class ChebyshevAxis(Axis):
     """
 
     def __init__(self, num_points, low=0, high=1, **kwargs):
+        """Constructor
+
+        Parameters
+        ----------
+        num_points: positive int
+            Number of grid points
+        low: float
+            Smallest coordinate value
+        high: float
+            Greatest coordinate value (included).
+        """
         super(ChebyshevAxis, self).__init__(num_points, low, high, periodic=False, **kwargs)
 
-    def setup_internal_coords(self, *args):
+    def _setup_internal_coords(self, *args):
         n = len(self)
         return np.cos(np.arange(n) * np.pi / (n - 1))
 
-    def setup_external_coords(self, low, high):
+    def _setup_external_coords(self, low, high):
         coords = (self._coords_internal[::-1] + 1) / 2
         return coords * (high - low) + low
 
 
 class LogAxis(Axis):
-    """Represents an axis with grid points spaced logarithmically."""
+    """
+    Represents an axis with grid points spaced logarithmically.
+    """
 
     def __init__(self, num_points, low, high, **kwargs):
+        """Constructor for LogAxis
+
+        Parameters
+        ----------
+        num_points: positive int
+            Number of grid points (endpoint included)
+        low: float
+            Lowest coordinate value
+        high: float
+            Highest coordinate value
+        """
         if low <= 0:
             raise ValueError("LogAxis requires positive lower boundary.")
         super(LogAxis, self).__init__(num_points, low, high, periodic=False, **kwargs)
 
-    def setup_internal_coords(self, low, high):
+    def _setup_internal_coords(self, low, high):
+        """The internal coordinates are equidistant."""
         return np.linspace(np.log(low), np.log(high), len(self))
 
-    def setup_external_coords(self, low, high):
+    def _setup_external_coords(self, low, high):
+        """The external coordinates are as expected by the user."""
         return np.logspace(np.log10(low), np.log10(high), len(self))

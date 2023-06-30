@@ -56,6 +56,13 @@ class FFTDiff(GridDiff):
 
         self.operator = self._setup_operator(grid)
 
+        # since we have no matrix representation of a FFTDiff, use finite differences
+        # until we implement something better:
+        self._D = FinDiff(0, self.axis.spacing, 1, acc=6).matrix((len(self.axis),))
+
+    def as_matrix(self):
+        return self._D
+
     def _setup_operator(self, grid):
         n = len(self.axis)
         W = 1j * np.hstack((
@@ -119,7 +126,7 @@ class ChebyshevDiff(GridDiff):
                 c_j = 2 if j == 0 or j == N else 1
                 D[i, j] = c_i / c_j * (-1) ** (i + j) / (x[i] - x[j])
 
-        D = scipy.sparse.csr_matrix(-D)
+        D = scipy.sparse.csc_matrix(-D)
         if self.grid.ndims == 1:
             return D
 
