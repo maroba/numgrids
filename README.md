@@ -61,6 +61,16 @@ df_dr = d_dr(f)
 df_dphi = d_dphi(f)
 ```
 
+Obtain the matrix representation of the differential operators:
+
+```python
+d_dr.as_matrix()
+
+Out: <1000x1000 sparse matrix of type '<class 'numpy.float64'>'
+	with 20000 stored elements in COOrdinate format>
+```
+
+
 Define integration operator
 
 $$
@@ -76,6 +86,19 @@ Calculate the area integral (taking into account appropriate integration measure
 ```python
 I(f * R)
 ```
+
+Setting boundary values to zero
+
+```python
+f[grid.boundary] = 0  # grid.boundary is boolean mask selecting boundary grid points
+```
+
+or to something more complicated:
+
+```python
+f[grid.boundary] = exp(-R[grid.boundary])
+```
+
 
 ## Installation
 
