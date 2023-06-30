@@ -22,6 +22,9 @@ class Diff:
         if order <= 0:
             raise ValueError("Derivative order must be positive integer.")
 
+        if not isinstance(grid, Grid):
+            raise TypeError("Parameter 'grid' must be of type Grid.")
+
         if axis_index < 0:
             raise ValueError("axis must be nonnegative integer.")
 

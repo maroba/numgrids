@@ -5,7 +5,7 @@ import numpy as np
 import numpy.testing as npt
 
 from numgrids.grids import Grid
-from numgrids.axes import EquidistantAxis
+from numgrids.axes import EquidistantAxis, ChebyshevAxis
 
 
 class TestEquidistantAxis(unittest.TestCase):
@@ -85,6 +85,44 @@ class TestGridEquidistant(unittest.TestCase):
         npt.assert_array_almost_equal(Y, Y_)
 
         npt.assert_array_almost_equal(f, X_**2 + Y_**2)
+
+    def test_boundary(self):
+        nx = ny = 11
+        x_axis = EquidistantAxis(nx, -3, 7)
+        y_axis = EquidistantAxis(ny, -3, 7)
+        grid = Grid(x_axis, y_axis)
+        X, Y = grid.meshed_coords
+
+        bdry = np.ones_like(X, dtype=bool)
+        bdry[1:-1, 1:-1] = False
+
+        npt.assert_array_equal(grid.boundary, bdry)
+
+    def test_boundary_cheb(self):
+        nx = ny = 11
+        x_axis = ChebyshevAxis(nx, -3, 7)
+        y_axis = ChebyshevAxis(ny, -3, 7)
+        grid = Grid(x_axis, y_axis)
+        X, Y = grid.meshed_coords
+
+        bdry = np.ones_like(X, dtype=bool)
+        bdry[1:-1, 1:-1] = False
+
+        npt.assert_array_equal(grid.boundary, bdry)
+
+    def test_boundary_periodic(self):
+
+        phi_axis = EquidistantAxis(11, 0, 2*np.pi, periodic=True)
+        r_axis = EquidistantAxis(11, 1.E-3, 1)
+        grid = Grid(r_axis, phi_axis)
+        R, Phi = grid.meshed_coords
+
+        bdry = np.ones_like(R, dtype=bool)
+        bdry[1:-1, :] = False
+
+        npt.assert_array_equal(grid.boundary, bdry)
+
+
 
     def test_repr(self):
         with patch("matplotlib.pyplot.figure") as figure_mock:

@@ -9,6 +9,11 @@ class Grid:
         self.meshed_coords = np.meshgrid(
             *tuple(a.coords for a in axes), indexing="ij")
 
+        bdry = np.ones(self.shape, dtype=bool)
+        mask = [axis.boundary for axis in self.axes]
+        bdry[tuple(mask)] = False
+        self._boundary = bdry
+
     def get_axis(self, idx=0):
         return self.axes[idx]
 
@@ -54,3 +59,11 @@ class Grid:
                     ax.set_ylabel(f"axis-{j}")
 
         return ""
+
+    @property
+    def boundary(self):
+        """
+        Returns a binary mask of the shape of the grid indicating the
+        grid points on the boundary.
+        """
+        return self._boundary

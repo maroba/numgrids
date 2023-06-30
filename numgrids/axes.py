@@ -43,6 +43,13 @@ class Axis:
     def _setup_external_coords(self, low, high):
         return self._coords_internal * (high - low) + low
 
+    @property
+    def boundary(self):
+        if self.periodic:
+            return slice(None, None)
+        else:
+            return slice(1, -1)
+
     def __len__(self):
         """Returns the number of grid points on the axis."""
         return self._num_points
