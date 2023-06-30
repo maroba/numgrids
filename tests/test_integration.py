@@ -50,7 +50,6 @@ class TestIntegral(unittest.TestCase):
         )
 
         X, Y, Z = grid.meshed_coords
-        x, y, z = grid.coords
         f = np.sin(X) ** 2 + np.sin(Y) ** 2 + np.sin(Z) ** 2
 
         I = Integral(grid)
@@ -78,3 +77,18 @@ class TestIntegral(unittest.TestCase):
         actual = I(f)
         npt.assert_array_almost_equal(actual, expected)
 
+    def test_fft_integration(self):
+
+        grid = Grid(
+            Axis.of_type(AxisType.EQUIDISTANT_PERIODIC, 30, 0, 4*np.pi),
+        )
+
+        x = grid.coords
+        f = np.cos(x)**2
+
+        I = Integral(grid)
+
+        expected = 2*np.pi
+        actual = I(f)
+
+        self.assertAlmostEqual(actual, expected)
