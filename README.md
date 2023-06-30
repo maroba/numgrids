@@ -2,6 +2,7 @@
 
 [![PyPI version](https://badge.fury.io/py/numgrids.svg)](https://badge.fury.io/py/numgrids)
 ![build](https://github.com/maroba/numgrids/actions/workflows/checks.yml/badge.svg)
+[![codecov](https://codecov.io/gh/maroba/numgrids/branch/main/graph/badge.svg?token=JNH9SP7BRG)](https://codecov.io/gh/maroba/numgrids)
 
 Spectral methods for numerical grids in any number of dimensions supporting both non-periodic and periodic boundaries.
 
