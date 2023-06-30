@@ -24,7 +24,7 @@ setup(
     description=description,
     long_description=open('README.md').read() if exists('README.md') else '',
     long_description_content_type="text/markdown",
-    install_requires=['numpy', 'scipy', 'matplotlib', 'findiff'
+    install_requires=['numpy', 'scipy>=1.10.1', 'matplotlib', 'findiff'
                       ],
     python_requires=">=3.6",
     classifiers=['Operating System :: OS Independent',
