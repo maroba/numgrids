@@ -90,7 +90,7 @@ I = Integral(grid)
 Calculate the area integral
 
 $$
-\int f(r, \varphi) r \,dr\, d\varphi
+\int f(r, \varphi) r dr d\varphi
 $$
 
 (taking into account the appropriate integration measure  $r$  for polar coordinates):
