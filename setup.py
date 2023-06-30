@@ -8,8 +8,8 @@ email = 'matthias.r.baer@googlemail.com'
 description = ''
 name = 'numgrids'
 year = '2023'
-url = ''
-version = '0.0.1'
+url = 'https://github.com/maroba/numgrids'
+version = '0.1.0'
 
 setup(
     name=name,
@@ -20,7 +20,7 @@ setup(
     packages=find_packages(),
     package_dir={name: name},
     include_package_data=True,
-    license='None',
+    license='MIT',
     description=description,
     long_description=open('README.md').read() if exists('README.md') else '',
     long_description_content_type="text/markdown",
