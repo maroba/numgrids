@@ -1,4 +1,4 @@
-# numgrids
+# numgrids <img src="docs/assets/torus.png" height="150px"> <img src="docs/assets/disk320.png" height="150px">
 
 [![PyPI version](https://badge.fury.io/py/numgrids.svg)](https://badge.fury.io/py/numgrids)
 ![build](https://github.com/maroba/numgrids/actions/workflows/checks.yml/badge.svg)
