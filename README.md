@@ -11,8 +11,6 @@ To get an idea how *numgrids* can be used, have a look at the following example 
 - [Polar coordinates on unit disk](examples/polar-cooordinates-on-unit-disk.ipynb)
 - [Spherical Grid and the Spherical Laplacian](examples/spherical-grid.ipynb)
 - [Solving the Schrödinger equation for the quantum harmonic oscillator](examples/quantum-harmonic-oscillator.ipynb)
-- [Solving the Schrödinger equation for the hydrogen atom](TODO)
-
 
 ## Installation
 
