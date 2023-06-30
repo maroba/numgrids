@@ -13,16 +13,6 @@
 - Using high precision spectral methods (FFT + Chebyshev) wherever possible
 - Fully compatible with *numpy*
 
-## Usage / Example Notebooks
-
-To get an idea how *numgrids* can be used, have a look at the following example notebooks:
-
-- [How to define grids](examples/how-to-define-grids.ipynb)
-- [Partial derivatives in any dimension](examples/partial-derivatives.ipynb)
-- [Polar coordinates on unit disk](examples/polar-cooordinates-on-unit-disk.ipynb)
-- [Spherical Grid and the Spherical Laplacian](examples/spherical-grid.ipynb)
-- [Solving the Schrödinger equation for the quantum harmonic oscillator](examples/quantum-harmonic-oscillator.ipynb)
-
 ## Quick Start
 
 As a quick example, here is how you define a grid on the unit disk using polar coordinates.
@@ -92,3 +82,13 @@ I(f * R)
 ```shell
 pip install numgrids
 ```
+
+## Usage / Example Notebooks
+
+To get an idea how *numgrids* can be used, have a look at the following example notebooks:
+
+- [How to define grids](examples/how-to-define-grids.ipynb)
+- [Partial derivatives in any dimension](examples/partial-derivatives.ipynb)
+- [Polar coordinates on unit disk](examples/polar-cooordinates-on-unit-disk.ipynb)
+- [Spherical Grid and the Spherical Laplacian](examples/spherical-grid.ipynb)
+- [Solving the Schrödinger equation for the quantum harmonic oscillator](examples/quantum-harmonic-oscillator.ipynb)
