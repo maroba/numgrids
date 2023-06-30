@@ -30,7 +30,7 @@ jobs:
         pip freeze
     - name: Test with pytest
       run: |
-        coverage run --source=numgrids setup.py test
+        coverage run --source=numgrids -m unittest discover tests
     - name: Submit code coverage
       run: |
         coverage report -m
