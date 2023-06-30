@@ -21,6 +21,70 @@ To get an idea how *numgrids* can be used, have a look at the following example 
 - [Spherical Grid and the Spherical Laplacian](examples/spherical-grid.ipynb)
 - [Solving the Schrödinger equation for the quantum harmonic oscillator](examples/quantum-harmonic-oscillator.ipynb)
 
+## Quick Start
+
+As a quick example, here is how you define a grid on the unit disk using polar coordinates.
+Along the azimuthal (angular) direction, choose an equidistant spacing with periodic boundary conditions:
+
+```python
+from numgrids import *
+from numpy import pi
+
+axis_phi = Axis.of_type(AxisType.EQUIDISTANT, 50, 0, 2*pi, periodic=True)
+```
+
+<img src="docs/assets/equi_periodic.png" height="326">
+
+Along the radial axis, let's choose a non-equidistant spacing:
+
+```python
+axis_radial = Axis.of_type(AxisType.CHEBYSHEV, 20, 0, 1)
+```
+
+<img src="docs/assets/cheby.png" height="91">
+
+Now combine the axes to a grid:
+
+```python
+grid = Grid(axis_radial, axis_phi)
+```
+<img src="docs/assets/disk320.png">
+
+Sample a meshed function on this grid:
+
+```python
+from numpy import exp, sin
+
+R, Phi = grid.meshed_coords
+f = R**2 * sin(Phi)**2
+```
+Define partial derivatives $\partial/\partial r$ and $\partial/\partial \varphi$ and apply them:
+
+```python
+# second argument means derivative order, third argument means axis index:
+d_dr = Diff(grid, 1, 0) 
+d_dphi = Diff(grid, 1, 1)
+
+df_dr = d_dr(f)
+df_dphi = d_dphi(f)
+```
+
+Define integration operator
+
+$$
+\int \dots dr d\varphi
+$$
+
+```python
+I = Integral(grid)
+```
+
+Calculate the area integral (taking into account appropriate integration measure  𝑟  for polar coordinates):
+
+```python
+I(f * R)
+```
+
 ## Installation
 
 ```shell
