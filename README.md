@@ -8,8 +8,7 @@
 **Main Features**
 
 - Quickly define numerical grids for any rectangular or curvilinear coordinate system
-- Partial derivative operators
-- Integration operators
+- Partial differentiation and integration
 - Using high precision spectral methods (FFT + Chebyshev) wherever possible
 
 ## Usage / Example Notebooks
