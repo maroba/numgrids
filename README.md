@@ -8,10 +8,16 @@
 **Main Features**
 
 - Quickly define numerical grids for any rectangular or curvilinear coordinate system
-- Partial differentiation and integration
-- Easy manipulate meshed functions
+- Differentiation and integration
+- Easy manipulation of meshed functions
 - Using high precision spectral methods (FFT + Chebyshev) wherever possible
 - Fully compatible with *numpy*
+
+## Installation
+
+```shell
+pip install numgrids
+```
 
 ## Quick Start
 
@@ -103,13 +109,6 @@ or to something more complicated:
 
 ```python
 f[grid.boundary] = exp(-R[grid.boundary])
-```
-
-
-## Installation
-
-```shell
-pip install numgrids
 ```
 
 ## Usage / Example Notebooks
