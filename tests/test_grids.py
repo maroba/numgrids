@@ -1,5 +1,6 @@
 import unittest
 
+from unittest.mock import patch
 import numpy as np
 import numpy.testing as npt
 
@@ -84,3 +85,12 @@ class TestGridEquidistant(unittest.TestCase):
         npt.assert_array_almost_equal(Y, Y_)
 
         npt.assert_array_almost_equal(f, X_**2 + Y_**2)
+
+    def test_repr(self):
+        with patch("matplotlib.pyplot.figure") as figure_mock:
+            nx = 11
+            x_axis = EquidistantAxis(nx, -3, 7, periodic=True)
+            y_axis = EquidistantAxis(nx, -3, 7, periodic=True)
+            grid = Grid(x_axis, y_axis)
+            repr(grid)
+            figure_mock.assert_called()

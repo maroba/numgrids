@@ -31,7 +31,7 @@ jobs:
     - name: Test with pytest
       run: |
         coverage run --source=numgrids setup.py test
-    #- name: Submit code coverage
-    #  run: |
-    #    coverage report -m
-    #    codecov
+    - name: Submit code coverage
+      run: |
+        coverage report -m
+        codecov
