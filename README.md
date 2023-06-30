@@ -5,8 +5,12 @@
 
   <div align="center"><img src="docs/assets/torus.png" height="200px">  <img src="docs/assets/disk320.png" height="250px"></div>
 
-Spectral methods for numerical grids in any number of dimensions supporting both non-periodic and periodic boundaries.
+**Main Features**
 
+- Quickly define numerical grids for any rectangular or curvilinear coordinate system
+- Partial derivative operators
+- Integration operators
+- Using high precision spectral methods (FFT + Chebyshev) wherever possible
 
 ## Usage / Example Notebooks
 
