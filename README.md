@@ -81,7 +81,13 @@ $$
 I = Integral(grid)
 ```
 
-Calculate the area integral (taking into account appropriate integration measure  𝑟  for polar coordinates):
+Calculate the area integral
+
+$$
+\int f(r, \varphi) r \,dr\, d\varphi
+$$
+
+(taking into account the appropriate integration measure  $r$  for polar coordinates):
 
 ```python
 I(f * R)
