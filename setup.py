@@ -26,7 +26,7 @@ setup(
     long_description_content_type="text/markdown",
     install_requires=['numpy', 'scipy>=1.10.1', 'matplotlib', 'findiff'
                       ],
-    python_requires=">=3.6",
+    python_requires=">=3.8",
     classifiers=['Operating System :: OS Independent',
                  'Programming Language :: Python :: 3',
                  ],
