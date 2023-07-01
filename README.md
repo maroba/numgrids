@@ -167,3 +167,11 @@ Run the tests:
 ```
 python -m unittest discover tests
 ```
+
+### Contributing
+
+1. Fork the repository
+2. Develop
+3. Write tests!
+4. Create an [issue](https://github.com/maroba/numgrids/issues)
+5. Create a pull request, when done
