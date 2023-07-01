@@ -112,6 +112,28 @@ or to something more complicated:
 f[grid.boundary] = exp(-R[grid.boundary])
 ```
 
+Create an interpolation function
+
+```python
+inter = Interpolator(grid, f)
+```
+
+Interpolate for a single point
+
+```python
+point = (0.1, 0.5)
+inter(point)
+```
+
+or for many points at once, like for a parametrized curve:
+
+```python
+t = np.linspace(0, 1, 100)
+points = zip(2*t, t**2)
+inter(points)
+```
+
+
 ## Usage / Example Notebooks
 
 To get an idea how *numgrids* can be used, have a look at the following example notebooks:
@@ -121,3 +143,27 @@ To get an idea how *numgrids* can be used, have a look at the following example 
 - [Polar coordinates on unit disk](examples/polar-cooordinates-on-unit-disk.ipynb)
 - [Spherical Grid and the Spherical Laplacian](examples/spherical-grid.ipynb)
 - [Solving the Schrödinger equation for the quantum harmonic oscillator](examples/quantum-harmonic-oscillator.ipynb)
+
+## Development
+
+### Setting up the project
+
+Clone the repository
+
+```
+git clone https://github.com/maroba/numgrids.git
+```
+
+In the project root directory, submit
+
+```
+python setup.py develop
+```
+
+to install the package in development mode.
+
+Run the tests:
+
+```
+python -m unittest discover tests
+```
