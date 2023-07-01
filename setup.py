@@ -5,11 +5,11 @@ from setuptools import setup, find_packages
 
 author = 'Matthias Baer'
 email = 'matthias.r.baer@googlemail.com'
-description = ''
+description = 'Working with numerical grids made easy.'
 name = 'numgrids'
 year = '2023'
 url = 'https://github.com/maroba/numgrids'
-version = '0.2.1'
+version = '0.2.2'
 
 setup(
     name=name,
