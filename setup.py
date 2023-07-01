@@ -9,7 +9,7 @@ description = ''
 name = 'numgrids'
 year = '2023'
 url = 'https://github.com/maroba/numgrids'
-version = '0.2.0'
+version = '0.2.1'
 
 setup(
     name=name,
