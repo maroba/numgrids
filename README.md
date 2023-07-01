@@ -42,14 +42,14 @@ axis_radial = Axis(AxisType.CHEBYSHEV, 20, 0, 1)
 
 <img src="docs/assets/cheby.png" height="91">
 
-Now combine the axes to a grid:
+Now combine the axes to a **grid**:
 
 ```python
 grid = Grid(axis_radial, axis_phi)
 ```
 <img src="docs/assets/disk320.png">
 
-Sample a meshed function on this grid:
+**Sample** a meshed function on this grid:
 
 ```python
 from numpy import exp, sin
@@ -57,7 +57,7 @@ from numpy import exp, sin
 R, Phi = grid.meshed_coords
 f = R**2 * sin(Phi)**2
 ```
-Define partial derivatives $\partial/\partial r$ and $\partial/\partial \varphi$ and apply them:
+Define **partial derivatives** $\partial/\partial r$ and $\partial/\partial \varphi$ and apply them:
 
 ```python
 # second argument means derivative order, third argument means axis index:
@@ -68,7 +68,7 @@ df_dr = d_dr(f)
 df_dphi = d_dphi(f)
 ```
 
-Obtain the matrix representation of the differential operators:
+Obtain the **matrix representation** of the differential operators:
 
 ```python
 d_dr.as_matrix()
@@ -78,7 +78,7 @@ Out: <1000x1000 sparse matrix of type '<class 'numpy.float64'>'
 ```
 
 
-Define integration operator
+Define **integration operator**
 
 $$
 \int \dots dr d\varphi
@@ -100,7 +100,7 @@ $$
 I(f * R)
 ```
 
-Setting boundary values to zero
+Setting **boundary** values to zero
 
 ```python
 f[grid.boundary] = 0  # grid.boundary is boolean mask selecting boundary grid points
@@ -112,7 +112,7 @@ or to something more complicated:
 f[grid.boundary] = exp(-R[grid.boundary])
 ```
 
-Create an interpolation function
+Create an **interpolation function**
 
 ```python
 inter = Interpolator(grid, f)
