@@ -73,12 +73,8 @@ class AxisType:
     LOGARITHMIC = "log"
 
 
-class Axis:
-    """Interface for creating axis objects of any kind."""
-
-    @classmethod
-    def of_type(self, axis_type, num_points, low, high, **kwargs):
-        """Creates an Axis object of a given type.
+def Axis(axis_type, num_points, low, high, **kwargs):
+    """Creates an Axis object of a given type.
 
         Parameters
         ----------
@@ -96,16 +92,17 @@ class Axis:
         Axis object of specified type.
 
         """
-        if axis_type == AxisType.EQUIDISTANT:
-            return EquidistantAxis(num_points, low, high, **kwargs)
-        elif axis_type == AxisType.EQUIDISTANT_PERIODIC:
-            return EquidistantAxis(num_points, low, high, periodic=True, **kwargs)
-        elif axis_type == AxisType.CHEBYSHEV:
-            return ChebyshevAxis(num_points, low, high, **kwargs)
-        elif axis_type == AxisType.LOGARITHMIC:
-            return LogAxis(num_points, low, high, **kwargs)
-        else:
-            raise NotImplementedError(f"No such axis type: {axis_type}")
+
+    if axis_type == AxisType.EQUIDISTANT:
+        return EquidistantAxis(num_points, low, high, **kwargs)
+    elif axis_type == AxisType.EQUIDISTANT_PERIODIC:
+        return EquidistantAxis(num_points, low, high, periodic=True, **kwargs)
+    elif axis_type == AxisType.CHEBYSHEV:
+        return ChebyshevAxis(num_points, low, high, **kwargs)
+    elif axis_type == AxisType.LOGARITHMIC:
+        return LogAxis(num_points, low, high, **kwargs)
+    else:
+        raise NotImplementedError(f"No such axis type: {axis_type}")
 
 
 class SphericalGrid(Grid):

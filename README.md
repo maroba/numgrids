@@ -29,7 +29,7 @@ Along the azimuthal (angular) direction, choose an equidistant spacing with peri
 from numgrids import *
 from numpy import pi
 
-axis_phi = Axis.of_type(AxisType.EQUIDISTANT, 50, 0, 2*pi, periodic=True)
+axis_phi = Axis(AxisType.EQUIDISTANT, 50, 0, 2*pi, periodic=True)
 ```
 
 <img src="docs/assets/equi_periodic.png" height="326">
@@ -37,7 +37,7 @@ axis_phi = Axis.of_type(AxisType.EQUIDISTANT, 50, 0, 2*pi, periodic=True)
 Along the radial axis, let's choose a non-equidistant spacing:
 
 ```python
-axis_radial = Axis.of_type(AxisType.CHEBYSHEV, 20, 0, 1)
+axis_radial = Axis(AxisType.CHEBYSHEV, 20, 0, 1)
 ```
 
 <img src="docs/assets/cheby.png" height="91">

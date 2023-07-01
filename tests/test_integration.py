@@ -11,7 +11,7 @@ class TestIntegral(unittest.TestCase):
 
     def test_integral_1d_findiff(self):
         grid = Grid(
-            Axis.of_type(AxisType.EQUIDISTANT, 100, -1, 1)
+            Axis(AxisType.EQUIDISTANT, 100, -1, 1)
         )
 
         x = grid.coords
@@ -27,8 +27,8 @@ class TestIntegral(unittest.TestCase):
 
     def test_integral_2d_findiff(self):
         grid = Grid(
-            Axis.of_type(AxisType.EQUIDISTANT, 100, -1, 1),
-            Axis.of_type(AxisType.CHEBYSHEV, 100, 0, 1)
+            Axis(AxisType.EQUIDISTANT, 100, -1, 1),
+            Axis(AxisType.CHEBYSHEV, 100, 0, 1)
         )
 
         X, Y = grid.meshed_coords
@@ -44,9 +44,9 @@ class TestIntegral(unittest.TestCase):
 
     def test_integral_3d_findiff(self):
         grid = Grid(
-            Axis.of_type(AxisType.EQUIDISTANT, 50, -1, 1),
-            Axis.of_type(AxisType.EQUIDISTANT, 50, -1, 1),
-            Axis.of_type(AxisType.EQUIDISTANT, 50, -1, 1),
+            Axis(AxisType.EQUIDISTANT, 50, -1, 1),
+            Axis(AxisType.EQUIDISTANT, 50, -1, 1),
+            Axis(AxisType.EQUIDISTANT, 50, -1, 1),
         )
 
         X, Y, Z = grid.meshed_coords
@@ -61,9 +61,9 @@ class TestIntegral(unittest.TestCase):
 
     def test_integral_3d_findiff_cheb(self):
         grid = Grid(
-            Axis.of_type(AxisType.CHEBYSHEV, 30, -1, 1),
-            Axis.of_type(AxisType.CHEBYSHEV, 30, -1, 1),
-            Axis.of_type(AxisType.CHEBYSHEV, 30, -1, 1),
+            Axis(AxisType.CHEBYSHEV, 30, -1, 1),
+            Axis(AxisType.CHEBYSHEV, 30, -1, 1),
+            Axis(AxisType.CHEBYSHEV, 30, -1, 1),
         )
 
         X, Y, Z = grid.meshed_coords
@@ -80,7 +80,7 @@ class TestIntegral(unittest.TestCase):
     def test_fft_integration(self):
 
         grid = Grid(
-            Axis.of_type(AxisType.EQUIDISTANT_PERIODIC, 30, 0, 4*np.pi),
+            Axis(AxisType.EQUIDISTANT_PERIODIC, 30, 0, 4*np.pi),
         )
 
         x = grid.coords
