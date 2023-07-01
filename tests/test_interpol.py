@@ -10,7 +10,7 @@ from numgrids.interpol import Interpolator
 class TestInterpolation(unittest.TestCase):
 
     def test_interpol1d(self):
-        grid = Grid(Axis.of_type(AxisType.EQUIDISTANT, 50, 0, 1))
+        grid = Grid(Axis(AxisType.EQUIDISTANT, 50, 0, 1))
         x = grid.coords
         f = x ** 2
         expected = 0.5 ** 2
@@ -20,8 +20,8 @@ class TestInterpolation(unittest.TestCase):
 
     def test_interpol2d(self):
         grid = Grid(
-            Axis.of_type(AxisType.EQUIDISTANT, 50, 0, 1),
-            Axis.of_type(AxisType.CHEBYSHEV, 50, 0, 1)
+            Axis(AxisType.EQUIDISTANT, 50, 0, 1),
+            Axis(AxisType.CHEBYSHEV, 50, 0, 1)
         )
         X, Y = grid.meshed_coords
         f = X ** 2 + Y ** 2
@@ -32,8 +32,8 @@ class TestInterpolation(unittest.TestCase):
 
     def test_interpol_polar(self):
         grid = Grid(
-            Axis.of_type(AxisType.CHEBYSHEV, 50, 0, 1),
-            Axis.of_type(AxisType.EQUIDISTANT_PERIODIC, 50, 0, 2 * np.pi)
+            Axis(AxisType.CHEBYSHEV, 50, 0, 1),
+            Axis(AxisType.EQUIDISTANT_PERIODIC, 50, 0, 2 * np.pi)
         )
         R, Phi = grid.meshed_coords
         f = R ** 2 * np.sin(Phi)
@@ -44,9 +44,9 @@ class TestInterpolation(unittest.TestCase):
 
     def test_interpol_many(self):
         grid = Grid(
-            Axis.of_type(AxisType.EQUIDISTANT, 30, 0, 1),
-            Axis.of_type(AxisType.CHEBYSHEV, 30, 0, 1),
-            Axis.of_type(AxisType.CHEBYSHEV, 30, 0, 1)
+            Axis(AxisType.EQUIDISTANT, 30, 0, 1),
+            Axis(AxisType.CHEBYSHEV, 30, 0, 1),
+            Axis(AxisType.CHEBYSHEV, 30, 0, 1)
         )
         X, Y, Z = grid.meshed_coords
 

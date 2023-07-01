@@ -69,9 +69,9 @@ class TestSphericalGrid(unittest.TestCase):
 
     def test_spherical_grid(self):
         grid = SphericalGrid(
-            Axis.of_type(AxisType.CHEBYSHEV, 30, 1.E-3, 1),  # radial axis
-            Axis.of_type(AxisType.CHEBYSHEV, 30, 1.E-3, np.pi - 1.E-3),  # polar axis
-            Axis.of_type(AxisType.EQUIDISTANT_PERIODIC, 50, 0, 2 * np.pi),  # azimuthal axis
+            Axis(AxisType.CHEBYSHEV, 30, 1.E-3, 1),  # radial axis
+            Axis(AxisType.CHEBYSHEV, 30, 1.E-3, np.pi - 1.E-3),  # polar axis
+            Axis(AxisType.EQUIDISTANT_PERIODIC, 50, 0, 2 * np.pi),  # azimuthal axis
         )
         self.assertTrue(grid.axes[-1].periodic)
         self.assertTrue(len(grid.axes[0]) == 30)
