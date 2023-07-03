@@ -3,6 +3,8 @@ from types import GeneratorType
 import numpy as np
 from scipy.interpolate import interpn, RegularGridInterpolator, CubicSpline
 
+from numgrids import Grid
+
 
 class Interpolator:
 
@@ -37,11 +39,17 @@ class Interpolator:
         -------
 
         """
-        if not hasattr(points, "__iter__") and not hasattr(points, "__len__"):
-            points = [points]
-        if isinstance(points, zip):
-            points = list(points)
-        points = np.array(points)
+
+        if isinstance(points, Grid):
+            grid = points
+            points = np.array([c.reshape(-1) for c in grid.meshed_coords])
+            return self._inter(points.T).reshape(grid.shape)
+        else:
+            if not hasattr(points, "__iter__") and not hasattr(points, "__len__"):
+                points = [points]
+            if isinstance(points, zip):
+                points = list(points)
+            points = np.array(points)
         if points.ndim == 1:
             return self._inter(points)[0]
         else:

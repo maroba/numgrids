@@ -61,3 +61,46 @@ class TestInterpolation(unittest.TestCase):
         actual = inter(points)
         expected = [f_(0, 0, 0), f_(0.5, 0.25, 0.5), f_(1, 1, 1)]
         npt.assert_array_almost_equal(actual, expected)
+
+    def test_interpol_grid(self):
+        fine_grid = Grid(
+            Axis(AxisType.EQUIDISTANT, 100, 0, 1),
+            Axis(AxisType.CHEBYSHEV, 100, 0, 1),
+        )
+
+        coarse_grid = Grid(
+            Axis(AxisType.EQUIDISTANT, 10, 0, 1),
+            Axis(AxisType.CHEBYSHEV, 10, 0, 1),
+        )
+
+        X, Y = fine_grid.meshed_coords
+        f = X**2 + Y**2
+
+        X_c, Y_c = coarse_grid.meshed_coords
+        expected = X_c**2 + Y_c**2
+
+        interp = Interpolator(fine_grid, f)
+
+        f_coarse = interp(coarse_grid)
+
+        self.assertEqual(f_coarse.shape, coarse_grid.shape)
+        npt.assert_array_almost_equal(f_coarse, expected)
+
+    def test_interpol_grid_extrapol_raises_exception(self):
+        fine_grid = Grid(
+            Axis(AxisType.EQUIDISTANT, 100, 0, 1),
+            Axis(AxisType.CHEBYSHEV, 100, 0, 1),
+        )
+
+        coarse_grid = Grid(
+            Axis(AxisType.EQUIDISTANT, 10, 0, 2),
+            Axis(AxisType.CHEBYSHEV, 10, 0, 2),
+        )
+
+        X, Y = fine_grid.meshed_coords
+        f = X**2 + Y**2
+
+        interp = Interpolator(fine_grid, f)
+
+        with self.assertRaises(ValueError):
+            interp(coarse_grid)
