@@ -8,32 +8,7 @@ from numgrids.grids import Grid
 from numgrids.axes import EquidistantAxis, ChebyshevAxis
 
 
-class TestEquidistantAxis(unittest.TestCase):
-
-    def test_init_axis_with_scaling_and_offset(self):
-
-        axis = EquidistantAxis(11, -3, 7)
-        self.assertEqual(11, len(axis))
-        self.assertEqual(-3, axis[0])
-        self.assertEqual(-2, axis[1])
-        npt.assert_array_almost_equal(np.linspace(-3, 7, 11), axis.coords)
-
-        with self.assertRaises(IndexError):
-            axis[20]
-
-
-    def test_init_periodic(self):
-        axis = EquidistantAxis(10, 0, 1, periodic=True)
-        self.assertEqual(10, len(axis))
-        self.assertEqual(0, axis[0])
-        self.assertEqual(0.9, axis[-1])
-        npt.assert_array_almost_equal(np.linspace(0, 1, 10, endpoint=False), axis.coords)
-
-        self.assertEqual(axis[0], axis[10])
-        self.assertEqual(axis[1], axis[11])
-
-
-class TestGridEquidistant(unittest.TestCase):
+class TestGrid(unittest.TestCase):
 
     def test_init_line_segment(self):
         nx = 11
@@ -122,8 +97,6 @@ class TestGridEquidistant(unittest.TestCase):
 
         npt.assert_array_equal(grid.boundary, bdry)
 
-
-
     def test_repr(self):
         with patch("matplotlib.pyplot.figure") as figure_mock:
             nx = 11
@@ -132,3 +105,35 @@ class TestGridEquidistant(unittest.TestCase):
             grid = Grid(x_axis, y_axis)
             repr(grid)
             figure_mock.assert_called()
+
+    def test_refine_grid_default(self):
+        x_axis = ChebyshevAxis(10, -3, 7)
+        y_axis = ChebyshevAxis(10, -4, 8)
+        grid = Grid(x_axis, y_axis)
+
+        fine_grid = grid.refine()
+        x, y = fine_grid.coords
+
+        self.assertEqual(20, len(fine_grid.axes[0]))
+        self.assertEqual(20, len(fine_grid.axes[1]))
+        self.assertEqual(-3, x[0])
+        self.assertEqual(7, x[-1])
+        self.assertEqual(-4, y[0])
+        self.assertEqual(8, y[-1])
+        self.assertEqual(type(fine_grid.axes[0]), type(x_axis))
+
+    def test_coarsen_grid_default(self):
+        x_axis = ChebyshevAxis(20, -3, 7)
+        y_axis = ChebyshevAxis(20, -4, 8)
+        grid = Grid(x_axis, y_axis)
+
+        coarse_grid = grid.coarsen()
+        x, y = coarse_grid.coords
+
+        self.assertEqual(10, len(coarse_grid.axes[0]))
+        self.assertEqual(10, len(coarse_grid.axes[1]))
+        self.assertEqual(-3, x[0])
+        self.assertEqual(7, x[-1])
+        self.assertEqual(-4, y[0])
+        self.assertEqual(8, y[-1])
+        self.assertEqual(type(coarse_grid.axes[0]), type(x_axis))

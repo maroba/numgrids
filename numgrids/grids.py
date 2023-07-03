@@ -38,7 +38,7 @@ class Grid:
         import matplotlib.pyplot as plt
 
         nplots = self.ndims * (self.ndims - 1) // 2
-        fig = plt.figure(figsize=(12, nplots*8))
+        fig = plt.figure(figsize=(12, nplots * 8))
 
         ctr = 0
         for i in range(self.ndims):
@@ -67,3 +67,29 @@ class Grid:
         grid points on the boundary.
         """
         return self._boundary
+
+    def refine(self):
+        """
+        Returns a new grid with twice the number of grid points in each direction.
+        """
+        new_axes = []
+        for axis in self.axes:
+            cls = type(axis)
+            x = axis.coords
+            new_axes.append(
+                cls(len(axis) * 2, x[0], x[-1])
+            )
+        return Grid(*new_axes)
+
+    def coarsen(self):
+        """
+        Returns a new grid with half the number of grid points in each direction.
+        """
+        new_axes = []
+        for axis in self.axes:
+            cls = type(axis)
+            x = axis.coords
+            new_axes.append(
+                cls(len(axis) // 2, x[0], x[-1])
+            )
+        return Grid(*new_axes)
