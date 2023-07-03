@@ -1,7 +1,5 @@
-from types import GeneratorType
-
 import numpy as np
-from scipy.interpolate import interpn, RegularGridInterpolator, CubicSpline
+from scipy.interpolate import RegularGridInterpolator, CubicSpline
 
 from numgrids import Grid
 
@@ -27,30 +25,34 @@ class Interpolator:
         else:
             self._inter = CubicSpline(grid.coords, f)
 
-    def __call__(self, points):
+    def __call__(self, locations):
         """
         Return the interpolation for one or more points.
 
         Parameters
         ----------
-        points
+        locations: tuple, list of tuples, or Grid
+            The location(s) where to interpolate. In case of only one point to interpolate,
+            pass a tuple with the coordinates of the point. In case of several points, pass
+            a list of tuples. Alternatively, you can pass a grid instance. In that case,
+            the interpolation will be performed for all grid points of the passed grid.
 
         Returns
         -------
-
+        The interpolated value or values.
         """
 
-        if isinstance(points, Grid):
-            grid = points
-            points = np.array([c.reshape(-1) for c in grid.meshed_coords])
-            return self._inter(points.T).reshape(grid.shape)
+        if isinstance(locations, Grid):
+            grid = locations
+            locations = np.array([c.reshape(-1) for c in grid.meshed_coords])
+            return self._inter(locations.T).reshape(grid.shape)
         else:
-            if not hasattr(points, "__iter__") and not hasattr(points, "__len__"):
-                points = [points]
-            if isinstance(points, zip):
-                points = list(points)
-            points = np.array(points)
-        if points.ndim == 1:
-            return self._inter(points)[0]
+            if not hasattr(locations, "__iter__") and not hasattr(locations, "__len__"):
+                locations = [locations]
+            if isinstance(locations, zip):
+                locations = list(locations)
+            locations = np.array(locations)
+        if locations.ndim == 1:
+            return self._inter(locations)[0]
         else:
-            return np.array([self._inter(point)[0] for point in points])
+            return np.array([self._inter(point)[0] for point in locations])
