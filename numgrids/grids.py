@@ -2,11 +2,23 @@ import numpy as np
 
 
 class Grid:
+    """
+    Represents a numerical grid.
+    """
 
     def __init__(self, *axes):
-        self.axes = axes
+        """
+        Constructor
+
+        Parameters
+        ----------
+        axes: one or more Axis objects
+            One or more axes defining the grid. The order of the axes matters!
+            The first axis passed will have index 0.
+        """
+        self._axes = axes
         self.ndims = len(axes)
-        self.meshed_coords = np.meshgrid(
+        self._meshed_coords = np.meshgrid(
             *tuple(a.coords for a in axes), indexing="ij")
 
         bdry = np.ones(self.shape, dtype=bool)
@@ -15,6 +27,18 @@ class Grid:
         self._boundary = bdry
 
     def get_axis(self, idx=0):
+        """
+        Returns the axis with given index.
+
+        Parameters
+        ----------
+        idx: int
+            The index of the requested axis.
+
+        Returns
+        -------
+        The requested Axis object.
+        """
         return self.axes[idx]
 
     def __getitem__(self, inds):
@@ -25,13 +49,34 @@ class Grid:
         )
 
     @property
+    def axes(self):
+        """
+        Returns a list with the axes objects of the grid.
+        """
+        return self._axes
+
+    @property
     def coords(self):
+        """
+        Returns a tuple of lists with the coordinate values along each axis.
+        In case of 1D, only a single list is returned.
+        """
         if self.ndims == 1:
             return self.axes[0].coords
         return tuple(a.coords for a in self.axes)
 
     @property
+    def meshed_coords(self):
+        """
+        Returns the a tuple with the meshed coordinate values.
+        """
+        return self._meshed_coords
+
+    @property
     def shape(self):
+        """
+        Returns a tuple with the number of grid points along each axis.
+        """
         return tuple(len(axis) for axis in self.axes)
 
     def __repr__(self):

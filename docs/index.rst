@@ -3,18 +3,17 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to numgrids's documentation!
-====================================
+*numgrids* - Working with Grids Made Easy
+=========================================
+
+.. image:: assets/three_grids.png
+   :align: center
+
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
    getting_started.md
+   api
 
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`

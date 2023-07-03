@@ -10,7 +10,7 @@ from numgrids.utils import multi_kron
 
 class Integral:
     """
-    The integration operotor for integrating on a grid.
+    The integration operator for integrating on a grid.
 
         .. math::
             \int_V ... dV

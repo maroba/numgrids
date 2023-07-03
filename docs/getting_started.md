@@ -1,13 +1,20 @@
-# Getting Started with *numgrids*
+# Using *numgrids*
 
-This is a {math}`\partial_x` partial.
+## Installation
 
-```{math}
-a^2 + b^2= c^2
+To install the latest version of *numgrids*, simply use *pip*:
 
 ```
-
-
-```python
-len(x)
+pip install --upgrade numgrids
 ```
+
+## Axes and Grids
+
+The basic entities in *numgrids* are axes and grids. 
+
+
+## Interpolation
+
+## Differentiation and Integration
+
+## Refinement and Coarsening
