@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import os.path
+import re
 from os.path import exists
 from setuptools import setup, find_packages
 
@@ -9,7 +11,13 @@ description = 'Working with numerical grids made easy.'
 name = 'numgrids'
 year = '2023'
 url = 'https://github.com/maroba/numgrids'
-version = '0.2.3'
+
+with open(os.path.join('numgrids', '__init__.py'), 'r') as fh:
+    match = re.match('__version__ *= *([^ ]+)', fh.readline())
+    if match:
+        version = match.group(1)
+    else:
+        raise ValueError('numgrids.__init__.py must define version string as first line.')
 
 setup(
     name=name,
