@@ -137,3 +137,35 @@ class TestGrid(unittest.TestCase):
         self.assertEqual(-4, y[0])
         self.assertEqual(8, y[-1])
         self.assertEqual(type(coarse_grid.axes[0]), type(x_axis))
+
+    def test_meshed_indices(self):
+        x_axis = ChebyshevAxis(20, -3, 7)
+        y_axis = ChebyshevAxis(10, -4, 8)
+        grid = Grid(x_axis, y_axis)
+
+        I, J = grid.meshed_indices
+        self.assertEqual(0, I[0, 0])
+        self.assertEqual(19, I[-1, 0])
+        self.assertEqual(0, J[5, 0])
+        self.assertEqual(9, J[7, -1])
+
+    def test_index_tuples(self):
+        x_axis = ChebyshevAxis(20, -3, 7)
+        y_axis = ChebyshevAxis(10, -4, 8)
+        grid = Grid(x_axis, y_axis)
+
+        inds = grid.index_tuples
+
+        npt.assert_array_equal((0, 0), inds[0, 0])
+        npt.assert_array_equal((19, 9), inds[-1, -1])
+
+    def test_coord_tuples(self):
+        x_axis = ChebyshevAxis(20, -3, 7)
+        y_axis = ChebyshevAxis(10, -4, 8)
+        grid = Grid(x_axis, y_axis)
+
+        coord_tuples = grid.coord_tuples
+
+        npt.assert_array_equal((-3, -4), coord_tuples[0, 0])
+        npt.assert_array_equal((-3, 8), coord_tuples[0, -1])
+        npt.assert_array_equal((7, 8), coord_tuples[-1, -1])

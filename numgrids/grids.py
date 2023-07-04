@@ -26,6 +26,10 @@ class Grid:
         bdry[tuple(mask)] = False
         self._boundary = bdry
 
+    @property
+    def size(self):
+        return np.prod(self.shape)
+
     def get_axis(self, idx=0):
         """
         Returns the axis with given index.
@@ -138,3 +142,20 @@ class Grid:
                 cls(len(axis) // 2, x[0], x[-1])
             )
         return Grid(*new_axes)
+
+    @property
+    def meshed_indices(self):
+        return np.meshgrid(*[np.arange(len(axis)) for axis in self.axes], indexing="ij")
+
+    @property
+    def index_tuples(self):
+        return self._to_tuple_field(*self.meshed_indices)
+
+    @property
+    def coord_tuples(self):
+        return self._to_tuple_field(*self.meshed_coords)
+
+    def _to_tuple_field(self, *arrs):
+        return np.vstack([arr.reshape(-1) for arr in arrs]).T.reshape(
+            *self.shape, -1
+        )
