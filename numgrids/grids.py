@@ -145,14 +145,41 @@ class Grid:
 
     @property
     def meshed_indices(self):
+        """
+        Returns a tuple of length grid.ndims, where each item in the
+        tuple is an array of shape grid.shape. Each item stores the
+        indices of each grid point for a given axis.
+
+        For example, if you have a 2D grid with 4 points along axis 0
+        and 3 points along axis 1, the indices along axis 0 are [0, 1, 2, 3],
+        the indices along axis 1 are [0, 1, 2]. meshed_indices returns
+        a tuple (I, J), where I and J both have shape (4, 3). I contains
+        the "slot-0" indices, J contains the "slot-1" indices.
+
+        This generalizes for grids in higher dimensions, of course.
+        """
         return np.meshgrid(*[np.arange(len(axis)) for axis in self.axes], indexing="ij")
 
     @property
     def index_tuples(self):
+        """
+        Returns an array A of shape (*grid.shape, grid.ndims).
+
+        For example, in case of a 2D grid, A[i, j] contains the index
+        tuple (i, j).
+        """
         return self._to_tuple_field(*self.meshed_indices)
 
     @property
     def coord_tuples(self):
+        """
+        Returns an array A of shape (*grid.shape, grid.ndims) with
+        all the coordinate tuples.
+
+        For example, in case of a 2D grid, A[i, j] contains the
+        tuple (x, y), where x and y are the coordinates of the grid point
+        (i, j).
+        """
         return self._to_tuple_field(*self.meshed_coords)
 
     def _to_tuple_field(self, *arrs):

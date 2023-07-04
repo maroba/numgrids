@@ -13,7 +13,7 @@ year = '2023'
 url = 'https://github.com/maroba/numgrids'
 
 with open(os.path.join('numgrids', '__init__.py'), 'r') as fh:
-    match = re.match('__version__ *= *([^ ]+)', fh.readline())
+    match = re.match('__version__ *= *"([^"]+)"', fh.readline())
     if match:
         version = match.group(1)
     else:
