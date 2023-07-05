@@ -17,7 +17,7 @@
 ## Installation
 
 ```shell
-pip install numgrids
+pip install --upgrade numgrids
 ```
 
 ## Quick Start
