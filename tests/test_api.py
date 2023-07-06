@@ -4,7 +4,7 @@ import numpy as np
 import numpy.testing as npt
 
 
-from numgrids import Axis, AxisType, SphericalGrid, Diff
+from numgrids import Axis, AxisType, SphericalGrid, Diff, interpolate, diff, integrate
 from numgrids.axes import EquidistantAxis, ChebyshevAxis, LogAxis
 from numgrids.diff import FiniteDifferenceDiff, FFTDiff, ChebyshevDiff, LogDiff
 from numgrids.grids import Grid
@@ -75,3 +75,66 @@ class TestSphericalGrid(unittest.TestCase):
         )
         self.assertTrue(grid.axes[-1].periodic)
         self.assertTrue(len(grid.axes[0]) == 30)
+
+
+class TestConvenience(unittest.TestCase):
+
+    def test_diff(self):
+        axis = ChebyshevAxis(20, 0, 1)
+        grid = Grid(axis)
+        x = axis.coords
+        f = x**2
+
+        self.assertEqual(
+            0, len(grid.cache["diffs"])
+        )
+
+        # With default arguments
+        actual =  diff(grid, f)
+        npt.assert_array_almost_equal(
+            2*x,
+            actual
+        )
+
+        # With explicit args
+        actual =  diff(grid, f, 1, 0)
+        npt.assert_array_almost_equal(
+            2*x,
+            actual
+        )
+
+        # Test coverage ensures that the cache has actually been used.
+        self.assertEqual(
+            1, len(grid.cache["diffs"])
+        )
+
+    def test_interpolate(self):
+        grid = Grid(Axis(AxisType.EQUIDISTANT, 50, 0, 1))
+        x = grid.coords
+        f = x ** 2
+        expected = 0.5 ** 2
+
+        actual = interpolate(grid, f, 0.5)
+        self.assertAlmostEqual(actual, expected)
+
+    def test_integrate(self):
+        grid = Grid(
+            Axis(AxisType.CHEBYSHEV, 30, -1, 1),
+            Axis(AxisType.CHEBYSHEV, 30, -1, 1),
+            Axis(AxisType.CHEBYSHEV, 30, -1, 1),
+        )
+
+        X, Y, Z = grid.meshed_coords
+        f = np.sin(X) ** 2 + np.sin(Y) ** 2 + np.sin(Z) ** 2
+
+        expected = -12 * np.sin(1) * np.cos(1) + 12
+
+        self.assertIsNone(grid.cache.get("integral"))
+
+        actual = integrate(grid, f)
+        npt.assert_array_almost_equal(actual, expected)
+
+        actual = integrate(grid, f)
+        npt.assert_array_almost_equal(actual, expected)
+
+        self.assertIsNotNone(grid.cache.get("integral"))

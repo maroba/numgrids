@@ -26,6 +26,13 @@ class Grid:
         bdry[tuple(mask)] = False
         self._boundary = bdry
 
+        # The functions in the api module can store entities here for re-use:
+        self.cache = {
+            "diffs": {},
+            "integrals": None,
+            "interpolators": {}
+        }
+
     @property
     def size(self):
         return np.prod(self.shape)

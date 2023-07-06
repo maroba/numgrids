@@ -140,3 +140,28 @@ class SphericalGrid(Grid):
     def laplacian(self, f):
         """Returns the laplacian in spherical coordinates as a callable."""
         return self._laplacian(f)
+
+
+def diff(grid, f, order=1, axis_index=0):
+    if (order, axis_index) in grid.cache.get("diffs"):
+        d = grid.cache["diffs"][order, axis_index]
+    else:
+        d = Diff(grid, order, axis_index)
+        grid.cache["diffs"][order, axis_index] = d
+    return d(f)
+
+
+def interpolate(grid, f, locations):
+    from numgrids import Interpolator
+    inter = Interpolator(grid, f)
+    return inter(locations)
+
+
+def integrate(grid, f):
+    from numgrids.integration import Integral
+    if grid.cache.get("integral"):
+        I = grid.cache["integral"]
+    else:
+        I = Integral(grid)
+        grid.cache["integral"] = I
+    return I(f)
