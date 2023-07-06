@@ -1,12 +1,12 @@
-## How to contribute to *findiff*
+## How to contribute to *numgrids*
 
 #### **Did you find a bug?**
 
 * **Ensure the bug was not already reported** by searching on GitHub
-  under [Issues](https://github.com/maroba/findiff/issues).
+  under [Issues](https://github.com/maroba/numgrids/issues).
 
 * If you're unable to find an open issue addressing the
-  problem, [open a new one](https://github.com/maroba/findiff/issues/new). Be sure to include a **title and clear
+  problem, [open a new one](https://github.com/maroba/numgrids/issues/new). Be sure to include a **title and clear
   description**, as much relevant information as possible, and a **code sample** or an **executable test case**
   demonstrating the expected behavior that is not occurring.
 
@@ -18,7 +18,7 @@
 
 #### **Do you intend to add a new feature or change an existing one?**
 
-* Suggest your change in the [findiff discussion forum](https://github.com/maroba/findiff/discussions) and
+* Suggest your change in the [numgrids discussion forum](https://github.com/maroba/numgrids/discussions) and
   start writing code.
 
 * Do not open an issue on GitHub until you have collected positive feedback about the change. GitHub issues are
@@ -26,9 +26,9 @@
 
 #### **Do you have questions about the source code?**
 
-* Ask any question about how to use *findiff* in
-  the [discussion forum](https://github.com/maroba/findiff/discussions).
+* Ask any question about how to use *numgrids* in
+  the [discussion forum](https://github.com/maroba/numgrids/discussions).
 
 Thanks! :heart: :heart: :heart:
 
-The *findiff* Team
+The *numgrids* Team
