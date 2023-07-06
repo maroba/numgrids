@@ -212,7 +212,7 @@ class MultiGrid:
             grid = Grid(*axes)
             self.levels.append(grid)
 
-    def transfer(self, f, level_from, level_to):
+    def transfer(self, f, level_from, level_to, method="linear"):
         from numgrids import Interpolator
         assert f.shape == self.levels[level_from].shape
         assert abs(level_from - level_to) == 1
@@ -220,6 +220,6 @@ class MultiGrid:
         grid_fr = self.levels[level_from]
         grid_to = self.levels[level_to]
 
-        interp = Interpolator(grid_fr, f, method="linear")
+        interp = Interpolator(grid_fr, f, method=method)
         return interp(grid_to)
 

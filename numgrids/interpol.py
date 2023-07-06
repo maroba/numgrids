@@ -28,7 +28,7 @@ class Interpolator:
                 "quadratic": 2,
                 "cubic": 3
             }
-            self._inter = UnivariateSpline(grid.coords, f, kind=methods[method])
+            self._inter = UnivariateSpline(grid.coords, f, k=methods[method])
 
     def __call__(self, locations):
         """
