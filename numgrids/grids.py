@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.interpolate import interpn, RegularGridInterpolator
 
 
 class Grid:
@@ -193,3 +194,32 @@ class Grid:
         return np.vstack([arr.reshape(-1) for arr in arrs]).T.reshape(
             *self.shape, -1
         )
+
+
+class MultiGrid:
+
+    def __init__(self, *axes, min_size=8):
+        grid = Grid(*axes)
+        self.levels = [grid]
+        while True:
+            sizes = np.array(grid.shape)
+            # size -> size / 2 if size is even and size -> (size+1)/2 if it is odd:
+            sizes = sizes // 2 + sizes % 2
+            if min(sizes) < min_size:
+                break
+            axes = [type(axis)(size, axis.coords[0], axis.coords[-1])
+                    for size, axis in zip(sizes, axes)]
+            grid = Grid(*axes)
+            self.levels.append(grid)
+
+    def transfer(self, f, level_from, level_to):
+        from numgrids import Interpolator
+        assert f.shape == self.levels[level_from].shape
+        assert abs(level_from - level_to) == 1
+
+        grid_fr = self.levels[level_from]
+        grid_to = self.levels[level_to]
+
+        interp = Interpolator(grid_fr, f, method="linear")
+        return interp(grid_to)
+

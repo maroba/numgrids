@@ -4,7 +4,7 @@ from unittest.mock import patch
 import numpy as np
 import numpy.testing as npt
 
-from numgrids.grids import Grid
+from numgrids.grids import Grid, MultiGrid
 from numgrids.axes import EquidistantAxis, ChebyshevAxis
 
 
@@ -50,7 +50,7 @@ class TestGrid(unittest.TestCase):
 
         X, Y = grid.meshed_coords
 
-        f = X**2 + Y**2
+        f = X ** 2 + Y ** 2
 
         npt.assert_array_almost_equal(x_axis.coords, x)
         npt.assert_array_almost_equal(y_axis.coords, y)
@@ -59,7 +59,7 @@ class TestGrid(unittest.TestCase):
         npt.assert_array_almost_equal(X, X_)
         npt.assert_array_almost_equal(Y, Y_)
 
-        npt.assert_array_almost_equal(f, X_**2 + Y_**2)
+        npt.assert_array_almost_equal(f, X_ ** 2 + Y_ ** 2)
 
     def test_boundary(self):
         nx = ny = 11
@@ -86,8 +86,7 @@ class TestGrid(unittest.TestCase):
         npt.assert_array_equal(grid.boundary, bdry)
 
     def test_boundary_periodic(self):
-
-        phi_axis = EquidistantAxis(11, 0, 2*np.pi, periodic=True)
+        phi_axis = EquidistantAxis(11, 0, 2 * np.pi, periodic=True)
         r_axis = EquidistantAxis(11, 1.E-3, 1)
         grid = Grid(r_axis, phi_axis)
         R, Phi = grid.meshed_coords
@@ -169,3 +168,51 @@ class TestGrid(unittest.TestCase):
         npt.assert_array_equal((-3, -4), coord_tuples[0, 0])
         npt.assert_array_equal((-3, 8), coord_tuples[0, -1])
         npt.assert_array_equal((7, 8), coord_tuples[-1, -1])
+
+
+class TestMultiGrid(unittest.TestCase):
+
+    def test_init_multigrid(self):
+        axis = EquidistantAxis(10, -1, 1)
+        mgrid = MultiGrid(axis, axis, min_size=3)
+
+        self.assertEqual(3, len(mgrid.levels))
+        self.assertEqual((10, 10), mgrid.levels[0].shape)
+        self.assertEqual((5, 5), mgrid.levels[1].shape)
+        self.assertEqual((3, 3), mgrid.levels[2].shape)
+
+    def test_transfer_to_coarse_grid(self):
+        xaxis = EquidistantAxis(120, -1, 1)
+        yaxis = EquidistantAxis(100, -1, 1)
+        mgrid = MultiGrid(xaxis, yaxis, min_size=3)
+
+        grid_0 = mgrid.levels[0]
+        X_0, Y_0 = grid_0.meshed_coords
+
+        f_0 = X_0**2 + Y_0**2
+
+        grid_1 = mgrid.levels[1]
+        X_1, Y_1 = grid_1.meshed_coords
+
+        f_1 = X_1**2 + Y_1**2
+        actual = mgrid.transfer(f_0, 0, 1)
+
+        npt.assert_allclose(actual, f_1, atol=1.E-3)
+
+    def test_transfer_to_fine_grid(self):
+        xaxis = EquidistantAxis(120, -1, 1)
+        yaxis = EquidistantAxis(100, -1, 1)
+        mgrid = MultiGrid(xaxis, yaxis, min_size=3)
+
+        grid_0 = mgrid.levels[0]
+        X_0, Y_0 = grid_0.meshed_coords
+
+        f_0 = X_0**2 + Y_0**2
+
+        grid_1 = mgrid.levels[1]
+        X_1, Y_1 = grid_1.meshed_coords
+
+        f_1 = X_1**2 + Y_1**2
+        actual = mgrid.transfer(f_1, 1, 0)
+
+        npt.assert_allclose(actual, f_0, atol=1.E-3)
