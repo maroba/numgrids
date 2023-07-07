@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.interpolate import RegularGridInterpolator, CubicSpline, UnivariateSpline
+from scipy.interpolate import RegularGridInterpolator, CubicSpline, UnivariateSpline, interp1d
 
 from numgrids import Grid
 
@@ -18,6 +18,8 @@ class Interpolator:
             The grid on which the array f is meshed.
         f: numpy.ndarray
             The data to interpolate.
+        method: str
+            Interpolation order. May be 'linear', 'quadratic' or 'cubic'.
         """
         self.grid = grid
         if grid.ndims > 1:
@@ -28,7 +30,8 @@ class Interpolator:
                 "quadratic": 2,
                 "cubic": 3
             }
-            self._inter = UnivariateSpline(grid.coords, f, k=methods[method])
+            # self._inter = UnivariateSpline(grid.coords, f, k=methods[method])
+            self._inter = interp1d(grid.coords, f, kind=method)
 
     def __call__(self, locations):
         """
