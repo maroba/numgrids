@@ -193,3 +193,83 @@ class Grid:
         return np.vstack([arr.reshape(-1) for arr in arrs]).T.reshape(
             *self.shape, -1
         )
+
+
+class MultiGrid:
+    """
+    Represents a multigrid, a hierarchical set of grids of different resolutions
+    for the same domain.
+    """
+
+    def __init__(self, *axes, min_size=2):
+        """
+        Constructor.
+
+        The grids of the various resolutions are stored in the property `levels`.
+
+        Parameters
+        ----------
+        axes: one or more Axis objects
+            The axes for the grid with highest resolution. Starting from the grid
+            with the highest resolution (level 0), the constructor will create different levels
+            of resolution. Each additional level contains a grid with about half the grid
+            points in each direction.
+
+        min_size: positive int
+            This parameter sets a lower bound for the coarsest grid in the multigrid.
+            At the lowest resolution, each axis must have at least min_size grid points.
+        """
+        grid = Grid(*axes)
+        self._levels = [grid]
+        while True:
+            sizes = np.array(grid.shape)
+            # size -> size / 2 if size is even and size -> (size+1)/2 if it is odd:
+            sizes = sizes // 2 + sizes % 2
+            if min(sizes) < min_size:
+                break
+            axes = [type(axis)(size, axis.coords[0], axis.coords[-1])
+                    for size, axis in zip(sizes, axes)]
+            grid = Grid(*axes)
+            self._levels.append(grid)
+
+    @property
+    def levels(self):
+        """
+        Returns a list of grids with different resolution levels.
+
+        levels[0] => finest grid
+        levels[-1] => coarsest grid
+        """
+        return self._levels
+
+    def transfer(self, f, level_from, level_to, method="linear"):
+        """
+        Coarsen or refine an array on a grid by one level.
+
+        Parameters
+        ----------
+        f: numpy.ndarray
+            An array given on the grid at level = level_from.
+        level_from: int
+            The level of the grid on which f is given.
+        level_to: int
+            The level to which f shall be refined or coarsened.
+        method: str
+            Coarsening and refinement involves interpolation. This
+            is the interpolation order.
+
+        Returns
+        -------
+        The coarsened or refined array.
+        """
+        from numgrids import Interpolator
+        assert f.shape == self.levels[level_from].shape
+        assert abs(level_from - level_to) == 1
+
+        grid_fr = self.levels[level_from]
+        grid_to = self.levels[level_to]
+
+        interp = Interpolator(grid_fr, f, method=method)
+        f_trans = interp(grid_to)
+
+        return f_trans

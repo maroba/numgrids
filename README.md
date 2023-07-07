@@ -12,6 +12,7 @@
 - Interpolation
 - Easy manipulation of meshed functions
 - Using high precision spectral methods (FFT + Chebyshev) wherever possible
+- Includes multigrid functionality
 - Fully compatible with *numpy*
 
 ## Installation

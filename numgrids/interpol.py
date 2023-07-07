@@ -1,12 +1,12 @@
 import numpy as np
-from scipy.interpolate import RegularGridInterpolator, CubicSpline
+from scipy.interpolate import RegularGridInterpolator, CubicSpline, UnivariateSpline, interp1d
 
 from numgrids import Grid
 
 
 class Interpolator:
 
-    def __init__(self, grid, f):
+    def __init__(self, grid, f, method="cubic"):
         """
         Create an interpolating function for the array data.
 
@@ -18,12 +18,20 @@ class Interpolator:
             The grid on which the array f is meshed.
         f: numpy.ndarray
             The data to interpolate.
+        method: str
+            Interpolation order. May be 'linear', 'quadratic' or 'cubic'.
         """
         self.grid = grid
         if grid.ndims > 1:
-            self._inter = RegularGridInterpolator(grid.coords, f, method="cubic")
+            self._inter = RegularGridInterpolator(grid.coords, f, method=method)
         else:
-            self._inter = CubicSpline(grid.coords, f)
+            methods = {
+                "linear": 1,
+                "quadratic": 2,
+                "cubic": 3
+            }
+            # self._inter = UnivariateSpline(grid.coords, f, k=methods[method])
+            self._inter = interp1d(grid.coords, f, kind=method)
 
     def __call__(self, locations):
         """
