@@ -66,6 +66,39 @@ class TestDiff(unittest.TestCase):
         d_dx = Diff(grid, 1, 0)
         npt.assert_array_almost_equal(2*x, d_dx(f))
 
+    def test_default_acc(self):
+        axis = EquidistantAxis(100, 0, 1)
+        grid = Grid(axis)
+        d = Diff(grid, 1, 0)
+        self.assertEqual(d.operator.acc, 4)
+
+    def test_custom_acc(self):
+        axis = EquidistantAxis(100, 0, 1)
+        grid = Grid(axis)
+        d = Diff(grid, 1, 0, acc=8)
+        self.assertEqual(d.operator.acc, 8)
+
+    def test_acc_ignored_by_chebyshev(self):
+        axis = ChebyshevAxis(20, 0, 1)
+        grid = Grid(axis)
+        x = axis.coords
+        f = x ** 2
+        # acc is accepted but ignored — result should still be accurate
+        d = Diff(grid, 1, 0, acc=2)
+        npt.assert_array_almost_equal(2 * x, d(f))
+
+    def test_acc_with_periodic_axis(self):
+        axis = EquidistantAxis(50, 0, 2 * np.pi, periodic=True)
+        grid = Grid(axis)
+        d = Diff(grid, 1, 0, acc=2)
+        self.assertEqual(d.operator.acc, 2)
+
+    def test_acc_with_log_axis(self):
+        axis = LogAxis(50, 0.1, 10)
+        grid = Grid(axis)
+        d = Diff(grid, 1, 0, acc=8)
+        self.assertEqual(d.operator.acc, 8)
+
 class TestSphericalGrid(unittest.TestCase):
 
     def test_spherical_grid(self):
@@ -123,6 +156,21 @@ class TestConvenience(unittest.TestCase):
         self.assertEqual(
             1, len(grid.cache["diffs"])
         )
+
+    def test_diff_with_acc(self):
+        axis = EquidistantAxis(100, 0, 1)
+        grid = Grid(axis)
+        x = axis.coords
+        f = x ** 4
+
+        result = diff(grid, f, 1, 0, acc=6)
+        npt.assert_array_almost_equal(result, 4 * x ** 3, decimal=5)
+
+        # Different acc values create separate cache entries
+        diff(grid, f, 1, 0, acc=2)
+        self.assertEqual(2, len(grid.cache["diffs"]))
+        self.assertIn((1, 0, 6), grid.cache["diffs"])
+        self.assertIn((1, 0, 2), grid.cache["diffs"])
 
     def test_interpolate(self):
         grid = Grid(create_axis(AxisType.EQUIDISTANT, 50, 0, 1))

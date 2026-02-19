@@ -13,7 +13,7 @@ from numgrids.axes import Axis, EquidistantAxis, ChebyshevAxis, LogAxis
 
 class Diff:
 
-    def __init__(self, grid: Grid, order: int, axis_index: int = 0) -> None:
+    def __init__(self, grid: Grid, order: int, axis_index: int = 0, acc: int = 4) -> None:
         """Constructor for partial derivative operator.
 
         Parameters
@@ -24,6 +24,10 @@ class Diff:
             The order of the derivative.
         axis_index: int
             The axis index (which axis in the grid).
+        acc: int
+            The accuracy order for finite-difference based methods. Higher values
+            use wider stencils for better accuracy. Ignored by spectral methods
+            (Chebyshev). Default is 4.
         """
         if order <= 0:
             raise ValueError("Derivative order must be positive integer.")
@@ -38,7 +42,7 @@ class Diff:
             raise ValueError("No such axis index in this grid!")
 
         axis = grid.get_axis(axis_index)
-        self.operator = axis.create_diff_operator(grid, order, axis_index)
+        self.operator = axis.create_diff_operator(grid, order, axis_index, acc=acc)
 
     def __call__(self, f: NDArray) -> NDArray:
         """Apply the derivative to the array f."""
@@ -133,13 +137,14 @@ class SphericalGrid(Grid):
         return self._laplacian_fn(f)
 
 
-def diff(grid: Grid, f: NDArray, order: int = 1, axis_index: int = 0) -> NDArray:
+def diff(grid: Grid, f: NDArray, order: int = 1, axis_index: int = 0, acc: int = 4) -> NDArray:
     """Convenience function for differentiation with caching."""
-    if (order, axis_index) in grid.cache.get("diffs"):
-        d = grid.cache["diffs"][order, axis_index]
+    cache_key = (order, axis_index, acc)
+    if cache_key in grid.cache.get("diffs"):
+        d = grid.cache["diffs"][cache_key]
     else:
-        d = Diff(grid, order, axis_index)
-        grid.cache["diffs"][order, axis_index] = d
+        d = Diff(grid, order, axis_index, acc=acc)
+        grid.cache["diffs"][cache_key] = d
     return d(f)
 
 

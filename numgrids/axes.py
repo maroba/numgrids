@@ -52,8 +52,19 @@ class Axis:
     def _setup_external_coords(self, low: float, high: float) -> NDArray:
         return self._coords_internal * (high - low) + low
 
-    def create_diff_operator(self, grid: Grid, order: int, axis_index: int) -> GridDiff:
+    def create_diff_operator(self, grid: Grid, order: int, axis_index: int, acc: int = 4) -> GridDiff:
         """Create the appropriate differentiation operator for this axis type.
+
+        Parameters
+        ----------
+        grid: Grid
+            The numerical grid.
+        order: int
+            The derivative order.
+        axis_index: int
+            The axis index.
+        acc: int
+            The accuracy order for finite-difference based methods.
 
         Must be implemented by child classes.
         """
@@ -128,12 +139,12 @@ class EquidistantAxis(Axis):
     def _setup_internal_coords(self, *args) -> NDArray:
         return np.linspace(0, 1, len(self), endpoint=not self.periodic)
 
-    def create_diff_operator(self, grid: Grid, order: int, axis_index: int) -> GridDiff:
+    def create_diff_operator(self, grid: Grid, order: int, axis_index: int, acc: int = 4) -> GridDiff:
         """Create FFT-based diff for periodic, finite differences for non-periodic."""
         from numgrids.diff import FiniteDifferenceDiff, FFTDiff
         if self.periodic:
-            return FFTDiff(grid, order, axis_index)
-        return FiniteDifferenceDiff(grid, order, axis_index)
+            return FFTDiff(grid, order, axis_index, acc=acc)
+        return FiniteDifferenceDiff(grid, order, axis_index, acc=acc)
 
     @property
     def spacing(self) -> float:
@@ -200,8 +211,12 @@ class ChebyshevAxis(Axis):
         coords = (self._coords_internal[::-1] + 1) / 2
         return coords * (high - low) + low
 
-    def create_diff_operator(self, grid: Grid, order: int, axis_index: int) -> GridDiff:
-        """Create Chebyshev spectral differentiation operator."""
+    def create_diff_operator(self, grid: Grid, order: int, axis_index: int, acc: int = 4) -> GridDiff:
+        """Create Chebyshev spectral differentiation operator.
+
+        Note: acc is accepted for API consistency but not used
+        by the Chebyshev spectral method.
+        """
         from numgrids.diff import ChebyshevDiff
         return ChebyshevDiff(grid, order, axis_index)
 
@@ -233,7 +248,7 @@ class LogAxis(Axis):
         """The external coordinates are as expected by the user."""
         return np.logspace(np.log10(low), np.log10(high), len(self))
 
-    def create_diff_operator(self, grid: Grid, order: int, axis_index: int) -> GridDiff:
+    def create_diff_operator(self, grid: Grid, order: int, axis_index: int, acc: int = 6) -> GridDiff:
         """Create logarithmic differentiation operator."""
         from numgrids.diff import LogDiff
-        return LogDiff(grid, order, axis_index)
+        return LogDiff(grid, order, axis_index, acc=acc)

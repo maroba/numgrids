@@ -320,3 +320,66 @@ class TestLogDiff(unittest.TestCase):
 
         self.assertTrue(error < 1.E-5, msg=str(error))
 
+
+class TestAccuracyOrder(unittest.TestCase):
+    """Tests for the configurable accuracy order parameter."""
+
+    def test_finite_diff_default_acc(self):
+        grid = Grid(EquidistantAxis(100, 0, 1))
+        d = FiniteDifferenceDiff(grid, 1, 0)
+        self.assertEqual(d.acc, 4)
+
+    def test_finite_diff_custom_acc(self):
+        grid = Grid(EquidistantAxis(100, 0, 1))
+        d = FiniteDifferenceDiff(grid, 1, 0, acc=2)
+        self.assertEqual(d.acc, 2)
+
+    def test_finite_diff_higher_acc_is_more_accurate(self):
+        grid = Grid(EquidistantAxis(30, 0, 1))
+        x = grid.coords
+        f = x ** 5
+
+        d_low = FiniteDifferenceDiff(grid, 1, 0, acc=2)
+        d_high = FiniteDifferenceDiff(grid, 1, 0, acc=6)
+
+        expected = 5 * x ** 4
+        error_low = np.max(np.abs(d_low(f)[3:-3] - expected[3:-3]))
+        error_high = np.max(np.abs(d_high(f)[3:-3] - expected[3:-3]))
+
+        self.assertGreater(error_low, error_high)
+
+    def test_fft_diff_default_acc(self):
+        axis = EquidistantAxis(50, 0, 2 * np.pi, periodic=True)
+        grid = Grid(axis)
+        d = FFTDiff(grid, 1, 0)
+        self.assertEqual(d.acc, 6)
+
+    def test_fft_diff_custom_acc(self):
+        axis = EquidistantAxis(50, 0, 2 * np.pi, periodic=True)
+        grid = Grid(axis)
+        d = FFTDiff(grid, 1, 0, acc=2)
+        self.assertEqual(d.acc, 2)
+
+    def test_log_diff_default_acc(self):
+        grid = Grid(LogAxis(50, 0.1, 10))
+        d = LogDiff(grid, 1, 0)
+        self.assertEqual(d.acc, 6)
+
+    def test_log_diff_custom_acc(self):
+        grid = Grid(LogAxis(50, 0.1, 10))
+        d = LogDiff(grid, 1, 0, acc=2)
+        self.assertEqual(d.acc, 2)
+
+    def test_log_diff_higher_acc_is_more_accurate(self):
+        grid = Grid(LogAxis(50, 0.1, 10))
+        x = grid.coords
+        f = x ** 3
+
+        d_low = LogDiff(grid, 1, 0, acc=2)
+        d_high = LogDiff(grid, 1, 0, acc=6)
+
+        expected = 3 * x ** 2
+        error_low = np.max(np.abs(d_low(f)[3:-3] - expected[3:-3]))
+        error_high = np.max(np.abs(d_high(f)[3:-3] - expected[3:-3]))
+
+        self.assertGreater(error_low, error_high)

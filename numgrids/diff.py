@@ -43,13 +43,13 @@ class FiniteDifferenceDiff(GridDiff):
     Used for equidistant, non-periodic grids.
     """
 
-    def __init__(self, grid: Grid, order: int, axis_index: int) -> None:
+    def __init__(self, grid: Grid, order: int, axis_index: int, acc: int = 4) -> None:
         super().__init__(grid, order, axis_index)
         if not isinstance(self.axis, EquidistantAxis):
             raise TypeError(f"Axis must be of type EquidistantAxis. Got: {type(self.axis)}")
 
-        # TODO make the accuracy order flexible:
-        self.operator = FinDiff(axis_index, self.axis.spacing, order, acc=4)
+        self.acc = acc
+        self.operator = FinDiff(axis_index, self.axis.spacing, order, acc=acc)
 
     def as_matrix(self) -> spmatrix:
         return self.operator.matrix(self.grid.shape)
@@ -61,7 +61,7 @@ class FFTDiff(GridDiff):
     Used for equidistant, periodic grids.
     """
 
-    def __init__(self, grid: Grid, order: int, axis_index: int) -> None:
+    def __init__(self, grid: Grid, order: int, axis_index: int, acc: int = 6) -> None:
         super().__init__(grid, order, axis_index)
 
         if not isinstance(self.axis, EquidistantAxis):
@@ -69,11 +69,12 @@ class FFTDiff(GridDiff):
         if not self.axis.periodic:
             raise TypeError("Spectral FFT differentiation requires periodic boundary conditions.")
 
+        self.acc = acc
         self.operator = self._setup_operator(grid)
 
         # since we have no matrix representation of a FFTDiff, use finite differences
         # until we implement something better:
-        self._D = FinDiff(0, self.axis.spacing, 1, acc=6).matrix((len(self.axis),))
+        self._D = FinDiff(0, self.axis.spacing, 1, acc=acc).matrix((len(self.axis),))
 
     def as_matrix(self) -> spmatrix:
         return self._D
@@ -167,13 +168,14 @@ class LogDiff(GridDiff):
     Based on finite differences on the (equidistant) log-scale of coordinates.
     """
 
-    def __init__(self, grid: Grid, order: int, axis_index: int) -> None:
+    def __init__(self, grid: Grid, order: int, axis_index: int, acc: int = 6) -> None:
         super().__init__(grid, order, axis_index)
         if not isinstance(self.axis, LogAxis):
             raise TypeError(f"Axis must be of type LogAxis. Got: {type(self.axis)}")
 
+        self.acc = acc
         x = self.axis.coords_internal
-        self._fd = FinDiff(axis_index, x[1] - x[0], order, acc=6)
+        self._fd = FinDiff(axis_index, x[1] - x[0], order, acc=acc)
 
         def operator(f: NDArray) -> NDArray:
             return self._fd(f) / self.grid.meshed_coords[axis_index]
