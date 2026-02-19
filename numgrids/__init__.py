@@ -1,4 +1,4 @@
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 from .grids import Grid, MultiGrid
 from .api import Diff, AxisType, create_axis, SphericalGrid, CylindricalGrid, PolarGrid, diff, interpolate, integrate

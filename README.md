@@ -5,17 +5,25 @@
 
   <div align="center"><img src="docs/assets/torus.png" width="25%">  <img src="docs/assets/disk320.png" width="25%"> <img src="docs/assets/cubic.png" width="25%"></div>
 
+Setting up numerical grids, differentiation matrices, and coordinate
+transformations by hand is tedious and error-prone.
+*numgrids* gives you a high-level, NumPy-friendly API that handles all of
+this — so you can focus on the physics or mathematics of your problem instead
+of bookkeeping grid indices and scale factors.
+
 **Main Features**
 
 - Quickly define numerical grids for any rectangular or curvilinear coordinate system
+- Multiple axis types: **equidistant**, **Chebyshev**, **logarithmic**, and **periodic**
 - Built-in **spherical**, **cylindrical**, and **polar** coordinate grids
 - **Vector calculus operators**: gradient, divergence, curl, and Laplacian on curvilinear grids
-- Differentiation and integration
-- Interpolation
-- Easy manipulation of meshed functions
-- Using high precision spectral methods (FFT + Chebyshev) wherever possible
-- Includes multigrid functionality
-- Fully compatible with *numpy*
+- High-precision **spectral methods** (FFT + Chebyshev) selected automatically where possible
+- Differentiation, integration, and interpolation
+- **Boundary conditions**: Dirichlet, Neumann, and Robin — at the array level or inside sparse linear systems
+- **Adaptive mesh refinement** with built-in Richardson-extrapolation error estimation
+- **Save / load** grids and data to `.npz` files
+- Multigrid hierarchies with inter-level transfer operators
+- Fully compatible with *NumPy* and *SciPy*
 
 ## Installation
 

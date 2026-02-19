@@ -29,6 +29,48 @@ grid = Grid(axis_r, axis_phi)
 R, Phi = grid.meshed_coords
 ```
 
+### Choosing an axis type
+
+*numgrids* offers four axis types. Each one selects a different point
+distribution and differentiation strategy:
+
+| Axis type | Best for | Differentiation method |
+|---|---|---|
+| `EQUIDISTANT` | Uniform sampling, finite-difference problems | Finite differences (configurable accuracy) |
+| `EQUIDISTANT` with `periodic=True` | Periodic directions (angles, Fourier problems) | FFT spectral method |
+| `CHEBYSHEV` | Smooth non-periodic functions where high accuracy is needed | Chebyshev spectral method |
+| `LOGARITHMIC` | Domains where fine resolution is needed near the lower bound (e.g. radial coordinates near zero) | Finite differences on log-scale + chain rule |
+
+**Rules of thumb:**
+
+- For **periodic** coordinates (e.g. azimuthal angle *φ*), always use
+  `EQUIDISTANT` with `periodic=True` — the FFT spectral method gives
+  exponential convergence.
+- For **non-periodic smooth** functions, `CHEBYSHEV` typically reaches a
+  given accuracy with far fewer points than equidistant spacing.
+- For **large dynamic ranges** (e.g. *r* from 0.01 to 100), `LOGARITHMIC`
+  packs more points where the function varies fastest.
+- If you don't know yet, start with `EQUIDISTANT` — it is the most
+  straightforward and works well as a baseline.
+
+### Logarithmic axes
+
+Logarithmic axes place grid points on a log-scale, giving high resolution
+near the lower boundary. The lower bound must be strictly positive:
+
+```python
+# 40 points from 0.01 to 100, dense near 0.01
+axis_r = create_axis(AxisType.LOGARITHMIC, 40, 0.01, 100)
+
+grid = Grid(axis_r)
+R = grid.meshed_coords[0]
+f = 1 / R  # fine resolution where f varies fastest
+```
+
+Differentiation on a `LOGARITHMIC` axis uses finite differences on the
+internal log-scale coordinate and applies the chain rule automatically —
+no manual coordinate transformation needed.
+
 ## Differentiation and Integration
 
 ```python
@@ -40,6 +82,24 @@ df_dr = d_dr(f)            # ≈ 2r
 # Integration
 I = Integral(grid)
 I(f * R)  # ∫ f r dr dφ
+```
+
+For equidistant (non-periodic) axes the optional `acc` parameter controls the
+finite-difference accuracy order (default 4):
+
+```python
+d_dr_high = Diff(grid, 1, 0, acc=6)  # 6th-order finite differences
+```
+
+Spectral axes (`CHEBYSHEV` and periodic `EQUIDISTANT`) ignore `acc` and always
+use their native spectral method.
+
+Every `Diff` operator can also be exported as a sparse matrix, which is useful
+for building linear systems (e.g. PDE solves):
+
+```python
+D = Diff(grid, 2, 0)   # ∂²/∂r²
+D.as_matrix()           # returns a scipy.sparse matrix
 ```
 
 ## Interpolation
@@ -175,8 +235,102 @@ The file stores a compact JSON description of the grid definition (axis
 types, parameters) so the grid is fully reconstructed — including its type
 (`SphericalGrid`, `PolarGrid`, etc.) and all axis properties.
 
-## Refinement and Coarsening
+## Refinement, Coarsening, and Multigrid
 
-The `MultiGrid` class lets you define a hierarchy of grids at different
-resolutions and transfer meshed functions between them via interpolation.
-See the API reference for details.
+Every grid can be refined or coarsened:
+
+```python
+grid = Grid(
+    create_axis(AxisType.EQUIDISTANT, 20, 0, 1),
+    create_axis(AxisType.EQUIDISTANT, 20, 0, 1),
+)
+
+fine   = grid.refine()             # double all axis resolutions
+coarse = grid.coarsen()            # halve all axis resolutions
+fine_r = grid.refine_axis(0, 3)    # triple resolution along axis 0 only
+```
+
+The `MultiGrid` class builds a full hierarchy of grids automatically and
+can transfer meshed functions between levels via interpolation:
+
+```python
+mg = MultiGrid(
+    create_axis(AxisType.EQUIDISTANT, 32, 0, 1),
+    create_axis(AxisType.EQUIDISTANT, 32, 0, 1),
+)
+# mg.levels[0] is the finest grid, mg.levels[-1] the coarsest
+
+f_fine = mg.levels[0].meshed_coords[0] ** 2
+f_coarse = mg.transfer(f_fine, level_from=0, level_to=1)
+```
+
+## Adaptive Mesh Refinement
+
+When you don't know in advance how many grid points you need,
+*numgrids* can determine the resolution for you. The `adapt` function
+iteratively refines the axis that contributes the most discretization
+error until a prescribed tolerance is met.
+
+The core idea is **Richardson-extrapolation-style error estimation**:
+for each axis, the function is evaluated on a grid refined along that
+axis, interpolated back, and compared. The axis with the largest
+difference is the resolution bottleneck and gets refined first.
+
+### One-shot error estimation
+
+Use `estimate_error` for a quick diagnostic without running the full
+adaptation loop:
+
+```python
+from numgrids import *
+import numpy as np
+
+grid = Grid(
+    create_axis(AxisType.EQUIDISTANT, 10, 0, 1),
+    create_axis(AxisType.EQUIDISTANT, 10, 0, 1),
+)
+
+def my_func(g):
+    X, Y = g.meshed_coords
+    return np.sin(10 * X) * Y ** 2
+
+result = estimate_error(grid, my_func)
+print(result["global"])      # scalar error estimate
+print(result["per_axis"])    # {0: ..., 1: ...}
+```
+
+### Automatic adaptation
+
+The `adapt` function runs the estimation–refinement loop until the
+global error drops below a tolerance:
+
+```python
+grid = Grid(
+    create_axis(AxisType.EQUIDISTANT, 10, 0, 1),
+    create_axis(AxisType.EQUIDISTANT, 10, 0, 1),
+)
+
+result = adapt(grid, my_func, tol=1e-4)
+
+print(result.converged)      # True if tolerance was met
+print(result.grid.shape)     # final resolution per axis
+print(result.global_error)   # error on the final grid
+print(result.iterations)     # number of refinement steps
+```
+
+Because *numgrids* uses tensor-product grids, refinement is
+**per-axis** rather than per-cell. This keeps all existing operators
+(differentiation, integration, interpolation) working unchanged while
+still allowing anisotropic resolution — e.g. fine radial resolution with
+coarse angular resolution.
+
+Key parameters of `adapt`:
+
+| Parameter | Default | Description |
+|---|---|---|
+| `tol` | `1e-6` | Target error tolerance |
+| `norm` | `"max"` | Error norm (`"max"`, `"l2"`, or `"mean"`) |
+| `max_iterations` | `20` | Safety limit on refinement steps |
+| `max_points_per_axis` | `1024` | Cap on per-axis resolution |
+| `refinement_factor` | `2.0` | Factor by which to increase resolution |
+| `refine_all` | `False` | Refine all underresolved axes at once instead of only the worst |
