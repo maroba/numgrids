@@ -17,6 +17,9 @@ Working with Axes and Grids
 .. autoclass:: numgrids.SphericalGrid
     :members:
 
+.. autoclass:: numgrids.CylindricalGrid
+    :members:
+
 
 Differentiation, Integration and Interpolation
 ----------------------------------------------

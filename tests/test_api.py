@@ -7,7 +7,7 @@ import numpy as np
 import numpy.testing as npt
 
 
-from numgrids import create_axis, AxisType, SphericalGrid, Diff, interpolate, diff, integrate
+from numgrids import create_axis, AxisType, SphericalGrid, CylindricalGrid, Diff, interpolate, diff, integrate
 from numgrids.axes import EquidistantAxis, ChebyshevAxis, LogAxis
 from numgrids.diff import FiniteDifferenceDiff, FFTDiff, ChebyshevDiff, LogDiff
 from numgrids.grids import Grid
@@ -264,6 +264,182 @@ class TestSphericalGrid(unittest.TestCase):
 
         self.assertIs(grid._laplacian_fn, fn_ref)
         npt.assert_array_equal(result1, result2)
+
+
+class TestCylindricalGrid(unittest.TestCase):
+
+    def _make_grid(self, r_low=0.1, r_high=2, nr=20, nphi=30, nz=20,
+                   z_low=-1, z_high=1):
+        """Helper to create a standard cylindrical grid."""
+        return CylindricalGrid(
+            create_axis(AxisType.CHEBYSHEV, nr, r_low, r_high),
+            create_axis(AxisType.EQUIDISTANT_PERIODIC, nphi, 0, 2 * np.pi),
+            create_axis(AxisType.CHEBYSHEV, nz, z_low, z_high),
+        )
+
+    def test_construction(self):
+        grid = self._make_grid()
+        self.assertEqual(grid.ndims, 3)
+        self.assertEqual(len(grid.axes), 3)
+        self.assertTrue(grid.axes[1].periodic)
+
+    def test_shape(self):
+        grid = self._make_grid(nr=15, nphi=20, nz=10)
+        self.assertEqual(grid.shape, (15, 20, 10))
+
+    def test_meshed_coords_ordering(self):
+        """Axes order must be (r, phi, z)."""
+        grid = self._make_grid()
+        R, Phi, Z = grid.meshed_coords
+        # R should increase along axis 0
+        self.assertTrue(np.all(np.diff(R[:, 0, 0]) > 0) or
+                        np.all(np.diff(R[:, 0, 0]) < 0))
+        # Z should increase along axis 2
+        self.assertTrue(np.all(np.diff(Z[0, 0, :]) > 0) or
+                        np.all(np.diff(Z[0, 0, :]) < 0))
+
+    def test_lazy_laplacian_init(self):
+        """Laplacian should not be set up until first call."""
+        grid = self._make_grid()
+        self.assertIsNone(grid._laplacian_fn)
+        R, Phi, Z = grid.meshed_coords
+        grid.laplacian(R ** 2)
+        self.assertIsNotNone(grid._laplacian_fn)
+
+    def test_laplacian_caching(self):
+        """Second call must reuse the cached Laplacian function."""
+        grid = self._make_grid()
+        R, Phi, Z = grid.meshed_coords
+        f = R ** 2
+        grid.laplacian(f)
+        fn_ref = grid._laplacian_fn
+        grid.laplacian(f)
+        self.assertIs(grid._laplacian_fn, fn_ref)
+
+    def test_laplacian_output_shape(self):
+        grid = self._make_grid()
+        R, Phi, Z = grid.meshed_coords
+        f = R ** 2 + Z ** 2
+        result = grid.laplacian(f)
+        self.assertEqual(result.shape, grid.shape)
+
+    def test_laplacian_r_squared_plus_z_squared(self):
+        r"""Laplacian of r^2 + z^2.
+
+        d^2/dr^2(r^2) + (1/r)*d/dr(r^2) + d^2/dz^2(z^2)
+        = 2 + (1/r)*2r + 2 = 6
+        """
+        grid = self._make_grid(nr=25, nphi=20, nz=25)
+        R, Phi, Z = grid.meshed_coords
+        f = R ** 2 + Z ** 2
+        result = grid.laplacian(f)
+        expected = 6 * np.ones_like(f)
+
+        interior = (slice(2, -2), slice(None), slice(2, -2))
+        npt.assert_array_almost_equal(result[interior], expected[interior], decimal=1)
+
+    def test_laplacian_ln_r(self):
+        r"""Laplacian of ln(r) = 0 for r > 0 (harmonic in 2D cylindrical).
+
+        d^2/dr^2(ln r) + (1/r) d/dr(ln r) = -1/r^2 + 1/r^2 = 0
+        """
+        grid = self._make_grid(r_low=0.5, r_high=3, nr=30, nphi=20, nz=15)
+        R, Phi, Z = grid.meshed_coords
+        f = np.log(R)
+        result = grid.laplacian(f)
+
+        interior = (slice(3, -3), slice(None), slice(3, -3))
+        npt.assert_array_almost_equal(result[interior], 0.0, decimal=1)
+
+    def test_laplacian_cos_phi_over_r(self):
+        r"""Laplacian of cos(phi)/r = 0 for r > 0 (harmonic function).
+
+        This function is harmonic: nabla^2(cos(phi)/r) = 0.
+        """
+        grid = self._make_grid(r_low=0.5, r_high=3, nr=25, nphi=40, nz=15)
+        R, Phi, Z = grid.meshed_coords
+        f = np.cos(Phi) / R
+        result = grid.laplacian(f)
+
+        interior = (slice(3, -3), slice(None), slice(3, -3))
+        npt.assert_array_almost_equal(result[interior], 0.0, decimal=1)
+
+    def test_laplacian_z_squared(self):
+        r"""Laplacian of z^2 = 2 (no r or phi dependence)."""
+        grid = self._make_grid(nr=15, nphi=20, nz=25)
+        R, Phi, Z = grid.meshed_coords
+        f = Z ** 2
+        result = grid.laplacian(f)
+        expected = 2 * np.ones_like(f)
+
+        interior = (slice(2, -2), slice(None), slice(2, -2))
+        npt.assert_array_almost_equal(result[interior], expected[interior], decimal=2)
+
+    def test_laplacian_r_squared(self):
+        r"""Laplacian of r^2 = 4 (only radial terms contribute).
+
+        d^2/dr^2(r^2) + (1/r)*d/dr(r^2) = 2 + 2 = 4
+        """
+        grid = self._make_grid(nr=25, nphi=20, nz=15)
+        R, Phi, Z = grid.meshed_coords
+        f = R ** 2
+        result = grid.laplacian(f)
+        expected = 4 * np.ones_like(f)
+
+        interior = (slice(2, -2), slice(None), slice(2, -2))
+        npt.assert_array_almost_equal(result[interior], expected[interior], decimal=1)
+
+    def test_no_warnings_away_from_singularity(self):
+        """No RuntimeWarnings when grid is far from r=0."""
+        grid = self._make_grid(r_low=0.5, r_high=2)
+        R, Phi, Z = grid.meshed_coords
+        f = R ** 2
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            result = grid.laplacian(f)
+
+        self.assertTrue(np.all(np.isfinite(result)))
+
+    def test_no_warnings_near_r_zero(self):
+        """No RuntimeWarnings even when r is very close to zero."""
+        grid = self._make_grid(r_low=1e-6, r_high=1)
+        R, Phi, Z = grid.meshed_coords
+        f = R ** 2
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            result = grid.laplacian(f)
+
+        self.assertTrue(np.all(np.isfinite(result)))
+
+    def test_no_nan_or_inf_at_singularity(self):
+        """Output must be finite even with grid very close to r=0."""
+        grid = self._make_grid(r_low=1e-10, r_high=1)
+        R, Phi, Z = grid.meshed_coords
+        f = R ** 2 * np.cos(Phi)
+        result = grid.laplacian(f)
+
+        self.assertFalse(np.any(np.isnan(result)), "NaN in output")
+        self.assertFalse(np.any(np.isinf(result)), "Inf in output")
+
+    def test_phi_dependence(self):
+        r"""Laplacian of r^2 * cos(2*phi) must include azimuthal term.
+
+        nabla^2(r^2 cos(2phi)) = 4*cos(2phi) - 4*cos(2phi) = 0
+        (The r terms give 4*cos(2phi), the phi term gives -4*cos(2phi))
+        """
+        grid = self._make_grid(r_low=0.5, r_high=3, nr=25, nphi=40, nz=15)
+        R, Phi, Z = grid.meshed_coords
+        f = R ** 2 * np.cos(2 * Phi)
+        result = grid.laplacian(f)
+
+        interior = (slice(3, -3), slice(None), slice(3, -3))
+        npt.assert_array_almost_equal(result[interior], 0.0, decimal=1)
+
+    def test_is_subclass_of_grid(self):
+        grid = self._make_grid()
+        self.assertIsInstance(grid, Grid)
 
 
 class TestConvenience(unittest.TestCase):
