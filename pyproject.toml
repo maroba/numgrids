@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "numgrids"
+version = "0.3.0"
+description = "Working with numerical grids made easy."
+readme = "docs/pypi_description.md"
+license = "MIT"
+requires-python = ">=3.8"
+authors = [
+    { name = "Matthias Baer", email = "matthias.r.baer@googlemail.com" },
+]
+classifiers = [
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "numpy",
+    "scipy>=1.10.1",
+    "matplotlib",
+    "findiff",
+]
+
+[project.urls]
+Homepage = "https://github.com/maroba/numgrids"
+
+[tool.setuptools.packages.find]
+include = ["numgrids*"]
