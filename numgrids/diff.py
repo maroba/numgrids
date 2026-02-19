@@ -4,7 +4,7 @@ from typing import Callable
 
 import numpy as np
 import scipy.sparse
-from numpy.fft import fft, ifft
+from numpy.fft import fft, ifft, fftfreq
 from numpy.typing import NDArray
 from scipy.sparse import spmatrix
 from findiff import FinDiff
@@ -58,6 +58,7 @@ class FiniteDifferenceDiff(GridDiff):
 class FFTDiff(GridDiff):
     """Partial derivative based on FFT spectral method.
 
+    Uses a true spectral differentiation matrix constructed from the DFT.
     Used for equidistant, periodic grids.
     """
 
@@ -70,34 +71,60 @@ class FFTDiff(GridDiff):
             raise TypeError("Spectral FFT differentiation requires periodic boundary conditions.")
 
         self.acc = acc
-        self.operator = self._setup_operator(grid)
+        n = len(self.axis)
+        period = n * self.axis.spacing
+        scale = 2 * np.pi / period
 
-        # since we have no matrix representation of a FFTDiff, use finite differences
-        # until we implement something better:
-        self._D = FinDiff(0, self.axis.spacing, 1, acc=acc).matrix((len(self.axis),))
+        k_values = fftfreq(n) * n
+        self._W_1d = (1j * k_values * scale) ** order
+        if n % 2 == 0 and order % 2 == 1:
+            self._W_1d[n // 2] = 0
+
+        self.operator = self._setup_operator(grid)
+        self._D = self._build_spectral_matrix()
 
     def as_matrix(self) -> spmatrix:
         return self._D
 
     def _setup_operator(self, grid: Grid) -> Callable[[NDArray], NDArray]:
-        n = len(self.axis)
-        W = 1j * np.hstack((
-            np.arange(n // 2),
-            np.array([0]),
-            np.arange(-n // 2 + 1, 0)
-        ))
-        if self.order % 2:
-            W[n // 2] = 0
-        if self.order > 1:
-            W **= self.order
-        W = np.swapaxes(np.ones(grid.shape) * W, self.axis_index, -1)
+        shape = [1] * grid.ndims
+        shape[self.axis_index] = len(self.axis)
+        W = self._W_1d.reshape(shape)
 
-        def operator(f):
+        def operator(f: NDArray) -> NDArray:
             F = fft(f, axis=self.axis_index)
             dF = W * F
             return np.real(ifft(dF, axis=self.axis_index))
 
         return operator
+
+    def _build_spectral_matrix(self) -> spmatrix:
+        """Build the spectral differentiation matrix via DFT.
+
+        Constructs D = F_inv @ diag(W) @ F, where F is the DFT matrix.
+        For multi-dimensional grids, uses Kronecker products with identity
+        matrices for the other axes.
+        """
+        n = len(self.axis)
+        j_idx, k_idx = np.meshgrid(np.arange(n), np.arange(n), indexing='ij')
+        F = np.exp(-2j * np.pi * j_idx * k_idx / n)
+        F_inv = np.exp(2j * np.pi * j_idx * k_idx / n) / n
+
+        D = np.real(F_inv @ np.diag(self._W_1d) @ F)
+        D_sparse = scipy.sparse.csc_matrix(D)
+
+        if self.grid.ndims == 1:
+            return D_sparse
+
+        result = None
+        for i in range(self.grid.ndims):
+            if i == self.axis_index:
+                mat = D_sparse
+            else:
+                mat = scipy.sparse.identity(len(self.grid.axes[i]))
+            result = mat if result is None else scipy.sparse.kron(result, mat)
+
+        return result
 
 
 class ChebyshevDiff(GridDiff):

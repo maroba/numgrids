@@ -383,3 +383,170 @@ class TestAccuracyOrder(unittest.TestCase):
         error_high = np.max(np.abs(d_high(f)[3:-3] - expected[3:-3]))
 
         self.assertGreater(error_low, error_high)
+
+
+class TestFFTDiffMatrix(unittest.TestCase):
+    """Tests for the spectral differentiation matrix of FFTDiff."""
+
+    def test_matrix_matches_operator_1d_order1(self):
+        """Matrix-vector product must equal operator output."""
+        axis = EquidistantAxis(64, 0, 2 * np.pi, periodic=True)
+        grid = Grid(axis)
+        x = axis.coords
+        f = np.exp(np.sin(x))
+
+        d = FFTDiff(grid, 1, 0)
+        expected = d(f)
+        matrix_result = (d.as_matrix() @ f).reshape(grid.shape)
+
+        npt.assert_array_almost_equal(matrix_result, expected)
+
+    def test_matrix_matches_operator_1d_order2(self):
+        """Matrix must also match operator for second-order derivatives."""
+        axis = EquidistantAxis(64, 0, 2 * np.pi, periodic=True)
+        grid = Grid(axis)
+        x = axis.coords
+        f = np.exp(np.sin(x))
+
+        d = FFTDiff(grid, 2, 0)
+        expected = d(f)
+        matrix_result = (d.as_matrix() @ f).reshape(grid.shape)
+
+        npt.assert_array_almost_equal(matrix_result, expected)
+
+    def test_matrix_matches_operator_2d(self):
+        """Matrix must match operator for multi-dimensional grids."""
+        axis_r = ChebyshevAxis(20, 0.5, 1)
+        axis_theta = EquidistantAxis(32, 0, 2 * np.pi, periodic=True)
+        grid = Grid(axis_r, axis_theta)
+        R, Theta = grid.meshed_coords
+        f = R ** 2 * np.sin(2 * Theta)
+
+        d = FFTDiff(grid, 1, 1)
+        expected = d(f)
+        matrix_result = (d.as_matrix() @ f.reshape(-1)).reshape(grid.shape)
+
+        npt.assert_array_almost_equal(matrix_result, expected)
+
+    def test_matrix_shape_1d(self):
+        n = 50
+        axis = EquidistantAxis(n, 0, 2 * np.pi, periodic=True)
+        grid = Grid(axis)
+        D = FFTDiff(grid, 1, 0).as_matrix()
+
+        self.assertEqual(D.shape, (n, n))
+
+    def test_matrix_shape_2d(self):
+        n_r, n_theta = 30, 40
+        grid = Grid(
+            ChebyshevAxis(n_r, 0.5, 1),
+            EquidistantAxis(n_theta, 0, 2 * np.pi, periodic=True)
+        )
+        D = FFTDiff(grid, 1, 1).as_matrix()
+        total = n_r * n_theta
+
+        self.assertEqual(D.shape, (total, total))
+
+    def test_spectral_accuracy_first_derivative(self):
+        """Spectral method must achieve near-machine-precision accuracy."""
+        axis = EquidistantAxis(64, 0, 2 * np.pi, periodic=True)
+        grid = Grid(axis)
+        x = axis.coords
+        f = np.sin(3 * x)
+        expected = 3 * np.cos(3 * x)
+
+        D = FFTDiff(grid, 1, 0).as_matrix()
+        result = (D @ f).reshape(grid.shape)
+
+        error = np.max(np.abs(result - expected))
+        self.assertLess(error, 1e-12, f"Spectral error {error} is not near machine precision")
+
+    def test_spectral_accuracy_second_derivative(self):
+        """Second derivative must also achieve spectral accuracy."""
+        axis = EquidistantAxis(64, 0, 2 * np.pi, periodic=True)
+        grid = Grid(axis)
+        x = axis.coords
+        f = np.sin(3 * x)
+        expected = -9 * np.sin(3 * x)
+
+        D = FFTDiff(grid, 2, 0).as_matrix()
+        result = (D @ f).reshape(grid.shape)
+
+        error = np.max(np.abs(result - expected))
+        self.assertLess(error, 1e-11, f"Spectral error {error} is not near machine precision")
+
+    def test_spectral_convergence_is_exponential(self):
+        """Error must decay exponentially with grid size (spectral convergence)."""
+        errors = []
+        for n in [16, 32, 64]:
+            axis = EquidistantAxis(n, 0, 2 * np.pi, periodic=True)
+            grid = Grid(axis)
+            x = axis.coords
+            f = np.exp(np.sin(x))
+            expected = np.cos(x) * f
+
+            D = FFTDiff(grid, 1, 0).as_matrix()
+            result = (D @ f).reshape(grid.shape)
+            errors.append(np.max(np.abs(result - expected)))
+
+        # Spectral convergence: error ratio should increase rapidly
+        ratio = errors[0] / max(errors[1], 1e-16)
+        self.assertGreater(ratio, 100, "Convergence is not exponential")
+        self.assertLess(errors[-1], 1e-10, f"Error {errors[-1]} not at spectral level")
+
+    def test_matrix_with_non_2pi_domain(self):
+        """Matrix must give correct derivatives for domain period L != 2*pi."""
+        L = 4.0
+        axis = EquidistantAxis(64, 0, L, periodic=True)
+        grid = Grid(axis)
+        x = axis.coords
+        k = 2 * np.pi / L
+        f = np.sin(k * x)
+        expected = k * np.cos(k * x)
+
+        D = FFTDiff(grid, 1, 0).as_matrix()
+        result = (D @ f).reshape(grid.shape)
+
+        npt.assert_array_almost_equal(result, expected)
+
+    def test_operator_with_non_2pi_domain(self):
+        """Operator must give correct derivatives for domain period L != 2*pi."""
+        L = 4.0
+        axis = EquidistantAxis(64, 0, L, periodic=True)
+        grid = Grid(axis)
+        x = axis.coords
+        k = 2 * np.pi / L
+        f = np.sin(k * x)
+        expected = k * np.cos(k * x)
+
+        d = FFTDiff(grid, 1, 0)
+        result = d(f)
+
+        npt.assert_array_almost_equal(result, expected)
+
+    def test_matrix_odd_grid(self):
+        """Matrix must work correctly for odd-sized grids."""
+        axis = EquidistantAxis(63, 0, 2 * np.pi, periodic=True)
+        grid = Grid(axis)
+        x = axis.coords
+        f = np.sin(x)
+        expected = np.cos(x)
+
+        D = FFTDiff(grid, 1, 0).as_matrix()
+        result = (D @ f).reshape(grid.shape)
+
+        npt.assert_array_almost_equal(result, expected)
+
+    def test_matrix_2d_non_square_grid(self):
+        """Matrix must work when periodic axis is not the last axis."""
+        axis_periodic = EquidistantAxis(32, 0, 2 * np.pi, periodic=True)
+        axis_other = EquidistantAxis(20, 0, 1)
+        grid = Grid(axis_periodic, axis_other)
+        X, Y = grid.meshed_coords
+        f = np.sin(X) * Y ** 2
+
+        d = FFTDiff(grid, 1, 0)
+        expected = d(f)
+        matrix_result = (d.as_matrix() @ f.reshape(-1)).reshape(grid.shape)
+
+        npt.assert_array_almost_equal(matrix_result, expected)
