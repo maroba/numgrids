@@ -105,6 +105,57 @@ grid.curl(R * 0, R)               # scalar z-component = 2
 Singularities at *r = 0* or *θ = 0, π* are handled automatically —
 non-finite values are replaced by zero.
 
+## Boundary Conditions
+
+*numgrids* provides classes for applying Dirichlet, Neumann, and Robin
+boundary conditions — both at the array level and at the sparse-system level
+for linear PDE solves.
+
+Each non-periodic axis contributes two **faces** (low end and high end).
+Access them via `grid.faces`:
+
+```python
+from numgrids import *
+from numgrids.boundary import apply_bcs
+from scipy.sparse.linalg import spsolve
+import numpy as np
+
+x_ax = create_axis(AxisType.EQUIDISTANT, 101, 0, 1)
+y_ax = create_axis(AxisType.EQUIDISTANT, 101, 0, 1)
+grid = Grid(x_ax, y_ax)
+X, Y = grid.meshed_coords
+```
+
+### Function-level (array modification)
+
+```python
+u = np.zeros(grid.shape)
+DirichletBC(grid.faces["0_low"], value=1.0).apply(u)           # u = 1 on left
+DirichletBC(grid.faces["0_high"],
+            value=lambda c: np.sin(np.pi * c[1])).apply(u)     # u = sin(πy) on right
+```
+
+### System-level (sparse matrix + RHS)
+
+Build a Laplacian matrix, set up boundary conditions, and solve:
+
+```python
+L = Diff(grid, 2, 0).as_matrix() + Diff(grid, 2, 1).as_matrix()
+rhs = -2 * np.ones(grid.size)
+
+bcs = [
+    DirichletBC(grid.faces["0_low"],  0.0),
+    DirichletBC(grid.faces["0_high"], 0.0),
+    DirichletBC(grid.faces["1_low"],  0.0),
+    NeumannBC(grid.faces["1_high"],   0.0),   # du/dn = 0 on top
+]
+L, rhs = apply_bcs(bcs, L, rhs)
+u = spsolve(L, rhs).reshape(grid.shape)
+```
+
+Robin conditions (`a u + b du/dn = g`) are also supported via `RobinBC`.
+See the API reference for the full details.
+
 ## Refinement and Coarsening
 
 The `MultiGrid` class lets you define a hierarchy of grids at different

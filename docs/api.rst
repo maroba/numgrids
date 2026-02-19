@@ -37,4 +37,20 @@ Differentiation, Integration and Interpolation
     :members:
 
 
+Boundary Conditions
+-------------------
+
+.. autoclass:: numgrids.BoundaryFace
+    :members:
+
+.. autoclass:: numgrids.DirichletBC
+    :members:
+
+.. autoclass:: numgrids.NeumannBC
+    :members:
+
+.. autoclass:: numgrids.RobinBC
+    :members:
+
+.. autofunction:: numgrids.apply_bcs
 

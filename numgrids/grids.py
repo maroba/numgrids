@@ -36,7 +36,8 @@ class Grid:
         self.cache = {
             "diffs": {},
             "integrals": None,
-            "interpolators": {}
+            "interpolators": {},
+            "faces": None,
         }
 
     @property
@@ -119,6 +120,23 @@ class Grid:
                     ax.set_ylabel(f"axis-{j}")
 
         plt.show()
+
+    @property
+    def faces(self) -> dict:
+        """Return a dictionary of all boundary faces.
+
+        Keys follow the pattern ``'{axis_index}_{side}'``, e.g.
+        ``'0_low'``, ``'0_high'``.  Periodic axes are skipped.
+        """
+        if self.cache["faces"] is None:
+            from numgrids.boundary import BoundaryFace
+            result = {}
+            for i, axis in enumerate(self.axes):
+                if not axis.periodic:
+                    result[f"{i}_low"] = BoundaryFace(self, i, "low")
+                    result[f"{i}_high"] = BoundaryFace(self, i, "high")
+            self.cache["faces"] = result
+        return self.cache["faces"]
 
     @property
     def boundary(self) -> NDArray:
