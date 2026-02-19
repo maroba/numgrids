@@ -1,11 +1,11 @@
-# requirement on rtd
 numgrids
 numpy
 scipy
-# Remove sphinx from requirements b/c it lead to issues
-# on rtd and it's a dependency of the rtd theme anyway.
-# sphinx>=1.6.4,<2
-ipython
+sphinx>=7.0
+furo
+sphinx-design
 myst-parser
 nbsphinx
 pandoc
+ipython
+ipykernel
