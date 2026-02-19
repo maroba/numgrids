@@ -158,6 +158,42 @@ class Grid:
         """
         return Grid(*(axis.resized(len(axis) // 2) for axis in self.axes))
 
+    def refine_axis(self, axis_index: int, factor: float = 2.0) -> Grid:
+        """Return a new grid with one axis resized by the given factor.
+
+        Parameters
+        ----------
+        axis_index : int
+            Index of the axis to refine (or coarsen if *factor* < 1).
+        factor : float
+            Multiplicative factor for the number of points on the
+            specified axis.  Values greater than 1 refine; values
+            between 0 and 1 coarsen.  The result is rounded to the
+            nearest integer (minimum 2).
+
+        Returns
+        -------
+        Grid
+            A new grid with the specified axis resized.
+
+        Raises
+        ------
+        ValueError
+            If *axis_index* is out of range or *factor* is not positive.
+        """
+        if factor <= 0:
+            raise ValueError(f"factor must be positive, got {factor}")
+        if axis_index < 0 or axis_index >= self.ndims:
+            raise ValueError(
+                f"axis_index {axis_index} out of range for "
+                f"{self.ndims}-dimensional grid"
+            )
+        new_axes = list(self.axes)
+        old_n = len(new_axes[axis_index])
+        new_n = max(2, round(old_n * factor))
+        new_axes[axis_index] = new_axes[axis_index].resized(new_n)
+        return Grid(*new_axes)
+
     @property
     def meshed_indices(self) -> list[NDArray]:
         """
@@ -178,7 +214,7 @@ class Grid:
     @property
     def index_tuples(self) -> NDArray:
         """
-        Returns an array A of shape (*grid.shape, grid.ndims).
+        Returns an array A of shape ``(*grid.shape, grid.ndims)``.
 
         For example, in case of a 2D grid, A[i, j] contains the index
         tuple (i, j).
@@ -188,7 +224,7 @@ class Grid:
     @property
     def coord_tuples(self) -> NDArray:
         """
-        Returns an array A of shape (*grid.shape, grid.ndims) with
+        Returns an array A of shape ``(*grid.shape, grid.ndims)`` with
         all the coordinate tuples.
 
         For example, in case of a 2D grid, A[i, j] contains the
