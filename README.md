@@ -8,6 +8,8 @@
 **Main Features**
 
 - Quickly define numerical grids for any rectangular or curvilinear coordinate system
+- Built-in **spherical**, **cylindrical**, and **polar** coordinate grids
+- **Vector calculus operators**: gradient, divergence, curl, and Laplacian on curvilinear grids
 - Differentiation and integration
 - Interpolation
 - Easy manipulation of meshed functions
@@ -139,6 +141,67 @@ points = zip(2*t, t**2)
 inter(points)
 ```
 
+
+## Curvilinear Grids & Vector Calculus
+
+*numgrids* provides dedicated grid classes for the most common curvilinear coordinate systems, each with built-in
+vector calculus operators that correctly account for scale factors and coordinate singularities.
+
+### Spherical coordinates
+
+```python
+from numgrids import *
+import numpy as np
+
+grid = SphericalGrid(
+    create_axis(AxisType.CHEBYSHEV, 25, 0.1, 5),       # r
+    create_axis(AxisType.CHEBYSHEV, 20, 0.1, np.pi-0.1),  # theta
+    create_axis(AxisType.EQUIDISTANT_PERIODIC, 30, 0, 2*np.pi),  # phi
+)
+
+R, Theta, Phi = grid.meshed_coords
+f = R**2
+
+lap_f = grid.laplacian(f)            # scalar Laplacian (= 6)
+gr, gt, gp = grid.gradient(f)        # (2r, 0, 0)
+div_v = grid.divergence(gr, gt, gp)  # div(grad f) = laplacian f
+cr, ct, cp = grid.curl(gr, gt, gp)   # curl(grad f) = 0
+```
+
+### Cylindrical coordinates
+
+```python
+grid = CylindricalGrid(
+    create_axis(AxisType.CHEBYSHEV, 20, 0.1, 3),
+    create_axis(AxisType.EQUIDISTANT_PERIODIC, 30, 0, 2*np.pi),
+    create_axis(AxisType.CHEBYSHEV, 20, -1, 1),
+)
+
+R, Phi, Z = grid.meshed_coords
+f = R**2 + Z**2
+
+grid.laplacian(f)                    # = 6
+grid.gradient(f)                     # (2r, 0, 2z)
+```
+
+### Polar coordinates (2D)
+
+```python
+grid = PolarGrid(
+    create_axis(AxisType.CHEBYSHEV, 30, 0.1, 1),
+    create_axis(AxisType.EQUIDISTANT_PERIODIC, 40, 0, 2*np.pi),
+)
+
+R, Phi = grid.meshed_coords
+f = R * np.cos(Phi)      # this is just x
+
+grid.laplacian(f)         # = 0  (harmonic)
+grid.gradient(f)          # (cos φ, −sin φ)
+grid.curl(R*0, R)         # scalar z-component = 2
+```
+
+All operators handle the coordinate singularities at *r = 0* and *θ = 0, π* gracefully —
+non-finite values are automatically replaced by zero.
 
 ## Usage / Example Notebooks
 

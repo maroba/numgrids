@@ -621,6 +621,406 @@ class TestPolarGrid(unittest.TestCase):
         npt.assert_array_almost_equal(result[interior], expected[interior], decimal=1)
 
 
+# ────────────────────────────────────────────────────────────────────
+#  Vector calculus operator tests
+# ────────────────────────────────────────────────────────────────────
+
+class TestSphericalVectorCalc(unittest.TestCase):
+    """Tests for gradient, divergence, curl on SphericalGrid."""
+
+    def _make_grid(self, nr=25, ntheta=20, nphi=30,
+                   r_low=0.3, r_high=3,
+                   theta_low=0.2, theta_high=np.pi - 0.2):
+        return SphericalGrid(
+            create_axis(AxisType.CHEBYSHEV, nr, r_low, r_high),
+            create_axis(AxisType.CHEBYSHEV, ntheta, theta_low, theta_high),
+            create_axis(AxisType.EQUIDISTANT_PERIODIC, nphi, 0, 2 * np.pi),
+        )
+
+    # ── gradient ──────────────────────────────────────────────────
+
+    def test_gradient_output_shape(self):
+        grid = self._make_grid(nr=15, ntheta=12, nphi=20)
+        R, Theta, Phi = grid.meshed_coords
+        f = R ** 2
+        gr, gt, gp = grid.gradient(f)
+        for comp in (gr, gt, gp):
+            self.assertEqual(comp.shape, grid.shape)
+
+    def test_gradient_r_squared(self):
+        """grad(r^2) = (2r, 0, 0)."""
+        grid = self._make_grid()
+        R, Theta, Phi = grid.meshed_coords
+        f = R ** 2
+        gr, gt, gp = grid.gradient(f)
+
+        interior = (slice(2, -2), slice(2, -2), slice(None))
+        npt.assert_array_almost_equal(gr[interior], (2 * R)[interior], decimal=1)
+        npt.assert_array_almost_equal(gt[interior], 0.0, decimal=1)
+        npt.assert_array_almost_equal(gp[interior], 0.0, decimal=1)
+
+    def test_gradient_finite(self):
+        """Gradient should be finite everywhere."""
+        grid = self._make_grid()
+        R, Theta, Phi = grid.meshed_coords
+        f = R * np.sin(Theta) * np.cos(Phi)
+        for comp in grid.gradient(f):
+            self.assertFalse(np.any(np.isnan(comp)))
+            self.assertFalse(np.any(np.isinf(comp)))
+
+    # ── divergence ────────────────────────────────────────────────
+
+    def test_divergence_output_shape(self):
+        grid = self._make_grid(nr=15, ntheta=12, nphi=20)
+        R, Theta, Phi = grid.meshed_coords
+        v = np.ones(grid.shape)
+        result = grid.divergence(v, v, v)
+        self.assertEqual(result.shape, grid.shape)
+
+    def test_div_grad_equals_laplacian(self):
+        r"""div(grad(f)) = laplacian(f)."""
+        grid = self._make_grid(nr=25, ntheta=20, nphi=30)
+        R, Theta, Phi = grid.meshed_coords
+        f = R ** 2
+
+        gr, gt, gp = grid.gradient(f)
+        div_grad = grid.divergence(gr, gt, gp)
+        lap = grid.laplacian(f)
+
+        interior = (slice(4, -4), slice(4, -4), slice(None))
+        npt.assert_array_almost_equal(div_grad[interior], lap[interior], decimal=0)
+
+    def test_divergence_radial_field(self):
+        r"""div(r * r_hat) = 3 in spherical coordinates.
+
+        v = r * r_hat  =>  v_r = r, v_theta = 0, v_phi = 0
+        div = (1/r^2) d(r^2 * r)/dr = (1/r^2) d(r^3)/dr = 3
+        """
+        grid = self._make_grid()
+        R, Theta, Phi = grid.meshed_coords
+        v_r = R
+        v_theta = np.zeros_like(R)
+        v_phi = np.zeros_like(R)
+
+        result = grid.divergence(v_r, v_theta, v_phi)
+        interior = (slice(2, -2), slice(2, -2), slice(None))
+        npt.assert_array_almost_equal(result[interior], 3.0, decimal=1)
+
+    def test_divergence_finite(self):
+        grid = self._make_grid()
+        R, Theta, Phi = grid.meshed_coords
+        result = grid.divergence(R, np.sin(Theta), np.cos(Phi))
+        self.assertFalse(np.any(np.isnan(result)))
+
+    # ── curl ──────────────────────────────────────────────────────
+
+    def test_curl_output_shape(self):
+        grid = self._make_grid(nr=15, ntheta=12, nphi=20)
+        R, Theta, Phi = grid.meshed_coords
+        v = np.ones(grid.shape)
+        cr, ct, cp = grid.curl(v, v, v)
+        for comp in (cr, ct, cp):
+            self.assertEqual(comp.shape, grid.shape)
+
+    def test_curl_of_gradient_is_zero(self):
+        r"""curl(grad(f)) = 0 for any scalar field."""
+        grid = self._make_grid(nr=25, ntheta=20, nphi=30)
+        R, Theta, Phi = grid.meshed_coords
+        f = R ** 2 * np.cos(Theta)
+
+        gr, gt, gp = grid.gradient(f)
+        cr, ct, cp = grid.curl(gr, gt, gp)
+
+        interior = (slice(4, -4), slice(4, -4), slice(None))
+        npt.assert_array_almost_equal(cr[interior], 0.0, decimal=0)
+        npt.assert_array_almost_equal(ct[interior], 0.0, decimal=0)
+        npt.assert_array_almost_equal(cp[interior], 0.0, decimal=0)
+
+    def test_curl_finite(self):
+        grid = self._make_grid()
+        R, Theta, Phi = grid.meshed_coords
+        cr, ct, cp = grid.curl(R, np.sin(Theta), np.cos(Phi))
+        for comp in (cr, ct, cp):
+            self.assertFalse(np.any(np.isnan(comp)))
+            self.assertFalse(np.any(np.isinf(comp)))
+
+    def test_diff_ops_caching(self):
+        """_ensure_diff_ops should create operators only once."""
+        grid = self._make_grid(nr=10, ntheta=8, nphi=10)
+        R, Theta, Phi = grid.meshed_coords
+        f = R ** 2
+        grid.gradient(f)
+        ops_ref = grid._diff_ops
+        grid.gradient(f)
+        self.assertIs(grid._diff_ops, ops_ref)
+
+
+class TestCylindricalVectorCalc(unittest.TestCase):
+    """Tests for gradient, divergence, curl on CylindricalGrid."""
+
+    def _make_grid(self, nr=20, nphi=30, nz=20,
+                   r_low=0.3, r_high=3, z_low=-1, z_high=1):
+        return CylindricalGrid(
+            create_axis(AxisType.CHEBYSHEV, nr, r_low, r_high),
+            create_axis(AxisType.EQUIDISTANT_PERIODIC, nphi, 0, 2 * np.pi),
+            create_axis(AxisType.CHEBYSHEV, nz, z_low, z_high),
+        )
+
+    # ── gradient ──────────────────────────────────────────────────
+
+    def test_gradient_output_shape(self):
+        grid = self._make_grid(nr=12, nphi=16, nz=12)
+        R, Phi, Z = grid.meshed_coords
+        gr, gp, gz = grid.gradient(R ** 2)
+        for comp in (gr, gp, gz):
+            self.assertEqual(comp.shape, grid.shape)
+
+    def test_gradient_r_squared_plus_z_squared(self):
+        """grad(r^2 + z^2) = (2r, 0, 2z)."""
+        grid = self._make_grid()
+        R, Phi, Z = grid.meshed_coords
+        f = R ** 2 + Z ** 2
+        gr, gp, gz = grid.gradient(f)
+
+        interior = (slice(2, -2), slice(None), slice(2, -2))
+        npt.assert_array_almost_equal(gr[interior], (2 * R)[interior], decimal=1)
+        npt.assert_array_almost_equal(gp[interior], 0.0, decimal=1)
+        npt.assert_array_almost_equal(gz[interior], (2 * Z)[interior], decimal=1)
+
+    def test_gradient_finite(self):
+        grid = self._make_grid()
+        R, Phi, Z = grid.meshed_coords
+        f = R * np.cos(Phi) + Z
+        for comp in grid.gradient(f):
+            self.assertFalse(np.any(np.isnan(comp)))
+            self.assertFalse(np.any(np.isinf(comp)))
+
+    # ── divergence ────────────────────────────────────────────────
+
+    def test_divergence_output_shape(self):
+        grid = self._make_grid(nr=12, nphi=16, nz=12)
+        v = np.ones(grid.shape)
+        result = grid.divergence(v, v, v)
+        self.assertEqual(result.shape, grid.shape)
+
+    def test_div_grad_equals_laplacian(self):
+        r"""div(grad(f)) = laplacian(f)."""
+        grid = self._make_grid(nr=25, nphi=30, nz=25)
+        R, Phi, Z = grid.meshed_coords
+        f = R ** 2 + Z ** 2
+
+        gr, gp, gz = grid.gradient(f)
+        div_grad = grid.divergence(gr, gp, gz)
+        lap = grid.laplacian(f)
+
+        interior = (slice(4, -4), slice(None), slice(4, -4))
+        npt.assert_array_almost_equal(div_grad[interior], lap[interior], decimal=0)
+
+    def test_divergence_radial_field(self):
+        r"""div(r * r_hat) = 2 in cylindrical coordinates.
+
+        v_r = r, v_phi = 0, v_z = 0
+        div = (1/r) d(r * r)/dr = (1/r) d(r^2)/dr = (1/r)*2r = 2
+        """
+        grid = self._make_grid()
+        R, Phi, Z = grid.meshed_coords
+        v_r = R
+        v_phi = np.zeros_like(R)
+        v_z = np.zeros_like(R)
+
+        result = grid.divergence(v_r, v_phi, v_z)
+        interior = (slice(2, -2), slice(None), slice(2, -2))
+        npt.assert_array_almost_equal(result[interior], 2.0, decimal=1)
+
+    def test_divergence_finite(self):
+        grid = self._make_grid()
+        R, Phi, Z = grid.meshed_coords
+        result = grid.divergence(R, np.cos(Phi), Z)
+        self.assertFalse(np.any(np.isnan(result)))
+
+    # ── curl ──────────────────────────────────────────────────────
+
+    def test_curl_output_shape(self):
+        grid = self._make_grid(nr=12, nphi=16, nz=12)
+        v = np.ones(grid.shape)
+        cr, cp, cz = grid.curl(v, v, v)
+        for comp in (cr, cp, cz):
+            self.assertEqual(comp.shape, grid.shape)
+
+    def test_curl_of_gradient_is_zero(self):
+        r"""curl(grad(f)) = 0 for any scalar field."""
+        grid = self._make_grid(nr=25, nphi=30, nz=25)
+        R, Phi, Z = grid.meshed_coords
+        f = R ** 2 * np.cos(Phi) + Z ** 2
+
+        gr, gp, gz = grid.gradient(f)
+        cr, cp, cz = grid.curl(gr, gp, gz)
+
+        interior = (slice(4, -4), slice(None), slice(4, -4))
+        npt.assert_array_almost_equal(cr[interior], 0.0, decimal=0)
+        npt.assert_array_almost_equal(cp[interior], 0.0, decimal=0)
+        npt.assert_array_almost_equal(cz[interior], 0.0, decimal=0)
+
+    def test_curl_finite(self):
+        grid = self._make_grid()
+        R, Phi, Z = grid.meshed_coords
+        cr, cp, cz = grid.curl(R, np.cos(Phi), Z)
+        for comp in (cr, cp, cz):
+            self.assertFalse(np.any(np.isnan(comp)))
+            self.assertFalse(np.any(np.isinf(comp)))
+
+    def test_diff_ops_caching(self):
+        """_ensure_diff_ops should create operators only once."""
+        grid = self._make_grid(nr=10, nphi=12, nz=10)
+        R, Phi, Z = grid.meshed_coords
+        grid.gradient(R ** 2)
+        ops_ref = grid._diff_ops
+        grid.gradient(R ** 2)
+        self.assertIs(grid._diff_ops, ops_ref)
+
+
+class TestPolarVectorCalc(unittest.TestCase):
+    """Tests for gradient, divergence, curl on PolarGrid."""
+
+    def _make_grid(self, nr=30, nphi=40, r_low=0.3, r_high=3):
+        return PolarGrid(
+            create_axis(AxisType.CHEBYSHEV, nr, r_low, r_high),
+            create_axis(AxisType.EQUIDISTANT_PERIODIC, nphi, 0, 2 * np.pi),
+        )
+
+    # ── gradient ──────────────────────────────────────────────────
+
+    def test_gradient_output_shape(self):
+        grid = self._make_grid(nr=15, nphi=20)
+        R, Phi = grid.meshed_coords
+        gr, gp = grid.gradient(R ** 2)
+        for comp in (gr, gp):
+            self.assertEqual(comp.shape, grid.shape)
+
+    def test_gradient_r_squared(self):
+        """grad(r^2) = (2r, 0)."""
+        grid = self._make_grid()
+        R, Phi = grid.meshed_coords
+        f = R ** 2
+        gr, gp = grid.gradient(f)
+
+        interior = (slice(2, -2), slice(None))
+        npt.assert_array_almost_equal(gr[interior], (2 * R)[interior], decimal=1)
+        npt.assert_array_almost_equal(gp[interior], 0.0, decimal=1)
+
+    def test_gradient_r_cos_phi(self):
+        """grad(r*cos(phi)) = (cos(phi), -sin(phi))."""
+        grid = self._make_grid(nr=30, nphi=50)
+        R, Phi = grid.meshed_coords
+        f = R * np.cos(Phi)
+        gr, gp = grid.gradient(f)
+
+        interior = (slice(2, -2), slice(None))
+        npt.assert_array_almost_equal(gr[interior], np.cos(Phi)[interior], decimal=1)
+        npt.assert_array_almost_equal(gp[interior], (-np.sin(Phi))[interior], decimal=1)
+
+    def test_gradient_finite(self):
+        grid = self._make_grid()
+        R, Phi = grid.meshed_coords
+        for comp in grid.gradient(R * np.cos(Phi)):
+            self.assertFalse(np.any(np.isnan(comp)))
+            self.assertFalse(np.any(np.isinf(comp)))
+
+    # ── divergence ────────────────────────────────────────────────
+
+    def test_divergence_output_shape(self):
+        grid = self._make_grid(nr=15, nphi=20)
+        v = np.ones(grid.shape)
+        result = grid.divergence(v, v)
+        self.assertEqual(result.shape, grid.shape)
+
+    def test_div_grad_equals_laplacian(self):
+        r"""div(grad(f)) = laplacian(f)."""
+        grid = self._make_grid(nr=35, nphi=50)
+        R, Phi = grid.meshed_coords
+        f = R ** 2
+
+        gr, gp = grid.gradient(f)
+        div_grad = grid.divergence(gr, gp)
+        lap = grid.laplacian(f)
+
+        interior = (slice(4, -4), slice(None))
+        npt.assert_array_almost_equal(div_grad[interior], lap[interior], decimal=0)
+
+    def test_divergence_radial_field(self):
+        r"""div(r * r_hat) = 2 in polar coordinates.
+
+        v_r = r, v_phi = 0
+        div = (1/r) d(r * r)/dr = (1/r)*2r = 2
+        """
+        grid = self._make_grid()
+        R, Phi = grid.meshed_coords
+        v_r = R
+        v_phi = np.zeros_like(R)
+
+        result = grid.divergence(v_r, v_phi)
+        interior = (slice(2, -2), slice(None))
+        npt.assert_array_almost_equal(result[interior], 2.0, decimal=1)
+
+    def test_divergence_finite(self):
+        grid = self._make_grid()
+        R, Phi = grid.meshed_coords
+        result = grid.divergence(R, np.cos(Phi))
+        self.assertFalse(np.any(np.isnan(result)))
+
+    # ── curl ──────────────────────────────────────────────────────
+
+    def test_curl_output_is_scalar(self):
+        """Polar curl returns a scalar (z-component only)."""
+        grid = self._make_grid(nr=15, nphi=20)
+        R, Phi = grid.meshed_coords
+        result = grid.curl(np.ones(grid.shape), np.ones(grid.shape))
+        self.assertEqual(result.shape, grid.shape)
+
+    def test_curl_of_gradient_is_zero(self):
+        r"""curl(grad(f)) = 0 for any scalar field."""
+        grid = self._make_grid(nr=35, nphi=50)
+        R, Phi = grid.meshed_coords
+        f = R ** 3 * np.cos(2 * Phi)
+
+        gr, gp = grid.gradient(f)
+        result = grid.curl(gr, gp)
+
+        interior = (slice(4, -4), slice(None))
+        npt.assert_array_almost_equal(result[interior], 0.0, decimal=0)
+
+    def test_curl_finite(self):
+        grid = self._make_grid()
+        R, Phi = grid.meshed_coords
+        result = grid.curl(R, np.cos(Phi))
+        self.assertFalse(np.any(np.isnan(result)))
+        self.assertFalse(np.any(np.isinf(result)))
+
+    def test_curl_known_field(self):
+        r"""curl of v = (0, r) = (1/r) d(r^2)/dr = 2.
+
+        v_r = 0, v_phi = r
+        curl_z = (1/r) d(r * r)/dr - 0 = (1/r)*2r = 2
+        """
+        grid = self._make_grid()
+        R, Phi = grid.meshed_coords
+        v_r = np.zeros_like(R)
+        v_phi = R
+
+        result = grid.curl(v_r, v_phi)
+        interior = (slice(2, -2), slice(None))
+        npt.assert_array_almost_equal(result[interior], 2.0, decimal=1)
+
+    def test_diff_ops_caching(self):
+        """_ensure_diff_ops should create operators only once."""
+        grid = self._make_grid(nr=15, nphi=20)
+        R, Phi = grid.meshed_coords
+        grid.gradient(R ** 2)
+        ops_ref = grid._diff_ops
+        grid.gradient(R ** 2)
+        self.assertIs(grid._diff_ops, ops_ref)
+
+
 class TestConvenience(unittest.TestCase):
 
     def test_diff(self):
