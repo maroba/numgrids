@@ -8,7 +8,7 @@ version = "0.3.0"
 description = "Working with numerical grids made easy."
 readme = "docs/pypi_description.md"
 license = "MIT"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 authors = [
     { name = "Matthias Baer", email = "matthias.r.baer@googlemail.com" },
 ]
@@ -17,10 +17,10 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 dependencies = [
-    "numpy",
+    "numpy>=1.22",
     "scipy>=1.10.1",
-    "matplotlib",
-    "findiff",
+    "matplotlib>=3.5",
+    "findiff>=0.10",
 ]
 
 [project.urls]

@@ -1,6 +1,5 @@
 import unittest
 
-from unittest.mock import patch
 import numpy as np
 import numpy.testing as npt
 
@@ -97,13 +96,13 @@ class TestGrid(unittest.TestCase):
         npt.assert_array_equal(grid.boundary, bdry)
 
     def test_repr(self):
-        with patch("matplotlib.pyplot.figure") as figure_mock:
-            nx = 11
-            x_axis = EquidistantAxis(nx, -3, 7, periodic=True)
-            y_axis = EquidistantAxis(nx, -3, 7, periodic=True)
-            grid = Grid(x_axis, y_axis)
-            repr(grid)
-            figure_mock.assert_called()
+        nx = 11
+        x_axis = EquidistantAxis(nx, -3, 7, periodic=True)
+        y_axis = EquidistantAxis(nx, -3, 7, periodic=True)
+        grid = Grid(x_axis, y_axis)
+        result = repr(grid)
+        self.assertIn("Grid", result)
+        self.assertIn(str(grid.shape), result)
 
     def test_refine_grid_default(self):
         x_axis = ChebyshevAxis(10, -3, 7)
@@ -216,3 +215,22 @@ class TestMultiGrid(unittest.TestCase):
         actual = mgrid.transfer(f_1, 1, 0)
 
         npt.assert_allclose(actual, f_0, atol=1.E-3)
+
+    def test_transfer_wrong_shape_raises(self):
+        xaxis = EquidistantAxis(20, -1, 1)
+        yaxis = EquidistantAxis(20, -1, 1)
+        mgrid = MultiGrid(xaxis, yaxis, min_size=3)
+
+        wrong_shape = np.zeros((5, 5))
+        with self.assertRaises(ValueError):
+            mgrid.transfer(wrong_shape, 0, 1)
+
+    def test_transfer_non_adjacent_raises(self):
+        xaxis = EquidistantAxis(40, -1, 1)
+        yaxis = EquidistantAxis(40, -1, 1)
+        mgrid = MultiGrid(xaxis, yaxis, min_size=3)
+
+        grid_0 = mgrid.levels[0]
+        f_0 = np.ones(grid_0.shape)
+        with self.assertRaises(ValueError):
+            mgrid.transfer(f_0, 0, 2)

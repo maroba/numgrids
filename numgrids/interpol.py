@@ -1,12 +1,15 @@
+from __future__ import annotations
+
 import numpy as np
+from numpy.typing import NDArray
 from scipy.interpolate import RegularGridInterpolator, CubicSpline, UnivariateSpline, interp1d
 
-from numgrids import Grid
+from numgrids.grids import Grid
 
 
 class Interpolator:
 
-    def __init__(self, grid, f, method="cubic"):
+    def __init__(self, grid: Grid, f: NDArray, method: str = "cubic") -> None:
         """
         Create an interpolating function for the array data.
 
@@ -33,7 +36,7 @@ class Interpolator:
             # self._inter = UnivariateSpline(grid.coords, f, k=methods[method])
             self._inter = interp1d(grid.coords, f, kind=method)
 
-    def __call__(self, locations):
+    def __call__(self, locations) -> NDArray:
         """
         Return the interpolation for one or more points.
 

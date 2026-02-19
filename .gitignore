@@ -131,3 +131,4 @@ _version_save.py
 .idea
 .DS_Store
 wip
+.vscode/

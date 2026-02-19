@@ -30,7 +30,7 @@ Along the azimuthal (angular) direction, choose an equidistant spacing with peri
 from numgrids import *
 from numpy import pi
 
-axis_phi = Axis(AxisType.EQUIDISTANT, 50, 0, 2*pi, periodic=True)
+axis_phi = create_axis(AxisType.EQUIDISTANT, 50, 0, 2*pi, periodic=True)
 ```
 
 <img src="docs/assets/equi_periodic.png" height="326">
@@ -38,7 +38,7 @@ axis_phi = Axis(AxisType.EQUIDISTANT, 50, 0, 2*pi, periodic=True)
 Along the radial axis, let's choose a non-equidistant spacing:
 
 ```python
-axis_radial = Axis(AxisType.CHEBYSHEV, 20, 0, 1)
+axis_radial = create_axis(AxisType.CHEBYSHEV, 20, 0, 1)
 ```
 
 <img src="docs/assets/cheby.png" height="91">
@@ -158,7 +158,7 @@ git clone https://github.com/maroba/numgrids.git
 In the project root directory, submit
 
 ```
-python setup.py develop
+pip install -e .
 ```
 
 to install the package in development mode.
@@ -166,7 +166,7 @@ to install the package in development mode.
 Run the tests:
 
 ```
-python -m unittest discover tests
+python -m pytest tests
 ```
 
 ### Contributing

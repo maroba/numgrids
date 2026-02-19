@@ -1,24 +1,26 @@
-import numpy as np
+from __future__ import annotations
 
-from numgrids import Diff, Grid
+import numpy as np
+from numpy.typing import NDArray
 from scipy.sparse.linalg import inv
 from scipy.sparse import csc_matrix, identity, kron
 
+from numgrids.grids import Grid
+from numgrids.api import Diff
 from numgrids.axes import EquidistantAxis
 from numgrids.utils import multi_kron
 
 
 class Integral:
-    """
-    The integration operator for integrating on a grid.
+    r"""The integration operator for integrating on a grid.
 
-        .. math::
-            \int_V ... dV
+    .. math::
+        \int_V ... dV
 
     Integration always runs over the whole grid.
     """
 
-    def __init__(self, grid):
+    def __init__(self, grid: Grid) -> None:
         """Constructor
 
 
@@ -38,7 +40,7 @@ class Integral:
 
         self.eyes = [identity(len(axis)) for axis in self.grid.axes]
 
-    def __call__(self, f):
+    def __call__(self, f: NDArray) -> float:
         """
         Apply the integration to a meshed function.
 
@@ -54,7 +56,7 @@ class Integral:
         """
         f_ = f
         for i, axis in enumerate(self.grid.axes):
-            if type(axis) == EquidistantAxis and axis.periodic:
+            if isinstance(axis, EquidistantAxis) and axis.periodic:
                 # FFT-spectral integration is much easier and still spectral accuracy!
                 f_ = axis.spacing * np.sum(f_, axis=0)
             else:

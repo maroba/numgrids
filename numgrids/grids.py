@@ -1,12 +1,13 @@
+from __future__ import annotations
+
 import numpy as np
+from numpy.typing import NDArray
 
 
 class Grid:
-    """
-    Represents a numerical grid.
-    """
+    """Represents a numerical grid."""
 
-    def __init__(self, *axes):
+    def __init__(self, *axes) -> None:
         """
         Constructor
 
@@ -34,10 +35,10 @@ class Grid:
         }
 
     @property
-    def size(self):
+    def size(self) -> int:
         return np.prod(self.shape)
 
-    def get_axis(self, idx=0):
+    def get_axis(self, idx: int = 0):
         """
         Returns the axis with given index.
 
@@ -52,7 +53,7 @@ class Grid:
         """
         return self.axes[idx]
 
-    def __getitem__(self, inds):
+    def __getitem__(self, inds) -> NDArray:
         if self.ndims == 1:
             return self.axes[0][inds]
         return np.array(
@@ -60,14 +61,12 @@ class Grid:
         )
 
     @property
-    def axes(self):
-        """
-        Returns a list with the axes objects of the grid.
-        """
+    def axes(self) -> tuple:
+        """Returns the axes objects of the grid."""
         return self._axes
 
     @property
-    def coords(self):
+    def coords(self) -> NDArray | tuple[NDArray, ...]:
         """
         Returns a tuple of lists with the coordinate values along each axis.
         In case of 1D, only a single list is returned.
@@ -77,20 +76,20 @@ class Grid:
         return tuple(a.coords for a in self.axes)
 
     @property
-    def meshed_coords(self):
-        """
-        Returns the a tuple with the meshed coordinate values.
-        """
+    def meshed_coords(self) -> tuple[NDArray, ...]:
+        """Returns a tuple with the meshed coordinate values."""
         return self._meshed_coords
 
     @property
-    def shape(self):
-        """
-        Returns a tuple with the number of grid points along each axis.
-        """
+    def shape(self) -> tuple[int, ...]:
+        """Returns a tuple with the number of grid points along each axis."""
         return tuple(len(axis) for axis in self.axes)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
+        return f"Grid(shape={self.shape}, ndims={self.ndims})"
+
+    def plot(self) -> None:
+        """Visualize the grid using matplotlib."""
         import matplotlib.pyplot as plt
 
         nplots = self.ndims * (self.ndims - 1) // 2
@@ -105,26 +104,26 @@ class Grid:
                 ax.plot(X.reshape(-1), Y.reshape(-1), "o", ms=1)
 
                 if self.axes[i].name:
-                    ax.set_xlabel("${}$".format(self.axes[i].name))
+                    ax.set_xlabel(f"${self.axes[i].name}$")
                 else:
                     ax.set_xlabel(f"axis-{i}")
 
                 if self.axes[j].name:
-                    ax.set_ylabel("${}$".format(self.axes[j].name))
+                    ax.set_ylabel(f"${self.axes[j].name}$")
                 else:
                     ax.set_ylabel(f"axis-{j}")
 
-        return ""
+        plt.show()
 
     @property
-    def boundary(self):
+    def boundary(self) -> NDArray:
         """
         Returns a binary mask of the shape of the grid indicating the
         grid points on the boundary.
         """
         return self._boundary
 
-    def refine(self):
+    def refine(self) -> Grid:
         """
         Returns a new grid with twice the number of grid points in each direction.
         """
@@ -137,7 +136,7 @@ class Grid:
             )
         return Grid(*new_axes)
 
-    def coarsen(self):
+    def coarsen(self) -> Grid:
         """
         Returns a new grid with half the number of grid points in each direction.
         """
@@ -151,7 +150,7 @@ class Grid:
         return Grid(*new_axes)
 
     @property
-    def meshed_indices(self):
+    def meshed_indices(self) -> list[NDArray]:
         """
         Returns a tuple of length grid.ndims, where each item in the
         tuple is an array of shape grid.shape. Each item stores the
@@ -168,7 +167,7 @@ class Grid:
         return np.meshgrid(*[np.arange(len(axis)) for axis in self.axes], indexing="ij")
 
     @property
-    def index_tuples(self):
+    def index_tuples(self) -> NDArray:
         """
         Returns an array A of shape (*grid.shape, grid.ndims).
 
@@ -178,7 +177,7 @@ class Grid:
         return self._to_tuple_field(*self.meshed_indices)
 
     @property
-    def coord_tuples(self):
+    def coord_tuples(self) -> NDArray:
         """
         Returns an array A of shape (*grid.shape, grid.ndims) with
         all the coordinate tuples.
@@ -189,7 +188,7 @@ class Grid:
         """
         return self._to_tuple_field(*self.meshed_coords)
 
-    def _to_tuple_field(self, *arrs):
+    def _to_tuple_field(self, *arrs: NDArray) -> NDArray:
         return np.vstack([arr.reshape(-1) for arr in arrs]).T.reshape(
             *self.shape, -1
         )
@@ -201,7 +200,7 @@ class MultiGrid:
     for the same domain.
     """
 
-    def __init__(self, *axes, min_size=2):
+    def __init__(self, *axes, min_size: int = 2) -> None:
         """
         Constructor.
 
@@ -233,7 +232,7 @@ class MultiGrid:
             self._levels.append(grid)
 
     @property
-    def levels(self):
+    def levels(self) -> list[Grid]:
         """
         Returns a list of grids with different resolution levels.
 
@@ -242,7 +241,8 @@ class MultiGrid:
         """
         return self._levels
 
-    def transfer(self, f, level_from, level_to, method="linear"):
+    def transfer(self, f: NDArray, level_from: int, level_to: int,
+                 method: str = "linear") -> NDArray:
         """
         Coarsen or refine an array on a grid by one level.
 
@@ -262,9 +262,14 @@ class MultiGrid:
         -------
         The coarsened or refined array.
         """
-        from numgrids import Interpolator
-        assert f.shape == self.levels[level_from].shape
-        assert abs(level_from - level_to) == 1
+        from numgrids.interpol import Interpolator
+        if f.shape != self.levels[level_from].shape:
+            raise ValueError(
+                f"Array shape {f.shape} does not match grid shape "
+                f"{self.levels[level_from].shape} at level {level_from}."
+            )
+        if abs(level_from - level_to) != 1:
+            raise ValueError("Can only transfer between adjacent levels.")
 
         grid_fr = self.levels[level_from]
         grid_to = self.levels[level_to]

@@ -1,53 +1,68 @@
+from __future__ import annotations
+
+from typing import Callable
+
 import numpy as np
 import scipy.sparse
 from numpy.fft import fft, ifft
+from numpy.typing import NDArray
+from scipy.sparse import spmatrix
 from findiff import FinDiff
 
 from numgrids.axes import EquidistantAxis, LogAxis
 
+if __name__ != '__main__':
+    from typing import TYPE_CHECKING
+    if TYPE_CHECKING:
+        from numgrids.grids import Grid
+
 
 class GridDiff:
-    """Base class for add grid differentiators.
+    """Base class for all grid differentiators.
 
-        Child classes must implement a callable member "operator".
+    Child classes must implement a callable member "operator".
     """
 
-    def __init__(self, grid, order, axis_index):
+    def __init__(self, grid: Grid, order: int, axis_index: int) -> None:
         self.axis = grid.get_axis(axis_index)
         self.order = order
         self.grid = grid
         self.axis_index = axis_index
 
-    def __call__(self, f):
+    def __call__(self, f: NDArray) -> NDArray:
         return self.operator(f)
+
+    def as_matrix(self) -> spmatrix:
+        """Return the matrix representation of this operator."""
+        raise NotImplementedError
 
 
 class FiniteDifferenceDiff(GridDiff):
     """Partial derivative based on finite difference approximations.
 
-        Used for equidistant, non-periodic grids.
+    Used for equidistant, non-periodic grids.
     """
 
-    def __init__(self, grid, order, axis_index):
-        super(FiniteDifferenceDiff, self).__init__(grid, order, axis_index)
+    def __init__(self, grid: Grid, order: int, axis_index: int) -> None:
+        super().__init__(grid, order, axis_index)
         if not isinstance(self.axis, EquidistantAxis):
-            raise TypeError("Axis must be of type EquidistantAxis. Got: {}".format(type(self.axis)))
+            raise TypeError(f"Axis must be of type EquidistantAxis. Got: {type(self.axis)}")
 
         # TODO make the accuracy order flexible:
         self.operator = FinDiff(axis_index, self.axis.spacing, order, acc=4)
 
-    def as_matrix(self):
+    def as_matrix(self) -> spmatrix:
         return self.operator.matrix(self.grid.shape)
 
 
 class FFTDiff(GridDiff):
-    """Partial Derivative based on FFT spectral method.
+    """Partial derivative based on FFT spectral method.
 
-        Used for equidistant, periodic grids.
+    Used for equidistant, periodic grids.
     """
 
-    def __init__(self, grid, order, axis_index):
-        super(FFTDiff, self).__init__(grid, order, axis_index)
+    def __init__(self, grid: Grid, order: int, axis_index: int) -> None:
+        super().__init__(grid, order, axis_index)
 
         if not isinstance(self.axis, EquidistantAxis):
             raise TypeError("Spectral FFT differentiation requires equidistant axis.")
@@ -60,10 +75,10 @@ class FFTDiff(GridDiff):
         # until we implement something better:
         self._D = FinDiff(0, self.axis.spacing, 1, acc=6).matrix((len(self.axis),))
 
-    def as_matrix(self):
+    def as_matrix(self) -> spmatrix:
         return self._D
 
-    def _setup_operator(self, grid):
+    def _setup_operator(self, grid: Grid) -> Callable[[NDArray], NDArray]:
         n = len(self.axis)
         W = 1j * np.hstack((
             np.arange(n // 2),
@@ -87,11 +102,11 @@ class FFTDiff(GridDiff):
 class ChebyshevDiff(GridDiff):
     """Partial derivative based on Chebyshev spectral method.
 
-        Used for grids with non-equidistant Chebyshev axes.
+    Used for grids with non-equidistant Chebyshev axes.
     """
 
-    def __init__(self, grid, order, axis_index):
-        super(ChebyshevDiff, self).__init__(grid, order, axis_index)
+    def __init__(self, grid: Grid, order: int, axis_index: int) -> None:
+        super().__init__(grid, order, axis_index)
         self._scale = (self.axis[-1] - self.axis[0])
         self._diff_matrix = self._setup_diff_matrix()
         for _ in range(self.order - 1):
@@ -105,10 +120,10 @@ class ChebyshevDiff(GridDiff):
 
         self.operator = operator
 
-    def as_matrix(self):
+    def as_matrix(self) -> spmatrix:
         return self._diff_matrix
 
-    def _setup_diff_matrix(self):
+    def _setup_diff_matrix(self) -> spmatrix:
         N = len(self.axis) - 1
         x = self.axis.coords_internal
         D = np.zeros((N + 1, N + 1))
@@ -149,17 +164,18 @@ class ChebyshevDiff(GridDiff):
 class LogDiff(GridDiff):
     """Partial derivative for a LogAxis.
 
-        Based on finite differences on the (equidistant) log-scale of coordinates.
+    Based on finite differences on the (equidistant) log-scale of coordinates.
     """
 
-    def __init__(self, grid, order, axis_index):
-        super(LogDiff, self).__init__(grid, order, axis_index)
+    def __init__(self, grid: Grid, order: int, axis_index: int) -> None:
+        super().__init__(grid, order, axis_index)
         if not isinstance(self.axis, LogAxis):
-            raise TypeError("Axis must be of type LogAxis. Got: {}".format(type(self.axis)))
+            raise TypeError(f"Axis must be of type LogAxis. Got: {type(self.axis)}")
 
-        def operator(f):
-            x = self.axis.coords_internal
-            fd = FinDiff(axis_index, x[1] - x[0], order, acc=6)
-            return fd(f) / self.grid.meshed_coords[axis_index]
+        x = self.axis.coords_internal
+        self._fd = FinDiff(axis_index, x[1] - x[0], order, acc=6)
+
+        def operator(f: NDArray) -> NDArray:
+            return self._fd(f) / self.grid.meshed_coords[axis_index]
 
         self.operator = operator

@@ -3,14 +3,14 @@ import unittest
 import numpy as np
 import numpy.testing as npt
 
-from numgrids import Axis, AxisType, Grid
+from numgrids import create_axis, AxisType, Grid
 from numgrids.interpol import Interpolator
 
 
 class TestInterpolation(unittest.TestCase):
 
     def test_interpol1d(self):
-        grid = Grid(Axis(AxisType.EQUIDISTANT, 50, 0, 1))
+        grid = Grid(create_axis(AxisType.EQUIDISTANT, 50, 0, 1))
         x = grid.coords
         f = x ** 2
         expected = 0.5 ** 2
@@ -20,8 +20,8 @@ class TestInterpolation(unittest.TestCase):
 
     def test_interpol2d(self):
         grid = Grid(
-            Axis(AxisType.EQUIDISTANT, 100, 0, 1),
-            Axis(AxisType.CHEBYSHEV, 100, 0, 1)
+            create_axis(AxisType.EQUIDISTANT, 100, 0, 1),
+            create_axis(AxisType.CHEBYSHEV, 100, 0, 1)
         )
         X, Y = grid.meshed_coords
         f = X ** 2 + Y ** 2
@@ -32,8 +32,8 @@ class TestInterpolation(unittest.TestCase):
 
     def test_interpol_polar(self):
         grid = Grid(
-            Axis(AxisType.CHEBYSHEV, 100, 0, 1),
-            Axis(AxisType.EQUIDISTANT_PERIODIC, 100, 0, 2 * np.pi)
+            create_axis(AxisType.CHEBYSHEV, 100, 0, 1),
+            create_axis(AxisType.EQUIDISTANT_PERIODIC, 100, 0, 2 * np.pi)
         )
         R, Phi = grid.meshed_coords
         f = R ** 2 * np.sin(Phi)
@@ -44,9 +44,9 @@ class TestInterpolation(unittest.TestCase):
 
     def test_interpol_many(self):
         grid = Grid(
-            Axis(AxisType.EQUIDISTANT, 50, 0, 1),
-            Axis(AxisType.CHEBYSHEV, 50, 0, 1),
-            Axis(AxisType.CHEBYSHEV, 50, 0, 1)
+            create_axis(AxisType.EQUIDISTANT, 50, 0, 1),
+            create_axis(AxisType.CHEBYSHEV, 50, 0, 1),
+            create_axis(AxisType.CHEBYSHEV, 50, 0, 1)
         )
         X, Y, Z = grid.meshed_coords
 
@@ -64,13 +64,13 @@ class TestInterpolation(unittest.TestCase):
 
     def test_interpol_grid(self):
         fine_grid = Grid(
-            Axis(AxisType.EQUIDISTANT, 100, 0, 1),
-            Axis(AxisType.CHEBYSHEV, 100, 0, 1),
+            create_axis(AxisType.EQUIDISTANT, 100, 0, 1),
+            create_axis(AxisType.CHEBYSHEV, 100, 0, 1),
         )
 
         coarse_grid = Grid(
-            Axis(AxisType.EQUIDISTANT, 10, 0, 1),
-            Axis(AxisType.CHEBYSHEV, 10, 0, 1),
+            create_axis(AxisType.EQUIDISTANT, 10, 0, 1),
+            create_axis(AxisType.CHEBYSHEV, 10, 0, 1),
         )
 
         X, Y = fine_grid.meshed_coords
@@ -88,13 +88,13 @@ class TestInterpolation(unittest.TestCase):
 
     def test_interpol_grid_extrapol_raises_exception(self):
         fine_grid = Grid(
-            Axis(AxisType.EQUIDISTANT, 100, 0, 1),
-            Axis(AxisType.CHEBYSHEV, 100, 0, 1),
+            create_axis(AxisType.EQUIDISTANT, 100, 0, 1),
+            create_axis(AxisType.CHEBYSHEV, 100, 0, 1),
         )
 
         coarse_grid = Grid(
-            Axis(AxisType.EQUIDISTANT, 10, 0, 2),
-            Axis(AxisType.CHEBYSHEV, 10, 0, 2),
+            create_axis(AxisType.EQUIDISTANT, 10, 0, 2),
+            create_axis(AxisType.CHEBYSHEV, 10, 0, 2),
         )
 
         X, Y = fine_grid.meshed_coords

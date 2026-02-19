@@ -1,10 +1,11 @@
 import unittest
+from unittest.mock import patch, Mock
 
 import numpy as np
 import numpy.testing as npt
 
 
-from numgrids import Axis, AxisType, SphericalGrid, Diff, interpolate, diff, integrate
+from numgrids import create_axis, AxisType, SphericalGrid, Diff, interpolate, diff, integrate
 from numgrids.axes import EquidistantAxis, ChebyshevAxis, LogAxis
 from numgrids.diff import FiniteDifferenceDiff, FFTDiff, ChebyshevDiff, LogDiff
 from numgrids.grids import Grid
@@ -69,12 +70,27 @@ class TestSphericalGrid(unittest.TestCase):
 
     def test_spherical_grid(self):
         grid = SphericalGrid(
-            Axis(AxisType.CHEBYSHEV, 30, 1.E-3, 1),  # radial axis
-            Axis(AxisType.CHEBYSHEV, 30, 1.E-3, np.pi - 1.E-3),  # polar axis
-            Axis(AxisType.EQUIDISTANT_PERIODIC, 50, 0, 2 * np.pi),  # azimuthal axis
+            create_axis(AxisType.CHEBYSHEV, 30, 1.E-3, 1),  # radial axis
+            create_axis(AxisType.CHEBYSHEV, 30, 1.E-3, np.pi - 1.E-3),  # polar axis
+            create_axis(AxisType.EQUIDISTANT_PERIODIC, 50, 0, 2 * np.pi),  # azimuthal axis
         )
         self.assertTrue(grid.axes[-1].periodic)
         self.assertTrue(len(grid.axes[0]) == 30)
+
+    def test_spherical_grid_lazy_laplacian(self):
+        grid = SphericalGrid(
+            create_axis(AxisType.CHEBYSHEV, 15, 1.E-3, 1),
+            create_axis(AxisType.CHEBYSHEV, 15, 1.E-3, np.pi - 1.E-3),
+            create_axis(AxisType.EQUIDISTANT_PERIODIC, 20, 0, 2 * np.pi),
+        )
+        # Laplacian is not initialized until called
+        self.assertIsNone(grid._laplacian_fn)
+        R, Theta, Phi = grid.meshed_coords
+        f = R ** 2
+        # Calling laplacian triggers lazy init
+        result = grid.laplacian(f)
+        self.assertIsNotNone(grid._laplacian_fn)
+        self.assertEqual(result.shape, f.shape)
 
 
 class TestConvenience(unittest.TestCase):
@@ -109,7 +125,7 @@ class TestConvenience(unittest.TestCase):
         )
 
     def test_interpolate(self):
-        grid = Grid(Axis(AxisType.EQUIDISTANT, 50, 0, 1))
+        grid = Grid(create_axis(AxisType.EQUIDISTANT, 50, 0, 1))
         x = grid.coords
         f = x ** 2
         expected = 0.5 ** 2
@@ -117,11 +133,47 @@ class TestConvenience(unittest.TestCase):
         actual = interpolate(grid, f, 0.5)
         self.assertAlmostEqual(actual, expected)
 
+    def test_create_axis_logarithmic(self):
+        axis = create_axis(AxisType.LOGARITHMIC, 20, 0.1, 10)
+        self.assertIsInstance(axis, LogAxis)
+        self.assertEqual(len(axis), 20)
+
+    def test_create_axis_invalid_type(self):
+        with self.assertRaises(NotImplementedError):
+            create_axis("nonexistent", 10, 0, 1)
+
+    def test_type_error_for_non_grid(self):
+        with self.assertRaises(TypeError):
+            Diff("not a grid", 1, 0)
+
+    def test_grid_plot(self):
+        axis = EquidistantAxis(10, 0, 1)
+        grid = Grid(axis, axis)
+        with patch("matplotlib.pyplot.figure") as mock_fig, \
+             patch("matplotlib.pyplot.show"):
+            mock_fig.return_value = Mock()
+            mock_fig.return_value.add_subplot = Mock(return_value=Mock())
+            grid.plot()
+            mock_fig.assert_called()
+
+    def test_grid_plot_with_named_axes(self):
+        axis_x = EquidistantAxis(10, 0, 1, name="x")
+        axis_y = EquidistantAxis(10, 0, 1, name="y")
+        grid = Grid(axis_x, axis_y)
+        with patch("matplotlib.pyplot.figure") as mock_fig, \
+             patch("matplotlib.pyplot.show"):
+            mock_sub = Mock()
+            mock_fig.return_value = Mock()
+            mock_fig.return_value.add_subplot = Mock(return_value=mock_sub)
+            grid.plot()
+            mock_sub.set_xlabel.assert_called()
+            mock_sub.set_ylabel.assert_called()
+
     def test_integrate(self):
         grid = Grid(
-            Axis(AxisType.CHEBYSHEV, 30, -1, 1),
-            Axis(AxisType.CHEBYSHEV, 30, -1, 1),
-            Axis(AxisType.CHEBYSHEV, 30, -1, 1),
+            create_axis(AxisType.CHEBYSHEV, 30, -1, 1),
+            create_axis(AxisType.CHEBYSHEV, 30, -1, 1),
+            create_axis(AxisType.CHEBYSHEV, 30, -1, 1),
         )
 
         X, Y, Z = grid.meshed_coords

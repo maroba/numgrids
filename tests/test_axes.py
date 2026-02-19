@@ -4,9 +4,7 @@ import numpy as np
 import numpy.testing as npt
 from unittest.mock import patch, Mock
 
-from numpy import testing as npt
-
-from numgrids.axes import ChebyshevAxis, EquidistantAxis
+from numgrids.axes import ChebyshevAxis, EquidistantAxis, LogAxis
 
 
 class TestChebyshevAxis(unittest.TestCase):
@@ -27,22 +25,99 @@ class TestChebyshevAxis(unittest.TestCase):
 
     def test_repr(self):
         axis = ChebyshevAxis(10, -1, 1)
-        with patch("matplotlib.pyplot.subplots") as mock:
-            mock.return_value = Mock(), Mock()
-            repr(axis)
-            mock.assert_called()
+        result = repr(axis)
+        self.assertIn("ChebyshevAxis", result)
+        self.assertIn("num_points=10", result)
 
 
 class TestAxis(unittest.TestCase):
 
     def test_repr(self):
         axis = EquidistantAxis(10, -1, 1, periodic=True)
-        with patch("matplotlib.pyplot.subplots") as mock:
-            fig, ax = Mock(), Mock()
-            mock.return_value = fig, ax
-            repr(axis)
-            mock.assert_called()
-            ax.annotate.assert_called()
+        result = repr(axis)
+        self.assertIn("EquidistantAxis", result)
+        self.assertIn("periodic=True", result)
+
+    def test_str(self):
+        axis = EquidistantAxis(10, -1, 1)
+        result = str(axis)
+        self.assertIn("EquidistantAxis", result)
+        self.assertIn("10 points", result)
+
+    def test_high_must_be_greater_than_low(self):
+        with self.assertRaises(ValueError):
+            EquidistantAxis(10, 5, 3)
+
+    def test_num_points_must_be_positive(self):
+        with self.assertRaises(ValueError):
+            EquidistantAxis(0, 0, 1)
+        with self.assertRaises(ValueError):
+            EquidistantAxis(-5, 0, 1)
+
+    def test_plot_non_periodic(self):
+        axis = EquidistantAxis(10, -1, 1)
+        with patch("matplotlib.pyplot.subplots") as mock_subplots, \
+             patch("matplotlib.pyplot.show"):
+            mock_fig, mock_ax = Mock(), Mock()
+            mock_subplots.return_value = mock_fig, mock_ax
+            axis.plot()
+            mock_subplots.assert_called()
+
+    def test_plot_periodic(self):
+        axis = EquidistantAxis(10, 0, 2 * np.pi, periodic=True)
+        with patch("matplotlib.pyplot.subplots") as mock_subplots, \
+             patch("matplotlib.pyplot.show"):
+            mock_fig, mock_ax = Mock(), Mock()
+            mock_subplots.return_value = mock_fig, mock_ax
+            axis.plot()
+            mock_subplots.assert_called()
+
+    def test_plot_chebyshev(self):
+        axis = ChebyshevAxis(10, -1, 1)
+        with patch("matplotlib.pyplot.subplots") as mock_subplots, \
+             patch("matplotlib.pyplot.show"):
+            mock_fig, mock_ax = Mock(), Mock()
+            mock_subplots.return_value = mock_fig, mock_ax
+            axis.plot()
+            mock_subplots.assert_called()
+
+    def test_create_diff_operator_equidistant(self):
+        from numgrids.grids import Grid
+        from numgrids.diff import FiniteDifferenceDiff
+        axis = EquidistantAxis(20, 0, 1)
+        grid = Grid(axis)
+        op = axis.create_diff_operator(grid, 1, 0)
+        self.assertIsInstance(op, FiniteDifferenceDiff)
+
+    def test_create_diff_operator_equidistant_periodic(self):
+        from numgrids.grids import Grid
+        from numgrids.diff import FFTDiff
+        axis = EquidistantAxis(20, 0, 2 * np.pi, periodic=True)
+        grid = Grid(axis)
+        op = axis.create_diff_operator(grid, 1, 0)
+        self.assertIsInstance(op, FFTDiff)
+
+    def test_create_diff_operator_chebyshev(self):
+        from numgrids.grids import Grid
+        from numgrids.diff import ChebyshevDiff
+        axis = ChebyshevAxis(20, 0, 1)
+        grid = Grid(axis)
+        op = axis.create_diff_operator(grid, 1, 0)
+        self.assertIsInstance(op, ChebyshevDiff)
+
+    def test_create_diff_operator_log(self):
+        from numgrids.grids import Grid
+        from numgrids.diff import LogDiff
+        axis = LogAxis(20, 0.1, 10)
+        grid = Grid(axis)
+        op = axis.create_diff_operator(grid, 1, 0)
+        self.assertIsInstance(op, LogDiff)
+
+    def test_log_axis_requires_positive_low(self):
+        with self.assertRaises(ValueError):
+            LogAxis(10, -1, 10)
+        with self.assertRaises(ValueError):
+            LogAxis(10, 0, 10)
 
 
 class TestEquidistantAxis(unittest.TestCase):

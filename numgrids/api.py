@@ -1,13 +1,19 @@
+from __future__ import annotations
+
+import enum
+from typing import TYPE_CHECKING
+
 import numpy as np
+from numpy.typing import NDArray
+from scipy.sparse import spmatrix
 
 from numgrids.grids import Grid
-from numgrids.axes import EquidistantAxis, ChebyshevAxis, LogAxis
-from numgrids.diff import FiniteDifferenceDiff, FFTDiff, ChebyshevDiff, LogDiff
+from numgrids.axes import Axis, EquidistantAxis, ChebyshevAxis, LogAxis
 
 
 class Diff:
 
-    def __init__(self, grid, order, axis_index=0):
+    def __init__(self, grid: Grid, order: int, axis_index: int = 0) -> None:
         """Constructor for partial derivative operator.
 
         Parameters
@@ -32,24 +38,13 @@ class Diff:
             raise ValueError("No such axis index in this grid!")
 
         axis = grid.get_axis(axis_index)
+        self.operator = axis.create_diff_operator(grid, order, axis_index)
 
-        if isinstance(axis, EquidistantAxis):
-            if axis.periodic:
-                self.operator = FFTDiff(grid, order, axis_index)
-            else:
-                self.operator = FiniteDifferenceDiff(grid, order, axis_index)
-        elif isinstance(axis, ChebyshevAxis):
-            self.operator = ChebyshevDiff(grid, order, axis_index)
-        elif isinstance(axis, LogAxis):
-            self.operator = LogDiff(grid, order, axis_index)
-        else:
-            raise NotImplementedError
-
-    def __call__(self, f):
+    def __call__(self, f: NDArray) -> NDArray:
         """Apply the derivative to the array f."""
         return self.operator(f)
 
-    def as_matrix(self):
+    def as_matrix(self) -> spmatrix:
         """
         Returns a matrix representation of the differential operator.
 
@@ -58,41 +53,33 @@ class Diff:
         return self.operator.as_matrix()
 
 
-class AxisType:
-    """Enumeration of the available axis types in this package.
-
-        Available constants:
-            EQUIDISTANT
-            EQUIDISTANT_PERIODIC
-            CHEBYSHEV
-            LOGARITHMIC
-    """
+class AxisType(str, enum.Enum):
+    """Enumeration of the available axis types in this package."""
     EQUIDISTANT = "equidistant"
     EQUIDISTANT_PERIODIC = "equidistant_periodic"
     CHEBYSHEV = "chebyshev"
     LOGARITHMIC = "log"
 
 
-def Axis(axis_type, num_points, low, high, **kwargs):
-    """Creates an Axis object of a given type.
+def create_axis(axis_type: AxisType, num_points: int, low: float, high: float,
+                **kwargs) -> Axis:
+    """Create an Axis object of a given type.
 
-        Parameters
-        ----------
-        axis_type: AxisType
-            The type of axis (equidistant, periodic, logarithmic, Chebyshev, etc.)
-        num_points: positive int
-            Number of grid points along this axis.
-        low: float
-            The lowest coordinate value on the axis.
-        high: float
-            The highest coordinate value on the axis.
+    Parameters
+    ----------
+    axis_type: AxisType
+        The type of axis (equidistant, periodic, logarithmic, Chebyshev, etc.)
+    num_points: positive int
+        Number of grid points along this axis.
+    low: float
+        The lowest coordinate value on the axis.
+    high: float
+        The highest coordinate value on the axis.
 
-        Returns
-        -------
-        Axis object of specified type.
-
-        """
-
+    Returns
+    -------
+    Axis object of specified type.
+    """
     if axis_type == AxisType.EQUIDISTANT:
         return EquidistantAxis(num_points, low, high, **kwargs)
     elif axis_type == AxisType.EQUIDISTANT_PERIODIC:
@@ -108,9 +95,8 @@ def Axis(axis_type, num_points, low, high, **kwargs):
 class SphericalGrid(Grid):
     """A spherical grid in spherical coordinates (r, theta, phi)."""
 
-    def __init__(self, raxis, theta_axis, phi_axis):
-        """
-        Constructor
+    def __init__(self, raxis: Axis, theta_axis: Axis, phi_axis: Axis) -> None:
+        """Constructor
 
         Parameters
         ----------
@@ -121,8 +107,11 @@ class SphericalGrid(Grid):
         phi_axis: Axis
             The azimuthal axis (phi). Must be periodic.
         """
-        super(SphericalGrid, self).__init__(raxis, theta_axis, phi_axis)
+        super().__init__(raxis, theta_axis, phi_axis)
+        self._laplacian_fn: callable | None = None
 
+    def _setup_laplacian(self) -> None:
+        """Lazily initialize the laplacian operator."""
         dr2 = Diff(self, 2, 0)
         dr = Diff(self, 1, 0)
         dtheta = Diff(self, 1, 1)
@@ -130,19 +119,22 @@ class SphericalGrid(Grid):
 
         R, Phi, Theta = self.meshed_coords
 
-        def laplacian(f):
+        def laplacian(f: NDArray) -> NDArray:
             return dr2(f) + 2 / R * dr(f) + \
                    1 / (R ** 2 * np.sin(Theta)) * dtheta(np.sin(Theta) * dtheta(f)) + \
                    1 / (R ** 2 * np.sin(Theta) ** 2) * dphi2(f)
 
-        self._laplacian = laplacian
+        self._laplacian_fn = laplacian
 
-    def laplacian(self, f):
-        """Returns the laplacian in spherical coordinates as a callable."""
-        return self._laplacian(f)
+    def laplacian(self, f: NDArray) -> NDArray:
+        """Apply the laplacian in spherical coordinates to f."""
+        if self._laplacian_fn is None:
+            self._setup_laplacian()
+        return self._laplacian_fn(f)
 
 
-def diff(grid, f, order=1, axis_index=0):
+def diff(grid: Grid, f: NDArray, order: int = 1, axis_index: int = 0) -> NDArray:
+    """Convenience function for differentiation with caching."""
     if (order, axis_index) in grid.cache.get("diffs"):
         d = grid.cache["diffs"][order, axis_index]
     else:
@@ -151,13 +143,15 @@ def diff(grid, f, order=1, axis_index=0):
     return d(f)
 
 
-def interpolate(grid, f, locations):
-    from numgrids import Interpolator
+def interpolate(grid: Grid, f: NDArray, locations) -> NDArray:
+    """Convenience function for interpolation."""
+    from numgrids.interpol import Interpolator
     inter = Interpolator(grid, f)
     return inter(locations)
 
 
-def integrate(grid, f):
+def integrate(grid: Grid, f: NDArray) -> float:
+    """Convenience function for integration with caching."""
     from numgrids.integration import Integral
     if grid.cache.get("integral"):
         I = grid.cache["integral"]
