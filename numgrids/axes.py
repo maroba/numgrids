@@ -266,7 +266,7 @@ class EquidistantAxis(Axis):
 
 
 class ChebyshevAxis(Axis):
-    """Axis with grid points at Chebyshev nodes.
+    r"""Axis with grid points at Chebyshev nodes.
 
     The Chebyshev nodes are defined as
 
@@ -312,7 +312,7 @@ class ChebyshevAxis(Axis):
 
 
 class LogAxis(Axis):
-    """Axis with logarithmically spaced grid points.
+    r"""Axis with logarithmically spaced grid points.
 
     Internally the coordinate is transformed to a uniform grid on
     ``[ln(low), ln(high)]``.  Differentiation uses finite differences on the

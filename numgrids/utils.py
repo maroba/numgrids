@@ -6,7 +6,7 @@ from scipy.sparse import kron, spmatrix
 
 
 def multi_kron(*matrices: spmatrix) -> spmatrix:
-    """Compute the Kronecker product of an arbitrary number of sparse matrices.
+    r"""Compute the Kronecker product of an arbitrary number of sparse matrices.
 
     The product is evaluated left-to-right:
     ``multi_kron(A, B, C)`` returns ``kron(kron(A, B), C)``.

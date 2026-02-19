@@ -92,7 +92,7 @@ class FiniteDifferenceDiff(GridDiff):
 
 
 class FFTDiff(GridDiff):
-    """FFT spectral partial derivative for periodic grids.
+    r"""FFT spectral partial derivative for periodic grids.
 
     Computes derivatives via the discrete Fourier transform:
 
@@ -240,7 +240,7 @@ class ChebyshevDiff(GridDiff):
 
 
 class LogDiff(GridDiff):
-    """Partial derivative on a logarithmic axis.
+    r"""Partial derivative on a logarithmic axis.
 
     Uses finite differences on the equidistant log-scale coordinates and
     applies the chain rule:

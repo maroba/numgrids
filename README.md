@@ -213,6 +213,25 @@ To get an idea how *numgrids* can be used, have a look at the following example 
 - [Spherical Grid and the Spherical Laplacian](examples/spherical-grid.ipynb)
 - [Solving the Schrödinger equation for the quantum harmonic oscillator](examples/quantum-harmonic-oscillator.ipynb)
 
+## How to Cite
+
+If you use *numgrids* in a publication, please cite it as:
+
+> M. Baer. *numgrids* software package. URL: https://github.com/maroba/numgrids. 2023
+
+BibTeX entry:
+
+```bibtex
+@misc{numgrids,
+  title  = {{numgrids} Software Package},
+  author = {M. Baer},
+  url    = {https://github.com/maroba/numgrids},
+  key    = {numgrids},
+  note   = {\url{https://github.com/maroba/numgrids}},
+  year   = {2023}
+}
+```
+
 ## Development
 
 ### Setting up the project
