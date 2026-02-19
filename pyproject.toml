@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "numgrids"
-version = "0.3.0"
+version = "0.4.0"
 description = "Working with numerical grids made easy."
 readme = "docs/pypi_description.md"
 license = "MIT"
