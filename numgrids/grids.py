@@ -150,27 +150,13 @@ class Grid:
         """
         Returns a new grid with twice the number of grid points in each direction.
         """
-        new_axes = []
-        for axis in self.axes:
-            cls = type(axis)
-            x = axis.coords
-            new_axes.append(
-                cls(len(axis) * 2, x[0], x[-1])
-            )
-        return Grid(*new_axes)
+        return Grid(*(axis.resized(len(axis) * 2) for axis in self.axes))
 
     def coarsen(self) -> Grid:
         """
         Returns a new grid with half the number of grid points in each direction.
         """
-        new_axes = []
-        for axis in self.axes:
-            cls = type(axis)
-            x = axis.coords
-            new_axes.append(
-                cls(len(axis) // 2, x[0], x[-1])
-            )
-        return Grid(*new_axes)
+        return Grid(*(axis.resized(len(axis) // 2) for axis in self.axes))
 
     @property
     def meshed_indices(self) -> list[NDArray]:
@@ -235,7 +221,10 @@ class MultiGrid:
             The axes for the grid with highest resolution. Starting from the grid
             with the highest resolution (level 0), the constructor will create different levels
             of resolution. Each additional level contains a grid with about half the grid
-            points in each direction.
+            points in each direction.  All axis types are supported
+            (``EquidistantAxis``, ``ChebyshevAxis``, ``LogAxis``, and
+            mixtures thereof).  Axis properties such as ``periodic`` and
+            ``name`` are preserved at every level.
 
         min_size: positive int
             This parameter sets a lower bound for the coarsest grid in the multigrid.
@@ -249,8 +238,7 @@ class MultiGrid:
             sizes = sizes // 2 + sizes % 2
             if min(sizes) < min_size:
                 break
-            axes = [type(axis)(size, axis.coords[0], axis.coords[-1])
-                    for size, axis in zip(sizes, axes)]
+            axes = [axis.resized(size) for size, axis in zip(sizes, axes)]
             grid = Grid(*axes)
             self._levels.append(grid)
 

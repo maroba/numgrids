@@ -46,9 +46,9 @@ class Axis:
         num_points: positive int
             Number of grid points along the axis.
         low: float
-            The lower end coordinate value.
+            The lower end coordinate value.  Stored as :attr:`low`.
         high: float
-            The upper end coordinate value.
+            The upper end coordinate value.  Stored as :attr:`high`.
         periodic: bool
             Apply periodic boundary condition or not.
         """
@@ -57,10 +57,32 @@ class Axis:
         if high <= low:
             raise ValueError(f"high ({high}) must be greater than low ({low})")
         self._num_points = num_points
+        self.low = low
+        self.high = high
         self.periodic = bool(periodic)
         self._coords_internal = self._setup_internal_coords(low, high)
         self._coords = self._setup_external_coords(low, high)
         self.name: str | None = kwargs.get("name")
+
+    def resized(self, num_points: int) -> Axis:
+        """Return a new axis of the same type and domain with a different number of points.
+
+        Parameters
+        ----------
+        num_points : int
+            Number of grid points for the new axis.
+
+        Returns
+        -------
+        Axis
+            A new axis instance with the same type, domain, and metadata.
+        """
+        kwargs: dict = {}
+        if self.periodic:
+            kwargs["periodic"] = True
+        if self.name is not None:
+            kwargs["name"] = self.name
+        return type(self)(num_points, self.low, self.high, **kwargs)
 
     def _setup_internal_coords(self, low: float, high: float) -> NDArray:
         """Create the internal (canonical) coordinate array.
