@@ -37,35 +37,46 @@ class CurvilinearGrid(Grid):
 
     From the scale factors :math:`h_i` the class derives:
 
-    * **gradient** —
-      :math:`(\nabla f)_i = \frac{1}{h_i}\frac{\partial f}{\partial q_i}`
+    * **gradient**
 
-    * **divergence** —
-      :math:`\nabla\!\cdot\!\mathbf{v}
-      = \frac{1}{J}\sum_i \frac{\partial}{\partial q_i}
-        \!\left(\frac{J}{h_i}\,v_i\right)`,
-      :math:`J = \prod h_i`
+      .. math::
 
-    * **Laplacian** —
-      :math:`\nabla^2 f
-      = \frac{1}{J}\sum_i \frac{\partial}{\partial q_i}
-        \!\left(\frac{J}{h_i^2}\,\frac{\partial f}{\partial q_i}\right)`
+         (\nabla f)_i = \frac{1}{h_i}\frac{\partial f}{\partial q_i}
 
-    * **curl** (3D only) —
-      :math:`(\nabla\!\times\!\mathbf{v})_i
-      = \frac{1}{h_j h_k}\!\left[
-        \frac{\partial(h_k\,v_k)}{\partial q_j}
-        - \frac{\partial(h_j\,v_j)}{\partial q_k}\right]`
+    * **divergence** (where :math:`J = \prod h_i`)
+
+      .. math::
+
+         \nabla\!\cdot\!\mathbf{v}
+         = \frac{1}{J}\sum_i \frac{\partial}{\partial q_i}
+           \!\left(\frac{J}{h_i}\,v_i\right)
+
+    * **Laplacian**
+
+      .. math::
+
+         \nabla^2 f
+         = \frac{1}{J}\sum_i \frac{\partial}{\partial q_i}
+           \!\left(\frac{J}{h_i^2}\,\frac{\partial f}{\partial q_i}\right)
+
+    * **curl** (3D only)
+
+      .. math::
+
+         (\nabla\!\times\!\mathbf{v})_i
+         = \frac{1}{h_j h_k}\!\left[
+           \frac{\partial(h_k\,v_k)}{\partial q_j}
+           - \frac{\partial(h_j\,v_j)}{\partial q_k}\right]
 
     For **2D** grids a scalar *curl* is provided, equal to the out-of-plane
     component.
 
-    Coordinate singularities (e.g. *r = 0*) are handled gracefully:
+    Coordinate singularities (e.g. ``r = 0``) are handled gracefully:
     non-finite values are replaced by zero.
 
     Parameters
     ----------
-    *axes : Axis
+    \*axes : Axis
         One or more :class:`~numgrids.axes.Axis` objects.
     scale_factors : sequence of callables
         One callable per axis.  ``scale_factors[i](meshed_coords)`` must
