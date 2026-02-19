@@ -12,6 +12,20 @@ from numgrids.axes import Axis, EquidistantAxis, ChebyshevAxis, LogAxis
 
 
 class Diff:
+    """Partial derivative operator on a numerical grid.
+
+    Automatically selects the best differentiation strategy (finite
+    differences, FFT spectral, Chebyshev spectral, or log-scale) based
+    on the axis type at *axis_index*.
+
+    Examples
+    --------
+    >>> from numgrids import *
+    >>> ax = create_axis(AxisType.CHEBYSHEV, 30, 0, 1)
+    >>> grid = Grid(ax)
+    >>> d = Diff(grid, 1)      # first derivative
+    >>> d(grid.coords ** 2)    # apply to x**2
+    """
 
     def __init__(self, grid: Grid, order: int, axis_index: int = 0, acc: int = 4) -> None:
         """Constructor for partial derivative operator.
@@ -58,7 +72,19 @@ class Diff:
 
 
 class AxisType(str, enum.Enum):
-    """Enumeration of the available axis types in this package."""
+    """Enumeration of available axis types.
+
+    Members
+    -------
+    EQUIDISTANT
+        Uniformly spaced grid points (non-periodic).
+    EQUIDISTANT_PERIODIC
+        Uniformly spaced grid points with periodic boundary conditions.
+    CHEBYSHEV
+        Chebyshev-node spacing for spectral accuracy on non-periodic domains.
+    LOGARITHMIC
+        Logarithmically spaced grid points (requires ``low > 0``).
+    """
     EQUIDISTANT = "equidistant"
     EQUIDISTANT_PERIODIC = "equidistant_periodic"
     CHEBYSHEV = "chebyshev"
@@ -121,12 +147,17 @@ class SphericalGrid(Grid):
         dtheta = Diff(self, 1, 1)
         dphi2 = Diff(self, 2, 2)
 
-        R, Phi, Theta = self.meshed_coords
+        R, Theta, Phi = self.meshed_coords
 
         def laplacian(f: NDArray) -> NDArray:
-            return dr2(f) + 2 / R * dr(f) + \
-                   1 / (R ** 2 * np.sin(Theta)) * dtheta(np.sin(Theta) * dtheta(f)) + \
-                   1 / (R ** 2 * np.sin(Theta) ** 2) * dphi2(f)
+            with np.errstate(divide='ignore', invalid='ignore'):
+                term_radial = dr2(f) + 2 / R * dr(f)
+                theta_deriv = dtheta(np.sin(Theta) * dtheta(f))
+                term_theta = 1 / (R ** 2 * np.sin(Theta)) * theta_deriv
+                term_phi = 1 / (R ** 2 * np.sin(Theta) ** 2) * dphi2(f)
+                result = term_radial + term_theta + term_phi
+            result = np.where(np.isfinite(result), result, 0.0)
+            return result
 
         self._laplacian_fn = laplacian
 
@@ -138,7 +169,29 @@ class SphericalGrid(Grid):
 
 
 def diff(grid: Grid, f: NDArray, order: int = 1, axis_index: int = 0, acc: int = 4) -> NDArray:
-    """Convenience function for differentiation with caching."""
+    """Differentiate a meshed function (with operator caching).
+
+    Creates a :class:`Diff` operator on first call and caches it on the
+    grid for subsequent calls with the same ``(order, axis_index, acc)``.
+
+    Parameters
+    ----------
+    grid : Grid
+        The grid on which *f* is defined.
+    f : NDArray
+        Meshed function values with shape ``grid.shape``.
+    order : int, optional
+        Derivative order (default ``1``).
+    axis_index : int, optional
+        Axis along which to differentiate (default ``0``).
+    acc : int, optional
+        Accuracy order for finite-difference methods (default ``4``).
+
+    Returns
+    -------
+    NDArray
+        The derivative array, same shape as *f*.
+    """
     cache_key = (order, axis_index, acc)
     if cache_key in grid.cache.get("diffs"):
         d = grid.cache["diffs"][cache_key]
@@ -149,14 +202,45 @@ def diff(grid: Grid, f: NDArray, order: int = 1, axis_index: int = 0, acc: int =
 
 
 def interpolate(grid: Grid, f: NDArray, locations) -> NDArray:
-    """Convenience function for interpolation."""
+    """Interpolate a meshed function at arbitrary locations.
+
+    Parameters
+    ----------
+    grid : Grid
+        The grid on which *f* is defined.
+    f : NDArray
+        Meshed function values.
+    locations : tuple, list[tuple], zip, or Grid
+        Point(s) at which to interpolate.
+
+    Returns
+    -------
+    NDArray
+        Interpolated value(s).
+    """
     from numgrids.interpol import Interpolator
     inter = Interpolator(grid, f)
     return inter(locations)
 
 
 def integrate(grid: Grid, f: NDArray) -> float:
-    """Convenience function for integration with caching."""
+    """Integrate a meshed function over the entire grid domain.
+
+    The :class:`~numgrids.integration.Integral` operator is cached on the
+    grid after the first call.
+
+    Parameters
+    ----------
+    grid : Grid
+        The grid on which *f* is defined.
+    f : NDArray
+        Meshed function values.
+
+    Returns
+    -------
+    float
+        The definite integral over the grid domain.
+    """
     from numgrids.integration import Integral
     if grid.cache.get("integral"):
         I = grid.cache["integral"]

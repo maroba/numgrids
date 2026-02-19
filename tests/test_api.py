@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import patch, Mock
 
+import warnings
+
 import numpy as np
 import numpy.testing as npt
 
@@ -124,6 +126,144 @@ class TestSphericalGrid(unittest.TestCase):
         result = grid.laplacian(f)
         self.assertIsNotNone(grid._laplacian_fn)
         self.assertEqual(result.shape, f.shape)
+
+    def test_no_warnings_away_from_singularity(self):
+        """Grid far from singularities should produce no warnings."""
+        grid = SphericalGrid(
+            create_axis(AxisType.CHEBYSHEV, 15, 0.5, 2),
+            create_axis(AxisType.CHEBYSHEV, 15, 0.3, np.pi - 0.3),
+            create_axis(AxisType.EQUIDISTANT_PERIODIC, 20, 0, 2 * np.pi),
+        )
+        R, Theta, Phi = grid.meshed_coords
+        f = R ** 2
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            result = grid.laplacian(f)
+
+        self.assertTrue(np.all(np.isfinite(result)))
+
+    def test_no_warnings_near_r_zero(self):
+        """Grid near r=0 must not produce RuntimeWarnings."""
+        grid = SphericalGrid(
+            create_axis(AxisType.CHEBYSHEV, 20, 1.E-6, 1),
+            create_axis(AxisType.CHEBYSHEV, 15, 0.3, np.pi - 0.3),
+            create_axis(AxisType.EQUIDISTANT_PERIODIC, 20, 0, 2 * np.pi),
+        )
+        R, Theta, Phi = grid.meshed_coords
+        f = R ** 2
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            result = grid.laplacian(f)
+
+        self.assertTrue(np.all(np.isfinite(result)))
+
+    def test_no_warnings_near_theta_zero(self):
+        """Grid near theta=0 must not produce RuntimeWarnings."""
+        grid = SphericalGrid(
+            create_axis(AxisType.CHEBYSHEV, 15, 0.5, 2),
+            create_axis(AxisType.CHEBYSHEV, 15, 1.E-6, np.pi - 1.E-6),
+            create_axis(AxisType.EQUIDISTANT_PERIODIC, 20, 0, 2 * np.pi),
+        )
+        R, Theta, Phi = grid.meshed_coords
+        f = R ** 2
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            result = grid.laplacian(f)
+
+        self.assertTrue(np.all(np.isfinite(result)))
+
+    def test_no_nan_or_inf_at_singularities(self):
+        """Output must be finite even when grid includes near-singular points."""
+        grid = SphericalGrid(
+            create_axis(AxisType.CHEBYSHEV, 20, 1.E-8, 1),
+            create_axis(AxisType.CHEBYSHEV, 20, 1.E-8, np.pi - 1.E-8),
+            create_axis(AxisType.EQUIDISTANT_PERIODIC, 20, 0, 2 * np.pi),
+        )
+        R, Theta, Phi = grid.meshed_coords
+        f = R ** 2 * np.sin(Theta) ** 2
+
+        result = grid.laplacian(f)
+
+        self.assertFalse(np.any(np.isnan(result)), "NaN found in laplacian output")
+        self.assertFalse(np.any(np.isinf(result)), "Inf found in laplacian output")
+
+    def test_laplacian_r_squared(self):
+        """Laplacian of r^2 = 6 in spherical coordinates."""
+        grid = SphericalGrid(
+            create_axis(AxisType.CHEBYSHEV, 25, 0.1, 2),
+            create_axis(AxisType.CHEBYSHEV, 20, 0.2, np.pi - 0.2),
+            create_axis(AxisType.EQUIDISTANT_PERIODIC, 20, 0, 2 * np.pi),
+        )
+        R, Theta, Phi = grid.meshed_coords
+        f = R ** 2
+
+        result = grid.laplacian(f)
+        expected = 6 * np.ones_like(f)
+
+        # Check at interior points away from boundaries
+        interior = (
+            (slice(2, -2), slice(2, -2), slice(None))
+        )
+        npt.assert_array_almost_equal(result[interior], expected[interior], decimal=1)
+
+    def test_laplacian_1_over_r(self):
+        """Laplacian of 1/r = 0 for r > 0 (harmonic function)."""
+        grid = SphericalGrid(
+            create_axis(AxisType.CHEBYSHEV, 25, 0.5, 3),
+            create_axis(AxisType.CHEBYSHEV, 20, 0.3, np.pi - 0.3),
+            create_axis(AxisType.EQUIDISTANT_PERIODIC, 20, 0, 2 * np.pi),
+        )
+        R, Theta, Phi = grid.meshed_coords
+        f = 1.0 / R
+
+        result = grid.laplacian(f)
+
+        interior = (slice(2, -2), slice(2, -2), slice(None))
+        npt.assert_array_almost_equal(result[interior], 0.0, decimal=1)
+
+    def test_laplacian_uses_correct_theta_phi_ordering(self):
+        """Verify theta and phi are not swapped (regression test)."""
+        grid = SphericalGrid(
+            create_axis(AxisType.CHEBYSHEV, 20, 0.5, 2),
+            create_axis(AxisType.CHEBYSHEV, 20, 0.3, np.pi - 0.3),
+            create_axis(AxisType.EQUIDISTANT_PERIODIC, 30, 0, 2 * np.pi),
+        )
+        R, Theta, Phi = grid.meshed_coords
+
+        # f = cos(phi) depends only on azimuthal angle
+        # Laplacian should have non-zero phi terms but zero theta-only terms
+        f = np.cos(Phi)
+
+        result = grid.laplacian(f)
+
+        # With correct ordering, the phi derivative term contributes.
+        # If theta/phi were swapped, result would be very different.
+        # At interior points away from boundaries, check that the result
+        # matches the analytical form: -cos(phi) / (r^2 sin^2(theta))
+        interior = (slice(3, -3), slice(3, -3), slice(None))
+        expected = -np.cos(Phi) / (R ** 2 * np.sin(Theta) ** 2)
+        error = np.max(np.abs(result[interior] - expected[interior]))
+        self.assertLess(error, 1.0, f"Theta/phi ordering appears wrong, error={error}")
+
+    def test_laplacian_second_call_uses_cache(self):
+        """Second call to laplacian should reuse the cached function."""
+        grid = SphericalGrid(
+            create_axis(AxisType.CHEBYSHEV, 10, 0.5, 1),
+            create_axis(AxisType.CHEBYSHEV, 10, 0.3, np.pi - 0.3),
+            create_axis(AxisType.EQUIDISTANT_PERIODIC, 10, 0, 2 * np.pi),
+        )
+        R, Theta, Phi = grid.meshed_coords
+        f = R ** 2
+
+        result1 = grid.laplacian(f)
+        fn_ref = grid._laplacian_fn
+        result2 = grid.laplacian(f)
+
+        self.assertIs(grid._laplacian_fn, fn_ref)
+        npt.assert_array_equal(result1, result2)
 
 
 class TestConvenience(unittest.TestCase):

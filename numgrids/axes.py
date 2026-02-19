@@ -1,7 +1,18 @@
-"""An Axis is the fundamental object in numgrids.
+"""Axis types for numerical grids.
 
-An Axis represents a single coordinate axis in a (possibly curvilinear)
-coordinate system.
+An :class:`Axis` is the fundamental building block in numgrids. It represents
+a single coordinate axis in a (possibly curvilinear) coordinate system.
+
+Each axis type uses an *internal* coordinate system (e.g. ``[0, 1]`` or
+Chebyshev nodes on ``[-1, 1]``) and maps it to *external* (user-specified)
+coordinates via a linear or nonlinear transformation. The axis type also
+determines which differentiation strategy is used.
+
+Available axis types:
+
+- :class:`EquidistantAxis` -- uniformly spaced points, optional periodicity.
+- :class:`ChebyshevAxis` -- Chebyshev-node spacing for spectral accuracy.
+- :class:`LogAxis` -- logarithmically spaced points.
 """
 
 from __future__ import annotations
@@ -17,9 +28,14 @@ if TYPE_CHECKING:
 
 
 class Axis:
-    """
-    Base class for all axis types. An axis is an axis in a coordinate system.
-    May also be a curvilinear coordinate system.
+    """Base class for all axis types.
+
+    An axis represents a single coordinate dimension in a numerical grid.
+    It stores the coordinate values and knows how to create the appropriate
+    differentiation operator for its discretization strategy.
+
+    Subclasses must implement :meth:`_setup_internal_coords` and
+    :meth:`create_diff_operator`.
     """
 
     def __init__(self, num_points: int, low: float, high: float, periodic: bool, **kwargs) -> None:
@@ -47,9 +63,40 @@ class Axis:
         self.name: str | None = kwargs.get("name")
 
     def _setup_internal_coords(self, low: float, high: float) -> NDArray:
+        """Create the internal (canonical) coordinate array.
+
+        Parameters
+        ----------
+        low : float
+            Lower bound of the domain.
+        high : float
+            Upper bound of the domain.
+
+        Returns
+        -------
+        NDArray
+            1-D array of internal coordinate values.
+        """
         raise NotImplementedError("Must be implemented by child class.")
 
     def _setup_external_coords(self, low: float, high: float) -> NDArray:
+        """Map internal coordinates to user-facing (external) coordinates.
+
+        The default implementation applies a linear transformation.
+        Subclasses may override for nonlinear mappings (e.g. logarithmic).
+
+        Parameters
+        ----------
+        low : float
+            Lower bound of the user domain.
+        high : float
+            Upper bound of the user domain.
+
+        Returns
+        -------
+        NDArray
+            1-D array of external coordinate values.
+        """
         return self._coords_internal * (high - low) + low
 
     def create_diff_operator(self, grid: Grid, order: int, axis_index: int, acc: int = 4) -> GridDiff:
@@ -72,6 +119,16 @@ class Axis:
 
     @property
     def boundary(self) -> slice:
+        """Slice selecting interior points (excluding boundary).
+
+        For periodic axes the full range is returned because there are no
+        boundary points. For non-periodic axes the first and last point
+        are considered boundary.
+
+        Returns
+        -------
+        slice
+        """
         if self.periodic:
             return slice(None, None)
         else:
@@ -126,21 +183,46 @@ class Axis:
 
 
 class EquidistantAxis(Axis):
-    """Represents an axis with grid points spaced equidistantly.
+    """Axis with uniformly spaced grid points.
 
-    Can be specified as non-periodic or periodic. Note that spectral methods on
-    an equidistant axis can only be applied for periodic boundary conditions.
+    Supports both non-periodic and periodic boundary conditions. When periodic,
+    the FFT spectral differentiation method is used; otherwise classical
+    finite differences are employed.
+
+    For a periodic axis the last point is *not* included (it would coincide
+    with the first point after wrapping).
     """
 
     def __init__(self, num_points: int, low: float = 0, high: float = 1,
                  periodic: bool = False, **kwargs) -> None:
+        """Create an equidistant axis.
+
+        Parameters
+        ----------
+        num_points : int
+            Number of grid points.
+        low : float, optional
+            Lower coordinate bound (default ``0``).
+        high : float, optional
+            Upper coordinate bound (default ``1``).
+        periodic : bool, optional
+            Whether to apply periodic boundary conditions (default ``False``).
+        **kwargs
+            Additional keyword arguments forwarded to :class:`Axis`
+            (e.g. ``name``).
+        """
         super().__init__(num_points, low, high, periodic, **kwargs)
 
     def _setup_internal_coords(self, *args) -> NDArray:
+        """Internal coordinates on ``[0, 1]``."""
         return np.linspace(0, 1, len(self), endpoint=not self.periodic)
 
     def create_diff_operator(self, grid: Grid, order: int, axis_index: int, acc: int = 4) -> GridDiff:
-        """Create FFT-based diff for periodic, finite differences for non-periodic."""
+        """Create the differentiation operator for this axis.
+
+        Dispatches to :class:`~numgrids.diff.FFTDiff` for periodic axes and
+        :class:`~numgrids.diff.FiniteDifferenceDiff` otherwise.
+        """
         from numgrids.diff import FiniteDifferenceDiff, FFTDiff
         if self.periodic:
             return FFTDiff(grid, order, axis_index, acc=acc)
@@ -184,9 +266,17 @@ class EquidistantAxis(Axis):
 
 
 class ChebyshevAxis(Axis):
-    """Represents an axis with grid points localized at the Chebyshev points.
+    """Axis with grid points at Chebyshev nodes.
 
-    Allows using spectral methods even for non-periodic functions.
+    The Chebyshev nodes are defined as
+
+    .. math::
+        x_k = \cos\!\left(\frac{k\pi}{N-1}\right), \quad k = 0, \ldots, N-1
+
+    on the canonical interval ``[-1, 1]``, then linearly mapped to
+    ``[low, high]``.  Points cluster near the boundaries, which avoids the
+    Runge phenomenon and enables spectral accuracy for smooth, non-periodic
+    functions.
     """
 
     def __init__(self, num_points: int, low: float = 0, high: float = 1, **kwargs) -> None:
@@ -222,7 +312,20 @@ class ChebyshevAxis(Axis):
 
 
 class LogAxis(Axis):
-    """Represents an axis with grid points spaced logarithmically."""
+    """Axis with logarithmically spaced grid points.
+
+    Internally the coordinate is transformed to a uniform grid on
+    ``[ln(low), ln(high)]``.  Differentiation uses finite differences on the
+    log-scale and applies the chain rule
+
+    .. math::
+        \frac{df}{dx} = \frac{1}{x}\,\frac{df}{d(\ln x)}
+
+    This is useful for problems where fine resolution is needed near the
+    lower boundary (e.g. radial coordinates close to zero).
+
+    ``low`` must be strictly positive.
+    """
 
     def __init__(self, num_points: int, low: float, high: float, **kwargs) -> None:
         """Constructor for LogAxis

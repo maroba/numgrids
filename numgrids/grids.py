@@ -5,7 +5,12 @@ from numpy.typing import NDArray
 
 
 class Grid:
-    """Represents a numerical grid."""
+    """An N-dimensional numerical grid built from one or more axes.
+
+    A ``Grid`` is the tensor product of its constituent :class:`~numgrids.axes.Axis`
+    objects.  It provides meshed coordinate arrays, boundary masks, and
+    convenience methods for refinement and coarsening.
+    """
 
     def __init__(self, *axes) -> None:
         """

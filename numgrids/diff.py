@@ -18,29 +18,65 @@ if __name__ != '__main__':
 
 
 class GridDiff:
-    """Base class for all grid differentiators.
+    """Base class for grid differentiation operators.
 
-    Child classes must implement a callable member "operator".
+    A ``GridDiff`` encapsulates the logic for computing a partial derivative
+    of a given order along one axis of a :class:`~numgrids.grids.Grid`.
+
+    Subclasses must set ``self.operator`` to a callable ``(NDArray) -> NDArray``
+    and may override :meth:`as_matrix` to provide a sparse-matrix
+    representation.
     """
 
     def __init__(self, grid: Grid, order: int, axis_index: int) -> None:
+        """Initialize the differentiation operator.
+
+        Parameters
+        ----------
+        grid : Grid
+            The grid on which differentiation is performed.
+        order : int
+            Derivative order (e.g. 1 for first derivative).
+        axis_index : int
+            Index of the axis along which to differentiate.
+        """
         self.axis = grid.get_axis(axis_index)
         self.order = order
         self.grid = grid
         self.axis_index = axis_index
 
     def __call__(self, f: NDArray) -> NDArray:
+        """Apply the differentiation operator to a meshed function.
+
+        Parameters
+        ----------
+        f : NDArray
+            Array of shape ``grid.shape``.
+
+        Returns
+        -------
+        NDArray
+            The derivative, same shape as *f*.
+        """
         return self.operator(f)
 
     def as_matrix(self) -> spmatrix:
-        """Return the matrix representation of this operator."""
+        """Return a sparse-matrix representation of the operator.
+
+        Returns
+        -------
+        spmatrix
+            Scipy sparse matrix of shape ``(grid.size, grid.size)``.
+        """
         raise NotImplementedError
 
 
 class FiniteDifferenceDiff(GridDiff):
-    """Partial derivative based on finite difference approximations.
+    """Finite-difference partial derivative.
 
-    Used for equidistant, non-periodic grids.
+    Wraps the ``findiff`` library to apply finite-difference stencils on
+    equidistant, non-periodic grids.  The accuracy order (stencil width) is
+    configurable via the *acc* parameter.
     """
 
     def __init__(self, grid: Grid, order: int, axis_index: int, acc: int = 4) -> None:
@@ -56,10 +92,18 @@ class FiniteDifferenceDiff(GridDiff):
 
 
 class FFTDiff(GridDiff):
-    """Partial derivative based on FFT spectral method.
+    """FFT spectral partial derivative for periodic grids.
 
-    Uses a true spectral differentiation matrix constructed from the DFT.
-    Used for equidistant, periodic grids.
+    Computes derivatives via the discrete Fourier transform:
+
+    .. math::
+        \widehat{f^{(n)}}(k) = (i k)^n \, \hat{f}(k)
+
+    A sparse spectral differentiation matrix is also built so that
+    :meth:`as_matrix` returns the exact spectral operator.
+
+    Only valid for :class:`~numgrids.axes.EquidistantAxis` with
+    ``periodic=True``.
     """
 
     def __init__(self, grid: Grid, order: int, axis_index: int, acc: int = 6) -> None:
@@ -128,9 +172,15 @@ class FFTDiff(GridDiff):
 
 
 class ChebyshevDiff(GridDiff):
-    """Partial derivative based on Chebyshev spectral method.
+    """Chebyshev spectral partial derivative.
 
-    Used for grids with non-equidistant Chebyshev axes.
+    Constructs the Chebyshev differentiation matrix on the canonical
+    interval ``[-1, 1]`` and rescales it to the user domain.  Higher-order
+    derivatives are obtained by repeated multiplication of the first-order
+    matrix.  For multi-dimensional grids the 1-D matrix is embedded via
+    Kronecker products with identity matrices on the remaining axes.
+
+    Reference: Trefethen, *Spectral Methods in MATLAB*, SIAM, 2000.
     """
 
     def __init__(self, grid: Grid, order: int, axis_index: int) -> None:
@@ -190,9 +240,13 @@ class ChebyshevDiff(GridDiff):
 
 
 class LogDiff(GridDiff):
-    """Partial derivative for a LogAxis.
+    """Partial derivative on a logarithmic axis.
 
-    Based on finite differences on the (equidistant) log-scale of coordinates.
+    Uses finite differences on the equidistant log-scale coordinates and
+    applies the chain rule:
+
+    .. math::
+        \frac{df}{dx} = \frac{1}{x}\,\frac{df}{d(\ln x)}
     """
 
     def __init__(self, grid: Grid, order: int, axis_index: int, acc: int = 6) -> None:

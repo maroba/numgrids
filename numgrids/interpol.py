@@ -8,6 +8,12 @@ from numgrids.grids import Grid
 
 
 class Interpolator:
+    """Interpolation of meshed function data on a grid.
+
+    Wraps :class:`scipy.interpolate.RegularGridInterpolator` (multi-D) or
+    :func:`scipy.interpolate.interp1d` (1-D) to provide a callable that
+    evaluates the interpolant at arbitrary locations.
+    """
 
     def __init__(self, grid: Grid, f: NDArray, method: str = "cubic") -> None:
         """

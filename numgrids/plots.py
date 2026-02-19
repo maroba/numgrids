@@ -15,15 +15,36 @@ if TYPE_CHECKING:
 
 
 class Plotter:
-    """Simple plotting utility for visualizing meshed functions on a grid."""
+    """Plotting utility for visualizing meshed functions on a grid.
+
+    Wraps matplotlib to provide quick line plots of interpolated
+    function values along user-specified coordinate slices.
+    """
 
     def __init__(self, grid: Grid) -> None:
+        """Create a plotter for the given grid.
+
+        Parameters
+        ----------
+        grid : Grid
+            The grid on which the data lives.
+        """
         self.grid = grid
         self.fig: plt.Figure | None = None
         self.ax: plt.Axes | None = None
 
     def plot(self, f: NDArray, *coords) -> None:
-        """Plot a meshed function along specified coordinates."""
+        """Plot interpolated function values along a coordinate path.
+
+        Parameters
+        ----------
+        f : NDArray
+            Meshed function values on the grid.
+        *coords
+            Coordinate arrays or scalar values defining the path to plot.
+            At least one coordinate must be an array; scalar coordinates
+            are broadcast to match.
+        """
 
         num_points = None
         for c in coords:
