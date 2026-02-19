@@ -262,3 +262,14 @@ class LogDiff(GridDiff):
             return self._fd(f) / self.grid.meshed_coords[axis_index]
 
         self.operator = operator
+
+    def as_matrix(self) -> spmatrix:
+        """Return sparse-matrix representation of the log-scale derivative.
+
+        Constructs the matrix as ``diag(1/x) @ D_log``, where ``D_log`` is the
+        finite-difference matrix on the equidistant log-scale coordinates and
+        ``diag(1/x)`` applies the chain-rule factor.
+        """
+        D_log = self._fd.matrix(self.grid.shape)
+        inv_x = 1.0 / self.grid.meshed_coords[self.axis_index].ravel()
+        return scipy.sparse.diags(inv_x) @ D_log

@@ -537,6 +537,77 @@ class TestFFTDiffMatrix(unittest.TestCase):
 
         npt.assert_array_almost_equal(result, expected)
 
+
+class TestLogDiffMatrix(unittest.TestCase):
+    """Tests for the sparse-matrix representation of LogDiff."""
+
+    def test_matrix_matches_operator_1d(self):
+        """Matrix-vector product must equal operator output."""
+        axis = LogAxis(100, 1e-3, 2 * np.pi)
+        grid = Grid(axis)
+        x = grid.coords
+        f = np.exp(np.sin(x))
+
+        d = LogDiff(grid, 1, 0)
+        expected = d(f)
+        matrix_result = (d.as_matrix() @ f).reshape(grid.shape)
+
+        npt.assert_array_almost_equal(matrix_result, expected)
+
+    def test_matrix_matches_operator_1d_order2(self):
+        """Matrix must match operator for second-order derivatives."""
+        axis = LogAxis(100, 0.1, 10)
+        grid = Grid(axis)
+        x = grid.coords
+        f = x ** 3
+
+        d = LogDiff(grid, 2, 0)
+        expected = d(f)
+        matrix_result = (d.as_matrix() @ f).reshape(grid.shape)
+
+        npt.assert_array_almost_equal(matrix_result, expected)
+
+    def test_matrix_matches_operator_2d(self):
+        """Matrix must match operator for multi-dimensional grids."""
+        r_axis = LogAxis(50, 1e-3, 100)
+        phi_axis = EquidistantAxis(40, 0, 2 * np.pi, periodic=True)
+        grid = Grid(r_axis, phi_axis)
+        R, Phi = grid.meshed_coords
+        f = np.cos(Phi) / R
+
+        d = LogDiff(grid, 1, 0)
+        expected = d(f)
+        matrix_result = (d.as_matrix() @ f.ravel()).reshape(grid.shape)
+
+        npt.assert_array_almost_equal(matrix_result, expected)
+
+    def test_matrix_shape_1d(self):
+        n = 50
+        grid = Grid(LogAxis(n, 0.1, 10))
+        D = LogDiff(grid, 1, 0).as_matrix()
+        self.assertEqual(D.shape, (n, n))
+
+    def test_matrix_shape_2d(self):
+        n_r, n_phi = 30, 40
+        grid = Grid(LogAxis(n_r, 0.1, 10), EquidistantAxis(n_phi, 0, 2 * np.pi, periodic=True))
+        D = LogDiff(grid, 1, 0).as_matrix()
+        total = n_r * n_phi
+        self.assertEqual(D.shape, (total, total))
+
+    def test_matrix_accuracy_1d(self):
+        """Matrix derivative of x^3 should give 3x^2."""
+        axis = LogAxis(200, 0.1, 10)
+        grid = Grid(axis)
+        x = grid.coords
+        f = x ** 3
+        expected = 3 * x ** 2
+
+        D = LogDiff(grid, 1, 0).as_matrix()
+        result = (D @ f).reshape(grid.shape)
+
+        # Check interior points (boundary stencils are less accurate)
+        npt.assert_allclose(result[3:-3], expected[3:-3], rtol=1e-3)
+
     def test_matrix_2d_non_square_grid(self):
         """Matrix must work when periodic axis is not the last axis."""
         axis_periodic = EquidistantAxis(32, 0, 2 * np.pi, periodic=True)
