@@ -1,6 +1,7 @@
 __version__ = "0.4.0"
 
 from .grids import Grid, MultiGrid
+from .curvilinear import CurvilinearGrid
 from .api import Diff, AxisType, create_axis, SphericalGrid, CylindricalGrid, PolarGrid, diff, interpolate, integrate
 from .interpol import Interpolator
 from .integration import Integral

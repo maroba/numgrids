@@ -26,6 +26,13 @@ Working with Axes and Grids
 .. autoclass:: numgrids.MultiGrid
     :members:
 
+
+Curvilinear Coordinate Grids
+----------------------------
+
+.. autoclass:: numgrids.CurvilinearGrid
+    :members:
+
 .. autoclass:: numgrids.SphericalGrid
     :members:
 

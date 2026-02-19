@@ -118,13 +118,13 @@ class TestSphericalGrid(unittest.TestCase):
             create_axis(AxisType.CHEBYSHEV, 15, 1.E-3, np.pi - 1.E-3),
             create_axis(AxisType.EQUIDISTANT_PERIODIC, 20, 0, 2 * np.pi),
         )
-        # Laplacian is not initialized until called
-        self.assertIsNone(grid._laplacian_fn)
+        # Diff ops are not initialized until called
+        self.assertIsNone(grid._diff_ops)
         R, Theta, Phi = grid.meshed_coords
         f = R ** 2
         # Calling laplacian triggers lazy init
         result = grid.laplacian(f)
-        self.assertIsNotNone(grid._laplacian_fn)
+        self.assertIsNotNone(grid._diff_ops)
         self.assertEqual(result.shape, f.shape)
 
     def test_no_warnings_away_from_singularity(self):
@@ -249,7 +249,7 @@ class TestSphericalGrid(unittest.TestCase):
         self.assertLess(error, 1.0, f"Theta/phi ordering appears wrong, error={error}")
 
     def test_laplacian_second_call_uses_cache(self):
-        """Second call to laplacian should reuse the cached function."""
+        """Second call to laplacian should reuse the cached diff ops."""
         grid = SphericalGrid(
             create_axis(AxisType.CHEBYSHEV, 10, 0.5, 1),
             create_axis(AxisType.CHEBYSHEV, 10, 0.3, np.pi - 0.3),
@@ -259,10 +259,10 @@ class TestSphericalGrid(unittest.TestCase):
         f = R ** 2
 
         result1 = grid.laplacian(f)
-        fn_ref = grid._laplacian_fn
+        ops_ref = grid._diff_ops
         result2 = grid.laplacian(f)
 
-        self.assertIs(grid._laplacian_fn, fn_ref)
+        self.assertIs(grid._diff_ops, ops_ref)
         npt.assert_array_equal(result1, result2)
 
 
@@ -299,22 +299,22 @@ class TestCylindricalGrid(unittest.TestCase):
                         np.all(np.diff(Z[0, 0, :]) < 0))
 
     def test_lazy_laplacian_init(self):
-        """Laplacian should not be set up until first call."""
+        """Diff ops should not be set up until first call."""
         grid = self._make_grid()
-        self.assertIsNone(grid._laplacian_fn)
+        self.assertIsNone(grid._diff_ops)
         R, Phi, Z = grid.meshed_coords
         grid.laplacian(R ** 2)
-        self.assertIsNotNone(grid._laplacian_fn)
+        self.assertIsNotNone(grid._diff_ops)
 
     def test_laplacian_caching(self):
-        """Second call must reuse the cached Laplacian function."""
+        """Second call must reuse the cached diff ops."""
         grid = self._make_grid()
         R, Phi, Z = grid.meshed_coords
         f = R ** 2
         grid.laplacian(f)
-        fn_ref = grid._laplacian_fn
+        ops_ref = grid._diff_ops
         grid.laplacian(f)
-        self.assertIs(grid._laplacian_fn, fn_ref)
+        self.assertIs(grid._diff_ops, ops_ref)
 
     def test_laplacian_output_shape(self):
         grid = self._make_grid()
@@ -476,22 +476,22 @@ class TestPolarGrid(unittest.TestCase):
         self.assertIsInstance(grid, Grid)
 
     def test_lazy_laplacian_init(self):
-        """Laplacian should not be set up until first call."""
+        """Diff ops should not be set up until first call."""
         grid = self._make_grid()
-        self.assertIsNone(grid._laplacian_fn)
+        self.assertIsNone(grid._diff_ops)
         R, Phi = grid.meshed_coords
         grid.laplacian(R ** 2)
-        self.assertIsNotNone(grid._laplacian_fn)
+        self.assertIsNotNone(grid._diff_ops)
 
     def test_laplacian_caching(self):
-        """Second call must reuse the cached Laplacian function."""
+        """Second call must reuse the cached diff ops."""
         grid = self._make_grid()
         R, Phi = grid.meshed_coords
         f = R ** 2
         grid.laplacian(f)
-        fn_ref = grid._laplacian_fn
+        ops_ref = grid._diff_ops
         grid.laplacian(f)
-        self.assertIs(grid._laplacian_fn, fn_ref)
+        self.assertIs(grid._diff_ops, ops_ref)
 
     def test_laplacian_output_shape(self):
         grid = self._make_grid()
