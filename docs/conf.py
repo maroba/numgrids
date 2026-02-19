@@ -30,15 +30,18 @@ with open(os.path.join('..', 'numgrids', '__init__.py'), 'r') as fh:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
-    'sphinx.ext.autodoc', 'sphinx.ext.imgmath', 'sphinx.ext.intersphinx',
+    'sphinx.ext.autodoc', 'sphinx.ext.intersphinx',
     'IPython.sphinxext.ipython_console_highlighting', 'sphinx.ext.napoleon',
-    'IPython.sphinxext.ipython_directive', 'myst_parser', 'sphinx.ext.mathjax'
+    'IPython.sphinxext.ipython_directive', 'myst_parser', 'sphinx.ext.mathjax',
+    'nbsphinx',
 ]
 
 autoclass_content = 'both'
 
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', 'pypi_description.md']
+
+nbsphinx_execute = 'never'
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output

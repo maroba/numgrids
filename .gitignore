@@ -132,3 +132,6 @@ _version_save.py
 .DS_Store
 wip
 .vscode/
+
+# Copied example notebooks in docs
+docs/examples/

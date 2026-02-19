@@ -17,3 +17,13 @@
    getting_started.md
    api
 
+.. toctree::
+   :maxdepth: 1
+   :caption: Examples:
+
+   examples/how-to-define-grids
+   examples/partial-derivatives
+   examples/polar-cooordinates-on-unit-disk
+   examples/spherical-grid
+   examples/quantum-harmonic-oscillator
+

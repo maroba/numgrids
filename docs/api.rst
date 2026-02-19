@@ -6,7 +6,7 @@ Working with Axes and Grids
 ---------------------------
 
 .. automodule:: numgrids
-    :members: Axis
+    :members: create_axis
 
 .. autoclass:: numgrids.AxisType
     :members:
