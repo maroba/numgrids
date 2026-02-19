@@ -20,6 +20,9 @@ Working with Axes and Grids
 .. autoclass:: numgrids.CylindricalGrid
     :members:
 
+.. autoclass:: numgrids.PolarGrid
+    :members:
+
 
 Differentiation, Integration and Interpolation
 ----------------------------------------------

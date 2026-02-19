@@ -250,6 +250,82 @@ class CylindricalGrid(Grid):
         return self._laplacian_fn(f)
 
 
+class PolarGrid(Grid):
+    r"""A 2D grid in polar coordinates (r, phi).
+
+    Provides a built-in Laplacian operator in polar coordinates:
+
+    .. math::
+        \nabla^2 f = \frac{\partial^2 f}{\partial r^2}
+        + \frac{1}{r}\frac{\partial f}{\partial r}
+        + \frac{1}{r^2}\frac{\partial^2 f}{\partial \varphi^2}
+
+    The coordinate singularity at *r = 0* is handled gracefully:
+    divisions by zero are suppressed and any resulting non-finite values
+    are replaced by zero.
+
+    Examples
+    --------
+    >>> from numgrids import *
+    >>> import numpy as np
+    >>> grid = PolarGrid(
+    ...     create_axis(AxisType.CHEBYSHEV, 30, 0.1, 1),
+    ...     create_axis(AxisType.EQUIDISTANT_PERIODIC, 40, 0, 2 * np.pi),
+    ... )
+    >>> R, Phi = grid.meshed_coords
+    >>> f = R ** 2 * np.cos(Phi)
+    >>> lap_f = grid.laplacian(f)
+    """
+
+    def __init__(self, raxis: Axis, phi_axis: Axis) -> None:
+        """Constructor
+
+        Parameters
+        ----------
+        raxis: Axis
+            The radial axis.
+        phi_axis: Axis
+            The azimuthal axis (phi). Should typically be periodic.
+        """
+        super().__init__(raxis, phi_axis)
+        self._laplacian_fn: callable | None = None
+
+    def _setup_laplacian(self) -> None:
+        """Lazily initialize the Laplacian operator."""
+        dr2 = Diff(self, 2, 0)
+        dr = Diff(self, 1, 0)
+        dphi2 = Diff(self, 2, 1)
+
+        R, Phi = self.meshed_coords
+
+        def laplacian(f: NDArray) -> NDArray:
+            with np.errstate(divide='ignore', invalid='ignore'):
+                term_r = dr2(f) + (1 / R) * dr(f)
+                term_phi = (1 / R ** 2) * dphi2(f)
+                result = term_r + term_phi
+            result = np.where(np.isfinite(result), result, 0.0)
+            return result
+
+        self._laplacian_fn = laplacian
+
+    def laplacian(self, f: NDArray) -> NDArray:
+        """Apply the Laplacian in polar coordinates to *f*.
+
+        Parameters
+        ----------
+        f: numpy.ndarray
+            A meshed function of shape ``grid.shape``.
+
+        Returns
+        -------
+        numpy.ndarray
+            The Laplacian of *f*, same shape as the input.
+        """
+        if self._laplacian_fn is None:
+            self._setup_laplacian()
+        return self._laplacian_fn(f)
+
+
 def diff(grid: Grid, f: NDArray, order: int = 1, axis_index: int = 0, acc: int = 4) -> NDArray:
     """Differentiate a meshed function (with operator caching).
 
