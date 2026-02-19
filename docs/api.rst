@@ -54,3 +54,11 @@ Boundary Conditions
 
 .. autofunction:: numgrids.apply_bcs
 
+
+Save / Load
+-----------
+
+.. autofunction:: numgrids.save_grid
+
+.. autofunction:: numgrids.load_grid
+

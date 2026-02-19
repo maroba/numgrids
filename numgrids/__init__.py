@@ -5,6 +5,7 @@ from .api import Diff, AxisType, create_axis, SphericalGrid, CylindricalGrid, Po
 from .interpol import Interpolator
 from .integration import Integral
 from .boundary import BoundaryFace, DirichletBC, NeumannBC, RobinBC, apply_bcs
+from .io import save_grid, load_grid
 
 # Backward compatibility alias
 Axis = create_axis

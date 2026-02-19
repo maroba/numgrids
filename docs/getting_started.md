@@ -156,6 +156,25 @@ u = spsolve(L, rhs).reshape(grid.shape)
 Robin conditions (`a u + b du/dn = g`) are also supported via `RobinBC`.
 See the API reference for the full details.
 
+## Save / Load
+
+Grids (and any number of meshed data arrays) can be persisted to NumPy
+`.npz` files and loaded back:
+
+```python
+from numgrids import save_grid, load_grid
+
+save_grid("simulation.npz", grid, temperature=T, pressure=P)
+
+grid2, data = load_grid("simulation.npz")
+T = data["temperature"]
+P = data["pressure"]
+```
+
+The file stores a compact JSON description of the grid definition (axis
+types, parameters) so the grid is fully reconstructed — including its type
+(`SphericalGrid`, `PolarGrid`, etc.) and all axis properties.
+
 ## Refinement and Coarsening
 
 The `MultiGrid` class lets you define a hierarchy of grids at different
