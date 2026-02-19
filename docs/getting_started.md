@@ -165,6 +165,45 @@ grid.curl(R * 0, R)               # scalar z-component = 2
 Singularities at *r = 0* or *θ = 0, π* are handled automatically —
 non-finite values are replaced by zero.
 
+### Custom Curvilinear Coordinates
+
+All three built-in coordinate grids above are thin wrappers around the
+general-purpose `CurvilinearGrid` class. You can use it directly to define
+**any** orthogonal curvilinear coordinate system — just supply the scale
+factors *h_i* as callables:
+
+```python
+from numgrids import CurvilinearGrid
+
+# Example: oblate spheroidal-like coordinates with custom scale factors
+ax_u = create_axis(AxisType.CHEBYSHEV, 25, 0.1, 3)
+ax_v = create_axis(AxisType.CHEBYSHEV, 25, 0.1, np.pi - 0.1)
+ax_phi = create_axis(AxisType.EQUIDISTANT_PERIODIC, 30, 0, 2*np.pi)
+
+grid = CurvilinearGrid(
+    ax_u, ax_v, ax_phi,
+    scale_factors=(
+        lambda c: np.ones_like(c[0]),          # h_u
+        lambda c: c[0],                         # h_v = u
+        lambda c: c[0] * np.sin(c[1]),          # h_phi = u sin(v)
+    ),
+)
+
+U, V, Phi = grid.meshed_coords
+f = U ** 2
+
+# All operators are auto-generated from scale factors:
+grid.laplacian(f)
+grid.gradient(f)
+grid.divergence(U, np.zeros_like(U), np.zeros_like(U))
+grid.curl(np.zeros_like(U), np.zeros_like(U), U)
+```
+
+Each scale-factor callable receives the tuple of meshed coordinate arrays
+and returns an array of shape `grid.shape`. The class automatically derives
+gradient, divergence, Laplacian, and curl (3D) or scalar curl (2D) from the
+standard orthogonal curvilinear identities.
+
 ## Boundary Conditions
 
 *numgrids* provides classes for applying Dirichlet, Neumann, and Robin

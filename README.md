@@ -16,6 +16,7 @@ of bookkeeping grid indices and scale factors.
 - Quickly define numerical grids for any rectangular or curvilinear coordinate system
 - Multiple axis types: **equidistant**, **Chebyshev**, **logarithmic**, and **periodic**
 - Built-in **spherical**, **cylindrical**, and **polar** coordinate grids
+- **Custom curvilinear coordinates** — supply scale factors and get gradient, divergence, curl, and Laplacian automatically
 - **Vector calculus operators**: gradient, divergence, curl, and Laplacian on curvilinear grids
 - High-precision **spectral methods** (FFT + Chebyshev) selected automatically where possible
 - Differentiation, integration, and interpolation
@@ -210,6 +211,35 @@ grid.curl(R*0, R)         # scalar z-component = 2
 
 All operators handle the coordinate singularities at *r = 0* and *θ = 0, π* gracefully —
 non-finite values are automatically replaced by zero.
+
+### Custom curvilinear coordinates
+
+All three coordinate grids above inherit from `CurvilinearGrid`, which you
+can use directly to define **any** orthogonal curvilinear coordinate system.
+Just supply the metric scale factors *h_i* as callables:
+
+```python
+from numgrids import CurvilinearGrid
+
+grid = CurvilinearGrid(
+    axis_q1, axis_q2, axis_q3,
+    scale_factors=(
+        lambda c: np.ones_like(c[0]),          # h_1(q)
+        lambda c: c[0],                         # h_2(q) = q_1
+        lambda c: c[0] * np.sin(c[1]),          # h_3(q) = q_1 sin(q_2)
+    ),
+)
+
+grid.laplacian(f)
+grid.gradient(f)
+grid.divergence(v1, v2, v3)
+grid.curl(v1, v2, v3)
+```
+
+Each callable receives the tuple of meshed coordinate arrays and returns an
+array of shape `grid.shape`. The class automatically derives all vector
+calculus operators from the standard orthogonal curvilinear identities — no
+subclassing required.
 
 ## Usage / Example Notebooks
 

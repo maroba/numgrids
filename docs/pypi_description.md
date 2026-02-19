@@ -12,6 +12,7 @@ of bookkeeping grid indices and scale factors.
 - Quickly define numerical grids for any rectangular or curvilinear coordinate system
 - Multiple axis types: **equidistant**, **Chebyshev**, **logarithmic**, and **periodic**
 - Built-in **spherical**, **cylindrical**, and **polar** coordinate grids
+- **Custom curvilinear coordinates** — supply scale factors and get gradient, divergence, curl, and Laplacian automatically
 - **Vector calculus operators**: gradient, divergence, curl, and Laplacian on curvilinear grids
 - High-precision **spectral methods** (FFT + Chebyshev) selected automatically where possible
 - Differentiation, integration, and interpolation
