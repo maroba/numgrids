@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "numgrids"
-version = "0.4.0"
+version = "0.5.0"
 description = "Working with numerical grids made easy."
 readme = "docs/pypi_description.md"
 license = { text = "MIT" }
@@ -12,19 +12,88 @@ requires-python = ">=3.10"
 authors = [
     { name = "Matthias Baer", email = "matthias.r.baer@googlemail.com" },
 ]
+keywords = [
+    "numerical grids", "spectral methods", "finite differences", "chebyshev",
+    "pde", "differential equations", "curvilinear coordinates", "scientific computing",
+]
 classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Education",
+    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Typing :: Typed",
 ]
 dependencies = [
     "numpy>=1.22",
     "scipy>=1.10.1",
-    "matplotlib>=3.5",
     "findiff>=0.10",
+]
+
+[project.optional-dependencies]
+plot = ["matplotlib>=3.5"]
+xarray = ["xarray>=2023.1"]
+all = ["numgrids[plot,xarray]"]
+test = [
+    "numgrids[all]",
+    "pytest>=7",
+    "pytest-cov",
+    "netCDF4",
+]
+docs = [
+    "numgrids[all]",
+    "sphinx",
+    "furo",
+    "sphinx-design",
+    "myst-parser",
+    "nbsphinx",
+    "ipython",
+    "ipykernel",
+]
+dev = [
+    "numgrids[test,docs]",
+    "ruff",
 ]
 
 [project.urls]
 Homepage = "https://github.com/maroba/numgrids"
+Documentation = "https://maroba.github.io/numgrids/"
+Repository = "https://github.com/maroba/numgrids"
+Issues = "https://github.com/maroba/numgrids/issues"
+Changelog = "https://maroba.github.io/numgrids/dev/changelog.html"
 
 [tool.setuptools.packages.find]
 include = ["numgrids*"]
+
+[tool.setuptools.package-data]
+numgrids = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "numgrids"]
+addopts = "--doctest-modules"
+filterwarnings = [
+    "error::DeprecationWarning:numgrids.*",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+extend-exclude = ["docs", "examples"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = [
+    "B905",  # zip() without strict= -- lengths are checked explicitly where it matters
+    "E741",  # I, L, ... are idiomatic names for integrals and operators
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E731", "B018"]

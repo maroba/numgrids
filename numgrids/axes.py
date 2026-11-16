@@ -408,8 +408,9 @@ class ChebyshevAxis(Axis):
         super().__init__(num_points, low, high, periodic=False, **kwargs)
 
     def _setup_internal_coords(self, *args) -> NDArray:
-        n = len(self)
-        return np.cos(np.arange(n) * np.pi / (n - 1))
+        # sin form of cos(k pi / N): exactly symmetric and exact at the endpoints
+        N = len(self) - 1
+        return np.sin(np.pi * (N - 2 * np.arange(N + 1)) / (2 * N))
 
     def _compute_quadrature_weights(self) -> NDArray:
         """Clenshaw--Curtis weights, mapped to ``[low, high]``."""
@@ -433,7 +434,9 @@ class ChebyshevAxis(Axis):
 
     def _setup_external_coords(self, low: float, high: float) -> NDArray:
         coords = (self._coords_internal[::-1] + 1) / 2
-        return coords * (high - low) + low
+        coords = coords * (high - low) + low
+        coords[0], coords[-1] = low, high
+        return coords
 
     def create_diff_operator(self, grid: Grid, order: int, axis_index: int, acc: int = 4) -> GridDiff:
         """Create Chebyshev spectral differentiation operator.

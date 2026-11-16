@@ -239,7 +239,7 @@ def chebyshev_diff_matrix(num_points: int) -> NDArray:
     """
     N = num_points - 1
     k = np.arange(N + 1)
-    x = np.cos(np.pi * k / N)
+    x = np.sin(np.pi * (N - 2 * k) / (2 * N))
     c = np.ones(N + 1)
     c[0] = c[-1] = 2
     c *= (-1.0) ** k
