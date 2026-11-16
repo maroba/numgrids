@@ -462,3 +462,15 @@ def test_plotter_uses_coordinate_axis():
     with pytest.raises(ValueError):
         p.plot(grid.meshed_coords[0], 0.1, 0.2)
     plt.close("all")
+
+
+def test_plot_surface_grid_embedded_in_3d_falls_back_to_coordinates():
+    import matplotlib.pyplot as plt
+    sphere = CurvilinearGrid(
+        chebyshev(8, 0.1, 3.0, name="theta"), periodic(10, name="phi"),
+        scale_factors=(lambda c: np.ones_like(c[0]), lambda c: np.sin(c[0])),
+        cartesian=lambda c: (np.sin(c[0]) * np.cos(c[1]), np.sin(c[0]) * np.sin(c[1]), np.cos(c[0])),
+    )
+    ax = sphere.plot(sphere.meshed_coords[0])
+    assert ax.get_xlabel() == "$theta$"
+    plt.close("all")

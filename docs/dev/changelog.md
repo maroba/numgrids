@@ -55,6 +55,8 @@ All notable changes to **numgrids** are documented on this page.
 - `to_xarray()` / `from_xarray()` for xarray and NetCDF interoperability.
 - `grid.plot(f)` for 1D, 2D (Cartesian space for curvilinear grids) and
   sliced higher-dimensional fields.
+- All example notebooks rewritten for the new API, plus a new
+  "Operators and solvers" notebook.
 
 ### Improvements
 

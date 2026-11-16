@@ -153,6 +153,20 @@ grid.plot(modes[0])
 ```{note}
 Grid points *on* a coordinate singularity (such as $r = 0$) yield empty
 operator rows. `solve` raises an error and `eig` warns about spurious zero
-eigenvalues in that case: start the axis slightly away from the singularity
-and impose a suitable boundary condition there.
+eigenvalues in that case. Start the axis slightly away from the singularity
+instead -- the equation itself is then enforced at the innermost points. For
+eigenvalue problems this works very well: a disk with $r \in [0.01, 1]$
+reproduces the Bessel zeros to about 13 digits (see the
+[drum example](../examples/wave-equation-drum.ipynb)). For *time stepping*
+on such grids, prefer an annulus or a Cartesian grid, because the discrete
+operator then has unphysical eigenvalues that make explicit time integration
+unstable.
+```
+
+A full disk:
+
+```python
+grid = PolarGrid(chebyshev(30, 0.01, 1.0), periodic(40))
+vals, modes = (-grid.laplacian_operator()).eig(k=6, bcs={"r_high": 0})
+np.sqrt(vals)     # 2.4048, 3.8317, 3.8317, 5.1356, 5.1356, 5.5201 (Bessel zeros)
 ```

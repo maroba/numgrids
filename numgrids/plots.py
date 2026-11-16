@@ -100,9 +100,13 @@ def plot_field(
     use_cartesian = cartesian and grid.ndims == 2
     if use_cartesian:
         try:
-            X, Y = grid.cartesian_coords
+            cart = grid.cartesian_coords
         except NotImplementedError:
-            use_cartesian = False
+            cart = ()
+        # e.g. a 2D surface embedded in 3D space cannot be drawn flat
+        use_cartesian = len(cart) == 2
+        if use_cartesian:
+            X, Y = cart
     if not use_cartesian:
         X, Y = grid.meshed_coords[i0][index], grid.meshed_coords[i1][index]
 
