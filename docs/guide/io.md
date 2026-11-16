@@ -85,9 +85,9 @@ print(np.allclose(data2["field"], field))  # True
 `save_grid` and `load_grid` work with all grid types:
 
 - `Grid`
-- `SphericalGrid`
-- `CylindricalGrid`
-- `PolarGrid`
+- `SphericalGrid`, `CylindricalGrid`, `PolarGrid`
+- `EllipticCylindricalGrid`, `ProlateSpheroidalGrid`, `OblateSpheroidalGrid`
+  (including the focal parameter `a`)
 
 All axis types (`EquidistantAxis`, `ChebyshevAxis`, `LogAxis`, including
 periodic equidistant axes) are fully supported. Axis metadata such as
@@ -99,3 +99,44 @@ because the scale-factor callables are not serializable. The built-in
 coordinate grids (`SphericalGrid`, `CylindricalGrid`, `PolarGrid`) work
 because their scale factors are reconstructed from the class type.
 ```
+
+## Methods on the grid
+
+`grid.save(path, **data)` and `Grid.load(path)` are shortcuts for
+`save_grid` and `load_grid`:
+
+```python
+u = grid.evaluate(lambda *coords: coords[0] ** 2)
+grid.save("result.npz", u=u)
+grid, data = Grid.load("result.npz")
+```
+
+## xarray and NetCDF
+
+With the optional [xarray](https://xarray.dev) dependency
+(`pip install numgrids[xarray]`), grids and meshed data can be converted to
+labelled `xarray.Dataset` objects -- convenient for analysis, plotting and
+writing NetCDF files:
+
+```python
+grid = Grid(x=chebyshev(30, 0, 1), y=periodic(40))
+X, Y = grid.meshed_coords
+
+ds = grid.to_xarray(u=X * np.sin(Y), v=X**2)   # or to_xarray(grid, ...)
+ds.to_netcdf("result.nc")
+```
+
+Each axis becomes a dimension coordinate named after the axis (`x0`, `x1`,
+... for unnamed axes). The full grid definition is stored in the
+attributes, so the grid can be reconstructed exactly:
+
+```python
+import xarray as xr
+
+grid, data = Grid.from_xarray(xr.open_dataset("result.nc"))
+u = data["u"]
+```
+
+`from_xarray` also accepts single `DataArray` objects and datasets that were
+not created by numgrids; in that case the axis types are inferred from the
+coordinate values (equidistant, Chebyshev or logarithmic).

@@ -13,12 +13,12 @@ if this_year == 2023:
 else:
     copyright = f'2023 - {this_year}, {author}'
 
-with open(os.path.join('..', 'numgrids', '__init__.py'), 'r') as fh:
-    match = re.match('__version__ *= *([^ ]+)', fh.readline())
+with open(os.path.join('..', 'pyproject.toml'), 'r') as fh:
+    match = re.search(r'^version *= *"([^"]+)"', fh.read(), re.M)
     if match:
         release = match.group(1)
     else:
-        raise ValueError('numgrids.__init__.py must define version string as first line.')
+        raise ValueError('pyproject.toml must define the project version.')
 
 
 # -- General configuration ---------------------------------------------------

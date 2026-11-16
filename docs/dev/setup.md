@@ -36,15 +36,20 @@ pip install -e .
 
 ## Install Development Dependencies
 
-Install the tools needed for testing, building documentation, and running notebooks:
+Install the tools needed for testing, linting, building documentation, and
+running notebooks in one go via the `dev` extra:
 
 ```bash
-pip install pytest sphinx furo sphinx-design myst-parser nbsphinx ipython ipykernel
+pip install -e ".[dev]"
 ```
+
+The narrower extras `test` and `docs` are available as well.
 
 | Package | Purpose |
 |---|---|
-| `pytest` | Test runner |
+| `pytest` / `pytest-cov` | Test runner and coverage |
+| `ruff` | Linter (`ruff check numgrids tests`) |
+| `matplotlib`, `xarray`, `netCDF4` | Optional features exercised by the tests |
 | `sphinx` | Documentation generator |
 | `furo` | Sphinx theme |
 | `sphinx-design` | Cards, tabs, and other design elements for Sphinx |

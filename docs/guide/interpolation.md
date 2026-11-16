@@ -26,13 +26,15 @@ interp = Interpolator(grid, f)
 
 ### Interpolation methods
 
-The `method` parameter accepts three values:
+The `method` parameter accepts these values:
 
-| Method       | Order | Description |
-|-------------|-------|-------------|
-| `"linear"`  | 1     | Piecewise linear interpolation |
-| `"quadratic"` | 2   | Piecewise quadratic interpolation |
-| `"cubic"`   | 3     | Piecewise cubic interpolation (default) |
+| Method        | Order    | Description |
+|---------------|----------|-------------|
+| `"linear"`    | 1        | Piecewise linear interpolation |
+| `"quadratic"` | 2        | Piecewise quadratic interpolation (1D grids only) |
+| `"cubic"`     | 3        | Cubic spline interpolation (default) |
+| `"quintic"`   | 5        | Quintic spline interpolation |
+| `"spectral"`  | spectral | Matches the axis type, see below |
 
 ```python
 interp_linear = Interpolator(grid, f, method="linear")
@@ -42,8 +44,36 @@ interp_cubic  = Interpolator(grid, f, method="cubic")
 ```{tip}
 The default `"cubic"` method is a good choice for most smooth data. Use
 `"linear"` when speed matters more than smoothness or when the data itself
-is not smooth.
+is not smooth. Use `"spectral"` to keep the full accuracy of Chebyshev and
+periodic grids.
 ```
+
+### Spectral interpolation
+
+With `method="spectral"` each axis is interpolated in the way that matches
+its discretization:
+
+* **Chebyshev axes** -- barycentric polynomial interpolation through all
+  nodes (spectrally accurate, numerically stable),
+* **periodic axes** -- trigonometric (Fourier) interpolation,
+* **equidistant and logarithmic axes** -- local polynomial interpolation of
+  degree 5 (in $\ln x$ for logarithmic axes).
+
+```python
+grid2d = Grid(chebyshev(20, 0, 1), periodic(32))
+X, Y = grid2d.meshed_coords
+spectral = Interpolator(grid2d, np.exp(X) * np.cos(Y), method="spectral")
+spectral((0.37, 1.2))      # error ~ 1e-15
+```
+
+Spectral interpolation onto another grid is done axis by axis and is
+therefore fast.
+
+### Periodic axes
+
+Periodic axes wrap around for all methods: points between the last grid
+point and the end of the period, as well as points outside the period, are
+handled correctly.
 
 ## Interpolating at points
 
@@ -56,7 +86,8 @@ val = interp((0.3,))
 print(val)  # sin(0.3 * pi) ~ 0.809
 ```
 
-For 1D grids you can also pass a plain number:
+For 1D grids you can also pass a plain number (and a 1D array for many
+points at once):
 
 ```python
 val = interp(0.3)

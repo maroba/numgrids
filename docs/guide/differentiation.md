@@ -70,7 +70,7 @@ method accordingly:
 | `EquidistantAxis` (non-periodic) | Finite differences | Accuracy controlled by `acc` |
 | `EquidistantAxis` (periodic) | FFT spectral | Spectral accuracy for smooth periodic functions |
 | `ChebyshevAxis` | Chebyshev spectral matrix | Spectral accuracy; `acc` is ignored |
-| `LogAxis` | Finite differences on log-scale | Chain rule $df/dx = (1/x)\,df/d(\ln x)$ |
+| `LogAxis` | Finite differences on log-scale | Exact identity $x^n d^n/dx^n = \theta(\theta-1)\cdots(\theta-n+1)$ with $\theta = d/d(\ln x)$ |
 
 ```{note}
 The `acc` parameter only affects finite-difference-based strategies
@@ -148,6 +148,15 @@ This sparse Laplacian matrix can be fed into `scipy.sparse.linalg.spsolve`
 to solve elliptic PDEs. See the [Boundary conditions](boundary-conditions.md)
 guide for a complete worked example.
 
+`Diff` objects can also be combined *directly*; the result is an
+[Operator](operators.md) that knows its grid and can solve boundary value
+and eigenvalue problems:
+
+```python
+L = Diff(grid, 2, 0) + Diff(grid, 2, 1)          # Operator
+u = L.solve(np.ones(grid.shape), bcs=0)          # u = 0 on the boundary
+```
+
 ## The convenience function `diff()`
 
 For quick one-off derivatives, use the module-level `diff()` function. It
@@ -157,6 +166,15 @@ reuse:
 ```python
 df_dx = diff(grid, f, order=1, axis_index=0)
 df_dy = diff(grid, f, order=1, axis_index=1)
+```
+
+The same is available as a grid method, which also accepts axis names:
+
+```python
+grid = Grid(x=chebyshev(30, 0, 1), y=chebyshev(30, 0, 1))
+f = grid.evaluate(lambda x, y: np.sin(x) * y**2)
+df_dx = grid.diff(f, axis="x")
+d2f_dy2 = grid.diff(f, order=2, axis="y")
 ```
 
 The cache key is the tuple `(order, axis_index, acc)`, so calls with the

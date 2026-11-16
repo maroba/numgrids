@@ -1,12 +1,26 @@
 # Testing
 
 numgrids uses [pytest](https://docs.pytest.org/) as its test runner. All tests live in
-the `tests/` directory at the repository root.
+the `tests/` directory at the repository root; in addition, the examples in the
+docstrings are run as doctests.
 
 ## Running the Full Test Suite
 
 ```bash
-python -m pytest tests
+python -m pytest
+```
+
+This runs `tests/` and the doctests in `numgrids/` (configured in
+`pyproject.toml`). With coverage:
+
+```bash
+python -m pytest --cov=numgrids --cov-report=term-missing
+```
+
+Lint the code with:
+
+```bash
+ruff check numgrids tests
 ```
 
 To see verbose output with individual test names:
@@ -54,24 +68,20 @@ When adding or modifying functionality, always include corresponding tests.
 
 ### Test structure
 
-Tests are written using Python's `unittest.TestCase` base class:
+Tests can be plain pytest functions (preferred for new tests) or
+`unittest.TestCase` classes, which the older test modules use:
 
 ```python
-import unittest
 import numpy as np
-from numpy.testing import assert_array_almost_equal
+from numpy.testing import assert_allclose
 
-from numgrids import Grid
+from numgrids import Grid, chebyshev
 
 
-class TestMyFeature(unittest.TestCase):
-
-    def test_something(self):
-        grid = Grid((-1, 1, 50))
-        # ... set up the problem ...
-        result = compute_something(grid)
-        expected = analytical_solution(grid)
-        assert_array_almost_equal(result, expected, decimal=6)
+def test_second_derivative_of_polynomial():
+    grid = Grid(chebyshev(20, -1, 1))
+    x = grid.coords
+    assert_allclose(grid.diff(x**3, order=2), 6 * x, atol=1e-10)
 ```
 
 ### Numerical assertions

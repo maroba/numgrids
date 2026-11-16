@@ -42,6 +42,20 @@ indices and scale factors.
       Dirichlet, Neumann, and Robin BCs at the array level or
       inside sparse linear systems.
 
+   .. grid-item-card:: Operators & Solvers
+      :link: guide/operators
+      :link-type: doc
+
+      Combine operators like formulas, then ``solve()`` boundary
+      value problems or ``eig()`` eigenvalue problems.
+
+   .. grid-item-card:: Time Evolution
+      :link: guide/time-evolution
+      :link-type: doc
+
+      Method-of-lines time stepping for heat, wave and
+      Schrödinger equations with a single call.
+
 
 .. toctree::
    :maxdepth: 2
@@ -63,7 +77,11 @@ indices and scale factors.
    guide/interpolation
    guide/curvilinear
    guide/boundary-conditions
+   guide/operators
+   guide/time-evolution
+   guide/plotting
    guide/io
+   guide/convergence
    guide/multigrid
    guide/amr
 
@@ -90,6 +108,7 @@ indices and scale factors.
    api/operators
    api/curvilinear
    api/boundary
+   api/evolution
    api/amr
    api/io
 

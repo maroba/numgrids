@@ -1,9 +1,9 @@
 # Grids
 
 A `Grid` is the tensor product of one or more [axes](axes.md). It provides
-meshed coordinate arrays, boundary information, and convenience methods for
-refinement and coarsening. All numgrids operators (differentiation,
-integration, interpolation) take a `Grid` as their first argument.
+meshed coordinate arrays, boundary information, and methods for
+differentiation, integration, interpolation, vector calculus, refinement,
+plotting and I/O.
 
 ```python
 from numgrids import *
@@ -20,6 +20,16 @@ ax_x = create_axis(AxisType.CHEBYSHEV, 40, 0.0, 1.0)
 ax_y = create_axis(AxisType.EQUIDISTANT, 50, -1.0, 1.0)
 grid = Grid(ax_x, ax_y)
 ```
+
+Axes passed as **keyword arguments** are named after the keyword:
+
+```python
+grid = Grid(x=chebyshev(40, 0.0, 1.0), y=equidistant(50, -1.0, 1.0))
+grid.axis_index("y")      # 1
+grid.get_axis("x")        # the Chebyshev axis
+```
+
+Axis names can be used wherever an axis index is expected.
 
 ### 1D grid
 
@@ -124,6 +134,10 @@ print(grid.boundary)
 # [ True False False False  True]
 ```
 
+### `interior`
+
+The complement of `boundary`: `True` for all points not on the boundary.
+
 ### `faces`
 
 A dictionary of `BoundaryFace` objects, one per non-periodic boundary face.
@@ -207,6 +221,34 @@ print(refined.shape)  # (10, 30)
 A factor less than 1 coarsens. The result is rounded to the nearest integer
 with a minimum of 2 points.
 
+## Working with functions on the grid
+
+Grids come with methods for the most common operations. All of them accept
+axis names or indices:
+
+```python
+grid = Grid(x=chebyshev(30, 0, 1), y=periodic(40))
+f = grid.evaluate(lambda x, y: x**2 * np.sin(y))   # sample a function
+
+grid.diff(f, axis="x")             # partial derivative d/dx
+grid.diff(f, order=2, axis="y")    # second derivative d^2/dy^2
+grid.integrate(f)                  # integral over the whole domain
+grid.interpolate(f, (0.5, 1.0))    # value at an arbitrary point
+
+grid.gradient(f)                   # (df/dx, df/dy)
+grid.laplacian(f)                  # d^2f/dx^2 + d^2f/dy^2
+grid.divergence(*grid.gradient(f))
+grid.curl(f, f)                    # scalar curl in 2D, vector curl in 3D
+```
+
+The same methods are available on [curvilinear grids](curvilinear.md),
+where they take the metric into account. For solving PDEs, the operators
+are also available as sparse [Operator](operators.md) objects
+(`grid.diff_operator(...)`, `grid.laplacian_operator()`).
+
+All methods check that the arrays have the grid's shape and raise a clear
+`ValueError` otherwise.
+
 ## Grid caching
 
 The `Grid` object maintains an internal cache dictionary. Operators created
@@ -224,6 +266,9 @@ dg = diff(grid, g, order=1, axis_index=0)
 The cache is per-grid-instance: creating a new `Grid` (e.g. via `refine()`)
 starts with a fresh cache. You do not need to manage the cache manually.
 
+`refine()`, `coarsen()` and `refine_axis()` preserve the grid type, so
+refining a `SphericalGrid` gives a `SphericalGrid` again.
+
 ## Visualization
 
 For 2D or higher grids, call `plot()` to see the grid point distribution:
@@ -237,3 +282,11 @@ grid.plot()
 ```
 
 Named axes produce labeled plot axes automatically.
+
+To plot a *function* on the grid, pass it to `plot()`; see
+[Plotting](plotting.md):
+
+```python
+X, Y = grid.meshed_coords
+grid.plot(np.sin(np.pi * X) * Y)
+```

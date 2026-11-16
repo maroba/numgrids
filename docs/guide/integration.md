@@ -18,9 +18,8 @@ grid = Grid(ax)
 I = Integral(grid)
 ```
 
-The constructor pre-computes the integration weights (inverse differentiation
-matrices), so reusing the same `Integral` object for multiple functions is
-efficient.
+The constructor collects the quadrature weights of all axes, so reusing the
+same `Integral` object for multiple functions is efficient.
 
 ### Calling the integrator
 
@@ -59,53 +58,68 @@ I = Integral(grid)
 print(I(f))  # close to 2/3
 ```
 
-### Periodic axes
+### Quadrature rules
 
-For periodic equidistant axes the integrator uses the trapezoidal rule
-(which is spectrally accurate for smooth periodic functions). For all other
-axis types it uses an anti-differentiation approach based on the inverse of
-the differentiation matrix.
+The integral is a tensor product of one-dimensional quadrature rules chosen
+per axis type (see `Axis.quadrature_weights`):
+
+| Axis type           | Rule                         | Accuracy                 |
+|---------------------|------------------------------|--------------------------|
+| Chebyshev           | Clenshaw--Curtis             | spectral                 |
+| periodic            | trapezoidal                  | spectral (periodic *f*)  |
+| equidistant, log    | inverse differentiation      | same order as `Diff`     |
+
+The weights are computed once per axis and cached, so integration is a
+cheap weighted sum.
 
 ## The convenience function `integrate()`
 
-For quick usage, the module-level `integrate()` function wraps `Integral`
-and caches the operator on the grid:
+For quick usage, the module-level `integrate()` function -- or the
+equivalent method `grid.integrate(f)` -- wraps `Integral` and caches the
+operator on the grid:
 
 ```python
 result = integrate(grid, f)
+result = grid.integrate(f)
 ```
 
 The first call constructs the `Integral` and stores it in `grid.cache`.
 Subsequent calls for the same grid reuse the cached object.
 
-```python
-# Both calls share the same Integral internally
-a = integrate(grid, f)
-b = integrate(grid, g)
-```
-
 ## Integration in curvilinear coordinates
 
-```{note}
-The `Integral` class integrates with respect to the *coordinate*
-differentials $dq_1\,dq_2\,\ldots$ It does **not** automatically include
-the Jacobian of a curvilinear coordinate system.
-
-If you are integrating on a `CurvilinearGrid` (or `SphericalGrid`,
-`CylindricalGrid`, `PolarGrid`), you must multiply your integrand by the
-appropriate volume element. For example, in spherical coordinates the
-volume element is $r^2 \sin\theta\,dr\,d\theta\,d\phi$:
-```
+On curvilinear grids (`CurvilinearGrid`, `SphericalGrid`,
+`CylindricalGrid`, `PolarGrid`, ...) the volume element
+$J = h_1 h_2 \cdots h_n$ is included automatically, i.e. the integral is
+$\int f \, dV$:
 
 ```python
 grid = SphericalGrid(
-    create_axis(AxisType.CHEBYSHEV, 25, 0.5, 2.0),
-    create_axis(AxisType.CHEBYSHEV, 20, 0.01, np.pi - 0.01),
-    create_axis(AxisType.EQUIDISTANT_PERIODIC, 30, 0, 2 * np.pi),
+    chebyshev(25, 0.0, 2.0),          # r
+    chebyshev(20, 0.0, np.pi),        # theta
+    periodic(30),                     # phi
 )
-R, Theta, Phi = grid.meshed_coords
-
-f = np.ones_like(R)                    # integrate 1 to get the volume
-volume_element = R**2 * np.sin(Theta)  # Jacobian for spherical coords
-result = integrate(grid, f * volume_element)
+volume = grid.integrate(np.ones(grid.shape))   # 4/3 pi 2^3 = 33.51...
 ```
+
+The volume element is available as `grid.volume_element`. To integrate
+with respect to the coordinate differentials $dq_1\,dq_2\cdots$ instead,
+use `Integral(grid, volume_element=False)`.
+
+```{versionchanged} 0.5.0
+Earlier versions did not include the volume element; integrands had to be
+multiplied by the Jacobian manually. Remove such factors when upgrading.
+```
+
+## Surface integrals
+
+Each boundary face can integrate over itself, including the surface
+element on curvilinear grids:
+
+```python
+sphere = grid.faces["r_high"]
+sphere.integrate(np.ones(grid.shape))     # 4 pi 2^2
+```
+
+See [Boundary conditions](boundary-conditions.md#working-with-boundary-faces)
+for more face operations.

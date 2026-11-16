@@ -12,16 +12,32 @@ import numpy as np
 
 ## Creating axes
 
-Use the `create_axis` factory function:
+The quickest way is one of the four short-hand factories, one per axis type:
+
+```python
+x = chebyshev(30, 0.0, 1.0)          # Chebyshev nodes on [0, 1]
+y = equidistant(50, 0.0, 1.0)        # uniform spacing on [0, 1]
+phi = periodic(64)                   # uniform, periodic on [0, 2*pi)
+r = logarithmic(40, 1e-3, 10.0)      # log-spaced on [1e-3, 10]
+```
+
+All of them take `(num_points, low, high, name=None)`; sensible defaults
+exist for the bounds (`[-1, 1]` for Chebyshev, `[0, 1]` for equidistant,
+`[0, 2*pi)` for periodic).
+
+Alternatively, use the generic `create_axis` factory:
 
 ```python
 ax = create_axis(AxisType.EQUIDISTANT, 50, 0.0, 1.0)
+ax = create_axis("chebyshev", 50, 0.0, 1.0)   # strings work, too
 ```
 
 The arguments are:
 
-1. **axis type** -- one of the `AxisType` enum members
-2. **num_points** -- number of grid points
+1. **axis type** -- an `AxisType` member or its string value
+   (`"equidistant"`, `"equidistant_periodic"` / `"periodic"`, `"chebyshev"`,
+   `"log"`)
+2. **num_points** -- number of grid points (at least 2)
 3. **low** -- lower coordinate bound
 4. **high** -- upper coordinate bound
 
@@ -165,12 +181,29 @@ adaptive mesh refinement module.
 
 ## Named axes
 
-Pass the `name` keyword to give an axis a label. Named axes produce nicer
-plot labels:
+Pass the `name` keyword to give an axis a label:
 
 ```python
-ax_r = create_axis(AxisType.CHEBYSHEV, 30, 0.1, 5.0, name="r")
+ax_r = chebyshev(30, 0.1, 5.0, name="r")
 print(ax_r.name)  # "r"
+```
+
+Names can be used instead of axis indices everywhere on a grid
+(`grid.diff(f, axis="r")`, `grid.faces["r_high"]`, ...), and they produce
+nicer plot labels. `ax.renamed("rho")` returns a renamed copy. The easiest
+way to name axes is to pass them as keyword arguments to
+[`Grid`](grids.md).
+
+## Quadrature weights
+
+Every axis knows a quadrature rule matching its type, available as
+`ax.quadrature_weights` (Clenshaw--Curtis for Chebyshev axes, the
+trapezoidal rule for periodic axes, and a rule consistent with the
+finite-difference stencils otherwise):
+
+```python
+x = chebyshev(20, 0, np.pi)
+print(x.quadrature_weights @ np.sin(x.coords))   # 2.0
 ```
 
 ## Visualization

@@ -28,13 +28,47 @@ print(grid.faces.keys())
 
 The key format is `"{axis_index}_{side}"`, where `side` is either `"low"`
 (first point along that axis) or `"high"` (last point). Periodic axes have
-no boundary faces and are automatically excluded.
+no boundary faces and are automatically excluded. For named axes, the key
+`"{name}_{side}"` works as well:
+
+```python
+grid = Grid(x=chebyshev(30, 0.0, 1.0), y=chebyshev(30, 0.0, 1.0))
+grid.faces["x_low"] is grid.faces["0_low"]   # True
+```
 
 Each `BoundaryFace` exposes:
 
 - `mask` -- a boolean array of shape `grid.shape`, `True` on the face
 - `flat_indices` -- 1D indices of the face points in the ravelled grid
 - `normal_sign` -- `-1` for `"low"`, `+1` for `"high"` (outward normal direction)
+- `key`, `shape` and `coords` -- the face key, the shape of face arrays,
+  and the meshed coordinates restricted to the face
+
+## Compact boundary condition specifications
+
+Most of the time you do not need to construct `DirichletBC` objects by
+hand. [`Operator.solve`](operators.md), `Operator.eig`, `evolve` and
+`apply_bcs(..., grid=grid)` accept compact specifications:
+
+```python
+grid = Grid(x=chebyshev(30, 0.0, 1.0), y=chebyshev(30, 0.0, 1.0))
+L = grid.laplacian_operator()
+rhs = np.ones(grid.shape)
+
+u = L.solve(rhs, bcs=0)                       # u = 0 on all faces
+u = L.solve(rhs, bcs=lambda c: c[0] * c[1])   # u = x*y on all faces
+u = L.solve(rhs, bcs={
+    "all": 0,                                 # default for all faces ...
+    "x_high": 1.0,                            # ... overridden: u = 1
+    "y_low": Neumann(0.0),                    # du/dn = 0
+    "y_high": Robin(a=1.0, b=0.5, value=0.0), # u + 0.5 du/dn = 0
+})
+```
+
+Plain values (numbers, arrays, callables) mean Dirichlet conditions;
+`Dirichlet`, `Neumann` and `Robin` are *unbound* specs that are attached to
+the face given by the dictionary key. `resolve_bcs(grid, spec)` turns any
+such specification into a list of bound conditions.
 
 ## DirichletBC
 
@@ -146,6 +180,29 @@ bc = DirichletBC(
 Here `coords[1]` is the y-coordinate array along the face. This is useful
 for spatially varying boundary data.
 
+## Working with boundary faces
+
+Faces also provide operations for post-processing, e.g. fluxes and
+surface integrals:
+
+```python
+X, Y = grid.meshed_coords
+f = X**2 * Y
+
+face = grid.faces["x_high"]
+face.restrict(f)              # values on the face, shape face.shape
+face.normal_derivative(f)     # outward normal derivative on the face
+face.integrate(f)             # surface integral
+face.flux(*grid.gradient(f))  # outward flux of a vector field
+
+# Gauss's theorem: total outward flux = volume integral of the divergence
+sum(face.flux(*grid.gradient(f)) for face in grid.faces.values())
+```
+
+On curvilinear grids, `normal_derivative` returns the physical derivative
+$\pm(1/h_i)\,\partial f/\partial q_i$ and `integrate` includes the
+surface element (e.g. $r^2\sin\theta$ on a sphere).
+
 ## Worked example: solving the Poisson equation
 
 Solve $\nabla^2 u = -2\pi^2 \sin(\pi x)\sin(\pi y)$ on $[0,1]^2$ with
@@ -186,6 +243,14 @@ print(f"Max error: {np.max(np.abs(u - u_exact)):.2e}")
 
 The Chebyshev spectral method should give an error on the order of $10^{-10}$
 or smaller with 30 points per side.
+
+With the [Operator](operators.md) API, the same problem is three lines:
+
+```python
+grid = Grid(x=chebyshev(30, 0.0, 1.0), y=chebyshev(30, 0.0, 1.0))
+rhs = lambda x, y: -2 * np.pi**2 * np.sin(np.pi * x) * np.sin(np.pi * y)
+u = grid.laplacian_operator().solve(rhs, bcs=0)
+```
 
 ```{tip}
 For mixed boundary conditions, simply put different BC types in the list.
