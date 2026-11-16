@@ -30,6 +30,7 @@ array([1., 4., 9.])
 from __future__ import annotations
 
 import numbers
+import warnings
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -266,6 +267,14 @@ class Operator:
         True
         """
         L, b = self.with_bcs(rhs, bcs)
+        n_zero = _count_zero_rows(L)
+        if n_zero:
+            raise ValueError(
+                f"The system has {n_zero} empty row(s) not covered by boundary conditions, "
+                "so it is singular. This typically happens when grid points lie on a "
+                "coordinate singularity (e.g. r = 0); start the axis slightly away from it "
+                "or impose a condition there."
+            )
         u = scipy.sparse.linalg.spsolve(L, b)
         return np.asarray(u).reshape(self.grid.shape)
 
@@ -329,6 +338,17 @@ class Operator:
             A = scipy.sparse.csr_matrix(A)
             bc_rows[idx] = True
             dirichlet[idx] = isinstance(bc, DirichletBC)
+
+        n_zero = _count_zero_rows(A)
+        if n_zero:
+            warnings.warn(
+                f"The operator has {n_zero} empty row(s) not covered by boundary conditions "
+                "(e.g. at a coordinate singularity such as r = 0). They produce spurious zero "
+                "eigenvalues; start the axis slightly away from the singularity or impose "
+                "boundary conditions there.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
         keep = ~dirichlet
         A = A[keep][:, keep]
@@ -396,3 +416,10 @@ class Operator:
         if which == "SR":
             return np.argsort(vals.real)
         return np.argsort(-vals.real)
+
+
+def _count_zero_rows(M) -> int:
+    """Number of rows of a sparse matrix without nonzero entries."""
+    M = scipy.sparse.csr_matrix(M, copy=True)
+    M.eliminate_zeros()
+    return int(np.sum(np.diff(M.indptr) == 0))

@@ -133,3 +133,11 @@ def test_deprecated_axis_alias_warns():
     with pytest.warns(DeprecationWarning):
         ax = numgrids.Axis(numgrids.AxisType.CHEBYSHEV, 10, 0, 1)
     assert isinstance(ax, numgrids.ChebyshevAxis)
+
+
+def test_diff_function_not_shadowed_by_submodule():
+    import numgrids
+    grid = Grid(chebyshev(10, 0, 1))
+    Diff(grid, 1)  # triggers lazy imports inside the package
+    assert callable(numgrids.diff)
+    npt.assert_allclose(numgrids.diff(grid, grid.coords ** 2), 2 * grid.coords, atol=1e-10)

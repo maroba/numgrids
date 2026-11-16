@@ -248,3 +248,15 @@ def test_remaining_operator_dunders():
         Dop / x
     with pytest.raises(TypeError):
         Diff(grid, 1.5)
+
+
+def test_singular_rows_are_reported():
+    grid = PolarGrid(chebyshev(10, 0.0, 1.0), periodic(8))
+    L = grid.laplacian_operator()
+    with pytest.raises(ValueError, match="singular"):
+        L.solve(1.0, bcs={"r_high": 0})
+    with pytest.warns(RuntimeWarning, match="spurious"):
+        L.eig(k=2, bcs={"r_high": 0})
+    # Covering the singular points with a condition removes the problem:
+    u = L.solve(1.0, bcs={"r_high": 0, "r_low": 0})
+    assert np.all(np.isfinite(u))

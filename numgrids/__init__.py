@@ -8,6 +8,10 @@ try:
 except _PackageNotFoundError:  # pragma: no cover - running from a source tree
     __version__ = "0.0.0+unknown"
 
+# Import the ``numgrids.diff`` submodule eagerly: importing it lazily later
+# would rebind the package attribute ``numgrids.diff`` from the function
+# (imported below) to the module.
+from . import diff as _diff_module  # noqa: F401, I001
 from .amr import AdaptationResult, ErrorEstimator, adapt, estimate_error
 from .api import (
     AxisType,
