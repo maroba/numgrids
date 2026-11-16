@@ -131,6 +131,7 @@ grid = CurvilinearGrid(
 
 ## Example Notebooks
 
+- [Operators and solvers: Poisson, eigenmodes, time evolution](examples/operators-and-solvers.ipynb)
 - [Heat equation in a rod](examples/heat-equation-rod.ipynb)
 - [Poisson equation in 2D](examples/poisson-equation-2d.ipynb)
 - [Quantum harmonic oscillator](examples/quantum-harmonic-oscillator.ipynb)

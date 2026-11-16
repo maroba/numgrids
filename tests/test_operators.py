@@ -260,3 +260,12 @@ def test_singular_rows_are_reported():
     # Covering the singular points with a condition removes the problem:
     u = L.solve(1.0, bcs={"r_high": 0, "r_low": 0})
     assert np.all(np.isfinite(u))
+
+
+def test_no_spurious_nyquist_modes_on_periodic_axes():
+    # The m = 0 modes of an annulus are non-degenerate; a Laplacian built from
+    # squared first-derivative matrices would duplicate them (Nyquist mode).
+    grid = PolarGrid(chebyshev(24, 0.4, 1.0), periodic(32))
+    vals, _ = (-grid.laplacian_operator()).eig(k=3, bcs=0)
+    npt.assert_allclose(np.sqrt(vals), [5.183072122637354, 5.391181199567447, 5.391181199567447],
+                        rtol=1e-8)

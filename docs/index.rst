@@ -90,6 +90,7 @@ indices and scale factors.
    :caption: Examples
    :hidden:
 
+   examples/operators-and-solvers
    examples/heat-equation-rod
    examples/poisson-equation-2d
    examples/spherical-harmonics

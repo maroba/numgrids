@@ -159,6 +159,7 @@ class CurvilinearGrid(Grid):
         self._diff_ops: dict | None = None
         self._h_arrays: tuple[NDArray, ...] | None = None
         self._jacobian: NDArray | None = None
+        self._lap_coeffs: list | None = None
 
     def _new_like(self, axes) -> CurvilinearGrid:
         new = copy.copy(self)
@@ -327,22 +328,38 @@ class CurvilinearGrid(Grid):
         """
         f = self._check_field(f)
         self._ensure_diff_ops()
-        h = self._evaluate_scale_factors()
         J = self._evaluate_jacobian()
-        result = np.zeros(self.shape)
+        result = np.zeros(self.shape, dtype=np.result_type(f, float))
         with np.errstate(divide="ignore", invalid="ignore"):
-            for i in range(self.ndims):
-                inner = (J / h[i] ** 2) * self._diff_ops[i](f)
-                result = result + self._diff_ops[i](inner)
+            for i, (c, dc) in enumerate(self._laplacian_coefficients()):
+                # Product rule d(c df) = c d^2f + dc df: uses the true second
+                # derivative, so no spurious modes (e.g. the Nyquist mode on
+                # periodic axes) end up in the null space.
+                result = result + c * self.diff(f, 2, i) + dc * self.diff(f, 1, i)
             result = result / J
         return _finite_or_zero(result)
+
+    def _laplacian_coefficients(self) -> list[tuple[NDArray, NDArray]]:
+        """Coefficients ``c_i = J / h_i^2`` and their derivatives along axis *i*."""
+        if getattr(self, "_lap_coeffs", None) is None:
+            h = self._evaluate_scale_factors()
+            J = self._evaluate_jacobian()
+            coeffs = []
+            with np.errstate(divide="ignore", invalid="ignore"):
+                for i in range(self.ndims):
+                    c = _finite_or_zero(J / h[i] ** 2)
+                    coeffs.append((c, self.diff(c, 1, i)))
+            self._lap_coeffs = coeffs
+        return self._lap_coeffs
 
     def laplacian_operator(self, acc: int = 4) -> Operator:
         r"""The Laplacian as a sparse :class:`~numgrids.operators.Operator`.
 
         .. math::
-            L = \operatorname{diag}(1/J) \sum_i D_i\,
-                \operatorname{diag}(J/h_i^2)\, D_i
+            L = \operatorname{diag}(1/J) \sum_i \left[
+                \operatorname{diag}(c_i)\, D_i^{(2)}
+                + \operatorname{diag}(\partial_i c_i)\, D_i^{(1)} \right],
+            \qquad c_i = J/h_i^2
 
         Rows at coordinate singularities (where the coefficients are not
         finite) are set to zero, consistent with :meth:`laplacian`.
@@ -351,15 +368,14 @@ class CurvilinearGrid(Grid):
         if key not in self.cache["operators"]:
             from numgrids.api import Diff
             from numgrids.operators import Operator
-            h = self._evaluate_scale_factors()
             J = self._evaluate_jacobian()
             total = None
             with np.errstate(divide="ignore", invalid="ignore"):
                 inv_J = _finite_or_zero(1.0 / J).ravel()
-                for i in range(self.ndims):
-                    D = Diff(self, 1, i, acc=acc).as_matrix()
-                    c = _finite_or_zero(J / h[i] ** 2).ravel()
-                    term = D @ scipy.sparse.diags(c) @ D
+                for i, (c, dc) in enumerate(self._laplacian_coefficients()):
+                    D1 = Diff(self, 1, i, acc=acc).as_matrix()
+                    D2 = Diff(self, 2, i, acc=acc).as_matrix()
+                    term = scipy.sparse.diags(c.ravel()) @ D2 + scipy.sparse.diags(dc.ravel()) @ D1
                     total = term if total is None else total + term
             M = scipy.sparse.diags(inv_J) @ total
             self.cache["operators"][key] = Operator(self, M)
