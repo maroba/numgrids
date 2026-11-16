@@ -4,9 +4,8 @@ import numpy as np
 import numpy.testing as npt
 from scipy.sparse.linalg import spsolve
 
-from numgrids.axes import EquidistantAxis, ChebyshevAxis
-from numgrids.grids import Grid
 from numgrids.api import Diff
+from numgrids.axes import ChebyshevAxis, EquidistantAxis
 from numgrids.boundary import (
     BoundaryFace,
     DirichletBC,
@@ -14,7 +13,7 @@ from numgrids.boundary import (
     RobinBC,
     apply_bcs,
 )
-
+from numgrids.grids import Grid
 
 # -----------------------------------------------------------------------
 # BoundaryFace

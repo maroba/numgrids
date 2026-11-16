@@ -7,18 +7,25 @@ matrices.
 Classes
 -------
 BoundaryFace
-    Identifies one face (side) of a grid boundary.
+    Identifies one face (side) of a grid boundary, with helpers to evaluate,
+    differentiate and integrate on it.
 DirichletBC
     Dirichlet condition: *u = g* on a boundary face.
 NeumannBC
     Neumann condition: *du/dn = g* on a boundary face.
 RobinBC
     Robin condition: *a u + b du/dn = g* on a boundary face.
+Dirichlet, Neumann, Robin
+    Unbound boundary condition specifications, used in dictionaries passed
+    to :meth:`numgrids.operators.Operator.solve` and :func:`resolve_bcs`.
 
 Functions
 ---------
 apply_bcs
     Apply a list of boundary conditions to a sparse linear system.
+resolve_bcs
+    Turn a compact boundary condition specification into a list of
+    bound boundary conditions.
 """
 
 from __future__ import annotations
@@ -53,6 +60,8 @@ class BoundaryFace:
     def __init__(self, grid: Grid, axis_index: int, side: str) -> None:
         if side not in ("low", "high"):
             raise ValueError(f"side must be 'low' or 'high', got {side!r}")
+        if isinstance(axis_index, str):
+            axis_index = grid.axis_index(axis_index)
         if axis_index < 0 or axis_index >= grid.ndims:
             raise ValueError(
                 f"axis_index {axis_index} out of range for {grid.ndims}-dimensional grid"
@@ -66,12 +75,21 @@ class BoundaryFace:
         self.side = side
 
     @property
+    def key(self) -> str:
+        """The canonical key of this face in :attr:`Grid.faces`, e.g. ``"0_low"``."""
+        return f"{self.axis_index}_{self.side}"
+
+    @property
+    def _index(self) -> tuple:
+        idx = [slice(None)] * self.grid.ndims
+        idx[self.axis_index] = 0 if self.side == "low" else -1
+        return tuple(idx)
+
+    @property
     def mask(self) -> NDArray:
         """Boolean mask of shape ``grid.shape``, True on this face."""
         m = np.zeros(self.grid.shape, dtype=bool)
-        idx = [slice(None)] * self.grid.ndims
-        idx[self.axis_index] = 0 if self.side == "low" else -1
-        m[tuple(idx)] = True
+        m[self._index] = True
         return m
 
     @property
@@ -88,8 +106,141 @@ class BoundaryFace:
         """
         return -1 if self.side == "low" else 1
 
+    @property
+    def shape(self) -> tuple[int, ...]:
+        """Shape of arrays restricted to this face."""
+        return tuple(n for i, n in enumerate(self.grid.shape) if i != self.axis_index)
+
+    @property
+    def coords(self) -> tuple[NDArray, ...]:
+        """Meshed coordinates (all grid dimensions) restricted to this face."""
+        return tuple(mc[self._index] for mc in self.grid.meshed_coords)
+
+    def restrict(self, f: NDArray) -> NDArray:
+        """Restrict a meshed function to this face.
+
+        Parameters
+        ----------
+        f : NDArray
+            Array of shape ``grid.shape``.
+
+        Returns
+        -------
+        NDArray
+            Array of shape :attr:`shape`.
+        """
+        f = self.grid._check_field(f)
+        return f[self._index]
+
+    def normal_derivative(self, f: NDArray) -> NDArray:
+        r"""Outward normal derivative :math:`\partial f / \partial n` on this face.
+
+        On curvilinear grids the physical normal derivative
+        :math:`\pm (1/h_i)\, \partial f / \partial q_i` is returned.
+
+        Parameters
+        ----------
+        f : NDArray
+            Array of shape ``grid.shape``.
+
+        Returns
+        -------
+        NDArray
+            Array of shape :attr:`shape`.
+        """
+        df = self.grid.diff(self.grid._check_field(f), 1, self.axis_index)
+        dn = self.normal_sign * df[self._index]
+        h = self._scale_factors()
+        if h is not None:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                dn = dn / h[self.axis_index][self._index]
+            dn = np.where(np.isfinite(dn), dn, 0.0)
+        return dn
+
+    def _scale_factors(self):
+        from numgrids.curvilinear import CurvilinearGrid
+        if isinstance(self.grid, CurvilinearGrid):
+            return self.grid.scale_factors
+        return None
+
+    @property
+    def area_element(self) -> float | NDArray:
+        r"""Surface element on this face (product of the other scale factors).
+
+        ``1.0`` for Cartesian grids.
+        """
+        h = self._scale_factors()
+        if h is None:
+            return 1.0
+        dA = np.ones(self.shape)
+        for i, hi in enumerate(h):
+            if i != self.axis_index:
+                dA = dA * hi[self._index]
+        return dA
+
+    def integrate(self, f: NDArray) -> float:
+        """Integrate a function over this face.
+
+        Parameters
+        ----------
+        f : NDArray
+            Either an array of shape ``grid.shape`` (restricted to the face
+            automatically) or an array of shape :attr:`shape`.
+
+        Returns
+        -------
+        float
+            The surface integral (including the surface element on
+            curvilinear grids).  For 1D grids the face is a single point
+            and its value is returned.
+        """
+        f = np.asarray(f)
+        if f.shape == self.grid.shape:
+            f = f[self._index]
+        if f.shape != self.shape:
+            raise ValueError(
+                f"Array of shape {f.shape} matches neither the grid shape "
+                f"{self.grid.shape} nor the face shape {self.shape}."
+            )
+        f = f * self.area_element
+        result = f
+        weights = [ax.quadrature_weights for i, ax in enumerate(self.grid.axes)
+                   if i != self.axis_index]
+        for w in reversed(weights):
+            result = result @ w
+        return complex(result) if np.iscomplexobj(result) else float(result)
+
+    def flux(self, *v: NDArray) -> float:
+        r"""Outward flux :math:`\int \mathbf{v}\cdot\mathbf{n}\, dA` of a vector field.
+
+        Parameters
+        ----------
+        *v : NDArray
+            The (physical) components of the vector field, one per axis.
+        """
+        if len(v) != self.grid.ndims:
+            raise ValueError(f"Expected {self.grid.ndims} vector components, got {len(v)}.")
+        return self.normal_sign * self.integrate(v[self.axis_index])
+
     def __repr__(self) -> str:
         return f"BoundaryFace(axis={self.axis_index}, side={self.side!r})"
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _replace_rows(L: spmatrix, rows: NDArray, R: spmatrix) -> spmatrix:
+    """Return a copy of *L* whose *rows* are replaced by the rows of *R*."""
+    n = L.shape[0]
+    sel = np.zeros(n)
+    sel[rows] = 1.0
+    keep = scipy.sparse.diags(1.0 - sel)
+    take = scipy.sparse.diags(sel)
+    L_new = keep @ scipy.sparse.csr_matrix(L) + take @ scipy.sparse.csr_matrix(R)
+    L_new = scipy.sparse.csc_matrix(L_new)
+    L_new.eliminate_zeros()
+    return L_new
 
 
 # ---------------------------------------------------------------------------
@@ -117,17 +268,16 @@ class BoundaryCondition:
     def _resolve_value(self) -> NDArray:
         """Return a 1-D array of values, one per face point."""
         face = self.face
-        grid = face.grid
         n = len(face.flat_indices)
 
-        if callable(self._value_spec):
-            idx = [slice(None)] * grid.ndims
-            idx[face.axis_index] = 0 if face.side == "low" else -1
-            face_coords = tuple(mc[tuple(idx)] for mc in grid.meshed_coords)
-            g = np.asarray(self._value_spec(face_coords))
-            return g.ravel()
-        elif isinstance(self._value_spec, np.ndarray):
-            return self._value_spec.ravel()
+        if callable(self._value_spec) or isinstance(self._value_spec, np.ndarray):
+            g = self._value_spec(face.coords) if callable(self._value_spec) else self._value_spec
+            g = np.asarray(g)
+            if g.size == n:
+                return g.ravel()
+            return np.broadcast_to(g, face.coords[0].shape).ravel()
+        elif np.iscomplexobj(self._value_spec):
+            return np.full(n, complex(self._value_spec))
         else:
             return np.full(n, float(self._value_spec))
 
@@ -137,6 +287,15 @@ class BoundaryCondition:
 
     def apply_to_system(self, L: spmatrix, rhs: NDArray) -> tuple[spmatrix, NDArray]:
         raise NotImplementedError
+
+    def _set_rhs(self, rhs: NDArray) -> NDArray:
+        g = self._resolve_value()
+        rhs = np.array(rhs, dtype=np.result_type(rhs, g), copy=True)
+        rhs[self.face.flat_indices] = g
+        return rhs
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self.face!r}, value={self._value_spec!r})"
 
 
 # ---------------------------------------------------------------------------
@@ -180,14 +339,8 @@ class DirichletBC(BoundaryCondition):
         tuple of (spmatrix, NDArray)
             Modified ``(L, rhs)``.
         """
-        L = L.tolil()
-        rhs = rhs.copy()
-        g = self._resolve_value()
-        for i, idx in enumerate(self.face.flat_indices):
-            L[idx, :] = 0
-            L[idx, idx] = 1.0
-            rhs[idx] = g[i]
-        return L.tocsc(), rhs
+        I = scipy.sparse.identity(L.shape[0], format="csr")  # noqa: E741
+        return _replace_rows(L, self.face.flat_indices, I), self._set_rhs(rhs)
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +351,10 @@ class NeumannBC(BoundaryCondition):
     r"""Neumann boundary condition: :math:`\partial u / \partial n = g`.
 
     The outward normal derivative is ``sign * du/d(axis)`` where *sign* is
-    ``+1`` on the ``"high"`` face and ``-1`` on the ``"low"`` face.
+    ``+1`` on the ``"high"`` face and ``-1`` on the ``"low"`` face.  On
+    curvilinear grids the derivative is taken with respect to the
+    coordinate (not the arc length); this makes no difference for
+    homogeneous conditions.
 
     Parameters
     ----------
@@ -231,17 +387,14 @@ class NeumannBC(BoundaryCondition):
             h = coords[1] - coords[0]
             src[face.axis_index] = 1
             dst[face.axis_index] = 0
-            # u[0] = u[1] - h * g  (outward normal is -x, so du/dn = -du/dx = g => du/dx = -g)
-            u[tuple(dst)] = u[tuple(src)] + h * face.normal_sign * g.reshape(
-                u[tuple(dst)].shape
-            )
         else:
             h = coords[-1] - coords[-2]
             src[face.axis_index] = -2
             dst[face.axis_index] = -1
-            u[tuple(dst)] = u[tuple(src)] + h * face.normal_sign * g.reshape(
-                u[tuple(dst)].shape
-            )
+        # Outward normal derivative (u[dst] - u[src]) / h * (+-1) = g
+        u[tuple(dst)] = u[tuple(src)] + h * face.normal_sign * g.reshape(
+            u[tuple(dst)].shape
+        )
         return u
 
     def apply_to_system(self, L: spmatrix, rhs: NDArray) -> tuple[spmatrix, NDArray]:
@@ -249,15 +402,8 @@ class NeumannBC(BoundaryCondition):
 
         Uses the full differentiation matrix from :class:`~numgrids.api.Diff`.
         """
-        L = L.tolil()
-        rhs = rhs.copy()
-        g = self._resolve_value()
-        sign = self.face.normal_sign
-        D = self._diff.as_matrix().tolil()
-        for i, idx in enumerate(self.face.flat_indices):
-            L[idx, :] = sign * D[idx, :]
-            rhs[idx] = g[i]
-        return L.tocsc(), rhs
+        R = self.face.normal_sign * scipy.sparse.csr_matrix(self._diff.as_matrix())
+        return _replace_rows(L, self.face.flat_indices, R), self._set_rhs(rhs)
 
 
 # ---------------------------------------------------------------------------
@@ -295,16 +441,151 @@ class RobinBC(BoundaryCondition):
 
     def apply_to_system(self, L: spmatrix, rhs: NDArray) -> tuple[spmatrix, NDArray]:
         """Replace boundary rows with ``a * I + b * sign * D``."""
-        L = L.tolil()
-        rhs = rhs.copy()
-        g = self._resolve_value()
-        sign = self.face.normal_sign
-        D = self._diff.as_matrix().tolil()
-        I = scipy.sparse.identity(self.face.grid.size, format="lil")
-        for i, idx in enumerate(self.face.flat_indices):
-            L[idx, :] = self.a * I[idx, :] + self.b * sign * D[idx, :]
-            rhs[idx] = g[i]
-        return L.tocsc(), rhs
+        n = self.face.grid.size
+        R = (self.a * scipy.sparse.identity(n, format="csr")
+             + self.b * self.face.normal_sign * scipy.sparse.csr_matrix(self._diff.as_matrix()))
+        return _replace_rows(L, self.face.flat_indices, R), self._set_rhs(rhs)
+
+    def __repr__(self) -> str:
+        return f"RobinBC({self.face!r}, a={self.a!r}, b={self.b!r}, value={self._value_spec!r})"
+
+
+# ---------------------------------------------------------------------------
+# Unbound specifications
+# ---------------------------------------------------------------------------
+
+class BCSpec:
+    """Base class for boundary condition specs not yet bound to a face."""
+
+    def bind(self, face: BoundaryFace) -> BoundaryCondition:
+        raise NotImplementedError
+
+
+class Dirichlet(BCSpec):
+    """Dirichlet condition *u = value*, to be bound to a face later.
+
+    Examples
+    --------
+    >>> from numgrids import Grid, Dirichlet, Neumann, chebyshev
+    >>> grid = Grid(x=chebyshev(10, 0, 1))
+    >>> bcs = {"x_low": Dirichlet(1.0), "x_high": Neumann(0.0)}
+    """
+
+    def __init__(self, value=0.0) -> None:
+        self.value = value
+
+    def bind(self, face: BoundaryFace) -> DirichletBC:
+        return DirichletBC(face, self.value)
+
+    def __repr__(self) -> str:
+        return f"Dirichlet({self.value!r})"
+
+
+class Neumann(BCSpec):
+    """Neumann condition *du/dn = value*, to be bound to a face later."""
+
+    def __init__(self, value=0.0) -> None:
+        self.value = value
+
+    def bind(self, face: BoundaryFace) -> NeumannBC:
+        return NeumannBC(face, self.value)
+
+    def __repr__(self) -> str:
+        return f"Neumann({self.value!r})"
+
+
+class Robin(BCSpec):
+    """Robin condition *a u + b du/dn = value*, to be bound to a face later."""
+
+    def __init__(self, a: float, b: float, value=0.0) -> None:
+        self.a = a
+        self.b = b
+        self.value = value
+
+    def bind(self, face: BoundaryFace) -> RobinBC:
+        return RobinBC(face, self.a, self.b, self.value)
+
+    def __repr__(self) -> str:
+        return f"Robin(a={self.a!r}, b={self.b!r}, value={self.value!r})"
+
+
+_ALL_KEYS = ("all", "*")
+
+
+def _bind(spec, face: BoundaryFace) -> BoundaryCondition:
+    if isinstance(spec, BCSpec):
+        return spec.bind(face)
+    if isinstance(spec, BoundaryCondition):
+        raise TypeError(
+            "Use unbound specs (Dirichlet, Neumann, Robin) as dict values, "
+            "not bound conditions such as DirichletBC."
+        )
+    return DirichletBC(face, spec)
+
+
+def resolve_bcs(grid: Grid, bcs) -> list[BoundaryCondition]:
+    """Convert a compact boundary condition specification to a list.
+
+    Parameters
+    ----------
+    grid : Grid
+        The grid the conditions refer to.
+    bcs : None, scalar, callable, BCSpec, BoundaryCondition, list or dict
+        * ``None`` -- no conditions,
+        * a scalar, array or callable -- Dirichlet condition with that
+          value on every boundary face,
+        * a :class:`Dirichlet`, :class:`Neumann` or :class:`Robin` spec --
+          applied to every boundary face,
+        * a bound :class:`BoundaryCondition` or a list of them -- used as is,
+        * a dict ``{face_key: spec_or_value}``.  Face keys are those of
+          :attr:`Grid.faces` (``"0_low"``, ``"x_high"``, ...).  The key
+          ``"all"`` applies to every face; specific keys override it.
+          Plain values mean Dirichlet conditions.
+
+    Returns
+    -------
+    list of BoundaryCondition
+
+    Examples
+    --------
+    >>> from numgrids import Grid, Neumann, chebyshev
+    >>> from numgrids.boundary import resolve_bcs
+    >>> grid = Grid(x=chebyshev(10, 0, 1), y=chebyshev(10, 0, 1))
+    >>> bcs = resolve_bcs(grid, {"all": 0, "y_high": Neumann(1)})
+    >>> [type(bc).__name__ for bc in bcs]
+    ['DirichletBC', 'DirichletBC', 'DirichletBC', 'DirichletBC', 'NeumannBC']
+    """
+    if bcs is None:
+        return []
+    if isinstance(bcs, BoundaryCondition):
+        return [bcs]
+    if isinstance(bcs, (list, tuple)):
+        result = []
+        for bc in bcs:
+            if not isinstance(bc, BoundaryCondition):
+                raise TypeError(
+                    f"List entries must be bound boundary conditions, got {type(bc).__name__}. "
+                    "Use a dict to map faces to specs."
+                )
+            result.append(bc)
+        return result
+    faces = grid.faces
+    if isinstance(bcs, dict):
+        result = []
+        for key in _ALL_KEYS:
+            if key in bcs:
+                result.extend(_bind(bcs[key], face) for face in faces.values())
+        for key, spec in bcs.items():
+            if key in _ALL_KEYS:
+                continue
+            if isinstance(key, BoundaryFace):
+                face = key
+            else:
+                face = faces[key]
+            result.append(_bind(spec, face))
+        return result
+    # A single spec or value for all faces:
+    return [_bind(bcs, face) for face in faces.values()]
 
 
 # ---------------------------------------------------------------------------
@@ -312,7 +593,7 @@ class RobinBC(BoundaryCondition):
 # ---------------------------------------------------------------------------
 
 def apply_bcs(
-    bcs: list[BoundaryCondition], L: spmatrix, rhs: NDArray
+    bcs, L: spmatrix, rhs: NDArray, grid: Grid | None = None
 ) -> tuple[spmatrix, NDArray]:
     """Apply a sequence of boundary conditions to a linear system.
 
@@ -321,17 +602,26 @@ def apply_bcs(
 
     Parameters
     ----------
-    bcs : list of BoundaryCondition
-        Boundary conditions to apply.
+    bcs : list of BoundaryCondition, or any spec accepted by :func:`resolve_bcs`
+        Boundary conditions to apply.  Compact specs (dicts, scalars)
+        require *grid*.
     L : spmatrix
         System matrix of shape ``(grid.size, grid.size)``.
     rhs : NDArray
         Right-hand side vector of shape ``(grid.size,)``.
+    grid : Grid, optional
+        Needed only for compact specifications.
 
     Returns
     -------
     tuple of (spmatrix, NDArray)
     """
-    for bc in bcs:
+    if not isinstance(bcs, (list, tuple, BoundaryCondition)) and bcs is not None:
+        if grid is None:
+            raise ValueError("Pass `grid=` to use a compact boundary condition specification.")
+        bcs = resolve_bcs(grid, bcs)
+    elif isinstance(bcs, BoundaryCondition):
+        bcs = [bcs]
+    for bc in bcs or []:
         L, rhs = bc.apply_to_system(L, rhs)
     return L, rhs

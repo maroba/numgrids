@@ -3,12 +3,10 @@
 import unittest
 
 import numpy as np
-import numpy.testing as npt
 
+from numgrids.amr import AdaptationResult, ErrorEstimator, adapt, estimate_error
+from numgrids.axes import ChebyshevAxis, EquidistantAxis, LogAxis
 from numgrids.grids import Grid
-from numgrids.axes import EquidistantAxis, ChebyshevAxis, LogAxis
-from numgrids.amr import ErrorEstimator, AdaptationResult, adapt, estimate_error
-
 
 # ---------------------------------------------------------------------------
 # Grid.refine_axis()

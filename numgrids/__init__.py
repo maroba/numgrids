@@ -1,13 +1,121 @@
-__version__ = "0.4.0"
+"""numgrids -- working with numerical grids made easy."""
 
+from importlib.metadata import PackageNotFoundError as _PackageNotFoundError
+from importlib.metadata import version as _version
+
+try:
+    __version__ = _version("numgrids")
+except _PackageNotFoundError:  # pragma: no cover - running from a source tree
+    __version__ = "0.0.0+unknown"
+
+from .amr import AdaptationResult, ErrorEstimator, adapt, estimate_error
+from .api import (
+    AxisType,
+    Diff,
+    chebyshev,
+    create_axis,
+    diff,
+    equidistant,
+    integrate,
+    interpolate,
+    logarithmic,
+    periodic,
+)
+from .axes import ChebyshevAxis, EquidistantAxis, LogAxis
+from .boundary import (
+    BoundaryFace,
+    Dirichlet,
+    DirichletBC,
+    Neumann,
+    NeumannBC,
+    Robin,
+    RobinBC,
+    apply_bcs,
+    resolve_bcs,
+)
+from .convergence import ConvergenceResult, convergence_study
+from .curvilinear import (
+    CurvilinearGrid,
+    CylindricalGrid,
+    EllipticCylindricalGrid,
+    OblateSpheroidalGrid,
+    PolarGrid,
+    ProlateSpheroidalGrid,
+    SphericalGrid,
+)
+from .evolution import EvolutionResult, evolve
 from .grids import Grid, MultiGrid
-from .curvilinear import CurvilinearGrid
-from .api import Diff, AxisType, create_axis, SphericalGrid, CylindricalGrid, PolarGrid, diff, interpolate, integrate
-from .interpol import Interpolator
 from .integration import Integral
-from .boundary import BoundaryFace, DirichletBC, NeumannBC, RobinBC, apply_bcs
-from .io import save_grid, load_grid
-from .amr import ErrorEstimator, AdaptationResult, adapt, estimate_error
+from .interpol import Interpolator
+from .io import from_xarray, load_grid, save_grid, to_xarray
+from .operators import Operator
 
-# Backward compatibility alias
-Axis = create_axis
+
+def Axis(*args, **kwargs):
+    """Deprecated alias of :func:`create_axis`.
+
+    .. deprecated:: 0.5.0
+       Use :func:`create_axis` or the short-hand factories
+       :func:`chebyshev`, :func:`equidistant`, :func:`periodic` and
+       :func:`logarithmic` instead.  The axis base class lives in
+       :mod:`numgrids.axes`.
+    """
+    import warnings
+    warnings.warn(
+        "numgrids.Axis is deprecated; use numgrids.create_axis (or chebyshev, "
+        "equidistant, periodic, logarithmic) instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return create_axis(*args, **kwargs)
+
+
+__all__ = [
+    "AdaptationResult",
+    "Axis",
+    "AxisType",
+    "BoundaryFace",
+    "ChebyshevAxis",
+    "ConvergenceResult",
+    "CurvilinearGrid",
+    "CylindricalGrid",
+    "Diff",
+    "Dirichlet",
+    "DirichletBC",
+    "EllipticCylindricalGrid",
+    "EquidistantAxis",
+    "ErrorEstimator",
+    "EvolutionResult",
+    "Grid",
+    "Integral",
+    "Interpolator",
+    "LogAxis",
+    "MultiGrid",
+    "Neumann",
+    "NeumannBC",
+    "OblateSpheroidalGrid",
+    "Operator",
+    "PolarGrid",
+    "ProlateSpheroidalGrid",
+    "Robin",
+    "RobinBC",
+    "SphericalGrid",
+    "adapt",
+    "apply_bcs",
+    "chebyshev",
+    "convergence_study",
+    "create_axis",
+    "diff",
+    "equidistant",
+    "estimate_error",
+    "evolve",
+    "from_xarray",
+    "integrate",
+    "interpolate",
+    "load_grid",
+    "logarithmic",
+    "periodic",
+    "resolve_bcs",
+    "save_grid",
+    "to_xarray",
+]

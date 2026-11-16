@@ -1,44 +1,65 @@
+"""Integration over the whole grid domain."""
+
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
-from scipy.sparse.linalg import inv
-from scipy.sparse import csc_matrix, identity, kron
 
-from numgrids.grids import Grid
-from numgrids.api import Diff
-from numgrids.axes import EquidistantAxis
-from numgrids.utils import multi_kron
+if TYPE_CHECKING:
+    from numgrids.grids import Grid
 
 
 class Integral:
-    r"""The integration operator for integrating on a grid.
+    r"""The integration operator for integrating over a grid.
 
     .. math::
-        \int_V ... dV
+        \int_V f \, dV
 
-    Integration always runs over the whole grid.
+    Integration always runs over the whole grid.  The integral is computed
+    as a tensor product of one-dimensional quadrature rules, chosen per
+    axis type:
+
+    * Chebyshev axes: Clenshaw--Curtis quadrature (spectral accuracy),
+    * periodic equidistant axes: trapezoidal rule (spectral accuracy),
+    * other axes: weights obtained by inverting the axis' differentiation
+      matrix (same order of accuracy as differentiation).
+
+    On curvilinear grids (:class:`~numgrids.CurvilinearGrid` and its
+    subclasses) the integrand is multiplied by the volume element
+    :math:`J = h_1 h_2 \cdots h_n` by default, so that e.g. integrating
+    ``1`` over a :class:`~numgrids.SphericalGrid` yields the volume of the
+    domain.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from numgrids import Grid, Integral, chebyshev
+    >>> grid = Grid(chebyshev(20, 0, np.pi))
+    >>> I = Integral(grid)
+    >>> round(I(np.sin(grid.coords)), 10)
+    2.0
     """
 
-    def __init__(self, grid: Grid) -> None:
-        """Constructor
-
+    def __init__(self, grid: Grid, volume_element: bool = True) -> None:
+        r"""Constructor
 
         Parameters
         ----------
         grid: Grid
             The grid on which to integrate.
+        volume_element: bool
+            Whether to include the volume element (Jacobian) of curvilinear
+            grids.  If ``False``, the integral is taken in coordinate space,
+            i.e. :math:`\int f\, dq_1 \cdots dq_n`.  Has no effect on
+            Cartesian grids.  Default is ``True``.
         """
         self.grid = grid
-
-        self.D_invs = []
-        for i, axis in enumerate(self.grid.axes):
-            internal_grid = Grid(axis)
-            D = Diff(internal_grid, 1, 0).as_matrix()
-            D_inv = inv(csc_matrix(D[1:, 1:])) # inv wants a csc_matrix, but findiff returns csr_matrix
-            self.D_invs.append(D_inv)
-
-        self.eyes = [identity(len(axis)) for axis in self.grid.axes]
+        self.volume_element = volume_element
+        self.weights = [axis.quadrature_weights for axis in grid.axes]
+        J = getattr(grid, "volume_element", None) if volume_element else None
+        self._jacobian = None if J is None or np.isscalar(J) else np.asarray(J)
 
     def __call__(self, f: NDArray) -> float:
         """
@@ -52,20 +73,18 @@ class Integral:
 
         Returns
         -------
-        The result of the integration (float).
+        The result of the integration (float, or complex for complex input).
         """
-        f_ = f
-        for i, axis in enumerate(self.grid.axes):
-            if isinstance(axis, EquidistantAxis) and axis.periodic:
-                # FFT-spectral integration is much easier and still spectral accuracy!
-                f_ = axis.spacing * np.sum(f_, axis=0)
-            else:
-                f_ = f_[1:, ...]
-                shape = f_.shape
-                f_ = f_.reshape(-1)
-                matrices = [identity(len(axis)) for axis in self.grid.axes]
-                matrices[i] = self.D_invs[i]
-                D_inv_big = multi_kron(*matrices[i:])
-                f_ = (D_inv_big * f_).reshape(shape)[-1, ...]
-
-        return f_
+        f = np.asarray(f)
+        if f.shape != self.grid.shape:
+            raise ValueError(
+                f"Array of shape {f.shape} does not match grid shape {self.grid.shape}."
+            )
+        if self._jacobian is not None:
+            f = f * self._jacobian
+        result = f
+        for w in reversed(self.weights):
+            result = result @ w
+        if np.iscomplexobj(result):
+            return complex(result)
+        return float(result)

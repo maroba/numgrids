@@ -1,7 +1,6 @@
 import unittest
-from unittest.mock import patch, Mock
 
-from numgrids import create_axis, AxisType, Grid
+from numgrids import AxisType, Grid, create_axis
 from numgrids.plots import Plotter
 
 

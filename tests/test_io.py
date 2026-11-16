@@ -5,10 +5,10 @@ from pathlib import Path
 import numpy as np
 import numpy.testing as npt
 
-from numgrids.axes import EquidistantAxis, ChebyshevAxis, LogAxis
+from numgrids.api import CylindricalGrid, PolarGrid, SphericalGrid
+from numgrids.axes import ChebyshevAxis, EquidistantAxis, LogAxis
 from numgrids.grids import Grid
-from numgrids.api import SphericalGrid, CylindricalGrid, PolarGrid, create_axis, AxisType
-from numgrids.io import save_grid, load_grid
+from numgrids.io import load_grid, save_grid
 
 
 class TestSaveLoadGrid(unittest.TestCase):
