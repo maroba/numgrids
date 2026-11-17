@@ -430,3 +430,62 @@ def test_no_spurious_nyquist_modes_on_periodic_axes():
     vals, _ = (-grid.laplacian_operator()).eig(k=3, bcs=0)
     npt.assert_allclose(np.sqrt(vals), [5.183072122637354, 5.391181199567447, 5.391181199567447],
                         rtol=1e-8)
+
+
+class TestTransposeAndAdjoint:
+    def test_transpose_and_conjugate_transpose(self):
+        grid = Grid(x=chebyshev(8, 0, 1))
+        L = grid.diff_operator() + 1j * grid.coords
+        npt.assert_allclose(L.T.toarray(), L.toarray().T)
+        npt.assert_allclose(L.H.toarray(), L.toarray().conj().T)
+        assert isinstance(L.toarray(), np.ndarray)
+
+    def test_adjoint_satisfies_its_definition(self):
+        grid = PolarGrid(chebyshev(12, 1, 2), periodic(12))
+        R, P = grid.meshed_coords
+        L = grid.diff_operator(1, "r") + 1j * grid.diff_operator(1, "phi") + R
+        f = np.exp(R) * np.cos(P) + 1j * np.sin(2 * P)
+        g = R ** 2 * np.sin(P) + 1j * R
+        assert grid.inner(f, L(g)) == pytest.approx(grid.inner(L.adjoint()(f), g), abs=1e-10)
+
+    def test_derivative_is_anti_self_adjoint_on_periodic_grids(self):
+        D = Grid(x=periodic(16)).diff_operator()
+        npt.assert_allclose(D.adjoint().toarray(), -D.toarray(), atol=1e-12)
+
+    def test_laplacian_is_self_adjoint_on_functions_vanishing_at_the_boundary(self):
+        grid = Grid(x=chebyshev(20, 0, 1))
+        x = grid.coords
+        L = grid.laplacian_operator()
+        f, g = np.sin(np.pi * x), x * (1 - x) * np.exp(x)
+        assert grid.inner(f, L(g)) == pytest.approx(grid.inner(L(f), g), abs=1e-10)
+
+
+class TestEigNormalization:
+    def test_l2_normalization(self):
+        grid = Grid(x=chebyshev(60, -8, 8))
+        x = grid.coords
+        H = -0.5 * grid.diff_operator(2) + 0.5 * x ** 2
+        vals, psi = H.eig(k=3, bcs=0, normalize="l2")
+        npt.assert_allclose(vals, [0.5, 1.5, 2.5], atol=1e-8)
+        for i in range(3):
+            assert grid.norm(psi[i]) == pytest.approx(1.0, abs=1e-12)
+        # The ground state is the normalized Gaussian
+        npt.assert_allclose(psi[0], np.pi ** -0.25 * np.exp(-x ** 2 / 2), atol=1e-6)
+
+    def test_other_normalizations(self):
+        grid = Grid(x=chebyshev(20, 0, 1))
+        L = -grid.diff_operator(2)
+        _, v = L.eig(k=2, bcs=0, normalize="max")
+        npt.assert_allclose(np.abs(v).reshape(2, -1).max(axis=1), 1.0)
+        _, v = L.eig(k=2, bcs=0)
+        npt.assert_allclose(np.linalg.norm(v.reshape(2, -1), axis=1), 1.0)
+        with pytest.raises(ValueError, match="normalization"):
+            L.eig(k=2, bcs=0, normalize="l3")
+        with pytest.raises(ValueError, match="method"):
+            L.eig(k=2, bcs=0, method="magic")
+
+    def test_l2_normalization_on_the_disk(self):
+        disk = PolarGrid(radial(16, 1.0), periodic(24))
+        _, modes = (-disk.laplacian_operator()).eig(k=4, bcs=0, normalize="l2")
+        for mode in modes:
+            assert disk.norm(mode) == pytest.approx(1.0, abs=1e-12)

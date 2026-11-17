@@ -42,6 +42,7 @@ from scipy.sparse import spmatrix
 
 if TYPE_CHECKING:
     from numgrids.grids import Grid
+    from numgrids.linalg import LinearSolver
 
 
 class Operator:
@@ -98,6 +99,46 @@ class Operator:
     @property
     def shape(self) -> tuple[int, int]:
         return self.matrix.shape
+
+    def toarray(self) -> NDArray:
+        """The matrix representation as a dense array."""
+        return self.matrix.toarray()
+
+    @property
+    def T(self) -> Operator:
+        """The transposed operator."""
+        return Operator(self.grid, self.matrix.T)
+
+    @property
+    def H(self) -> Operator:
+        """The conjugate transposed operator (adjoint for the Euclidean inner product)."""
+        return Operator(self.grid, self.matrix.conj().T)
+
+    def adjoint(self) -> Operator:
+        r"""The adjoint with respect to the :math:`L^2` inner product of the grid.
+
+        :math:`\langle f, L g\rangle = \langle L^\dagger f, g\rangle` with
+        :math:`\langle f, g\rangle = \int \bar f g\, dV` evaluated by the
+        quadrature of the grid (:meth:`Grid.inner <numgrids.grids.Grid.inner>`),
+        i.e. :math:`L^\dagger = W^{-1} L^H W` with the diagonal matrix *W*
+        of the quadrature weights.  Boundary terms are part of the adjoint:
+        operators such as the Laplacian are only self-adjoint on functions
+        that satisfy suitable boundary conditions.
+
+        Examples
+        --------
+        The derivative on a periodic grid is anti-self-adjoint:
+
+        >>> import numpy as np
+        >>> from numgrids import Grid, periodic
+        >>> D = Grid(x=periodic(16)).diff_operator()
+        >>> bool(np.allclose(D.adjoint().toarray(), -D.toarray()))
+        True
+        """
+        w = self.grid.quadrature_weights.ravel()
+        W = scipy.sparse.diags(w)
+        W_inv = scipy.sparse.diags(1.0 / w)
+        return Operator(self.grid, W_inv @ self.matrix.conj().T @ W)
 
     def __repr__(self) -> str:
         return (
@@ -232,7 +273,7 @@ class Operator:
         L, b = apply_bcs(resolve_bcs(self.grid, bcs), self.matrix, rhs)
         return scipy.sparse.csc_matrix(L), b
 
-    def solve(self, rhs=0.0, bcs=None) -> NDArray:
+    def solve(self, rhs=0.0, bcs=None, method: str = "auto") -> NDArray:
         """Solve the linear problem ``L u = rhs`` subject to boundary conditions.
 
         Parameters
@@ -250,6 +291,21 @@ class Operator:
               or ``"all"``) to values or to :class:`~numgrids.Dirichlet`,
               :class:`~numgrids.Neumann`, :class:`~numgrids.Robin` specs,
             * a list of bound boundary conditions (``DirichletBC`` etc.).
+        method : str
+            How to solve the linear system:
+
+            * ``"fourier"`` -- decouple the system by a Fourier transform
+              along the periodic axes on which neither the operator nor the
+              boundary conditions depend (e.g. the azimuthal angle of a
+              disk or ball), and solve one small system per Fourier mode.
+              By far the fastest method where it applies.
+            * ``"dense"`` -- dense LU factorization; faster than sparse LU
+              for spectral discretizations of moderate size.
+            * ``"sparse"`` -- sparse LU factorization; best for finite
+              differences.
+            * ``"auto"`` (default) -- the first of these that applies.
+
+            To solve with many right-hand sides, use :meth:`factorize`.
 
         Returns
         -------
@@ -266,17 +322,35 @@ class Operator:
         >>> bool(np.allclose(u, grid.coords ** 2))
         True
         """
-        L, b = self.with_bcs(rhs, bcs)
-        n_zero = _count_zero_rows(L)
-        if n_zero:
-            raise ValueError(
-                f"The system has {n_zero} empty row(s) not covered by boundary conditions, "
-                "so it is singular. This typically happens when grid points lie on a "
-                "coordinate singularity (e.g. r = 0); start the axis slightly away from it "
-                "or impose a condition there."
-            )
-        u = scipy.sparse.linalg.spsolve(L, b)
-        return np.asarray(u).reshape(self.grid.shape)
+        return self.factorize(bcs, method=method)(rhs)
+
+    def factorize(self, bcs=None, method: str = "auto") -> LinearSolver:
+        """Factorize the linear problem ``L u = rhs`` for repeated solves.
+
+        Returns a :class:`~numgrids.linalg.LinearSolver`: call it with a
+        right-hand side to get the solution.  The factorization is computed
+        once, so each further solve is cheap -- useful for implicit time
+        stepping, iterations and parameter studies.
+
+        Parameters
+        ----------
+        bcs, method
+            As for :meth:`solve`.  The boundary values are fixed.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from numgrids import Grid, chebyshev
+        >>> grid = Grid(x=chebyshev(20, 0, np.pi))
+        >>> solver = grid.diff_operator(2).factorize(bcs=0)
+        >>> x = grid.coords
+        >>> bool(np.allclose(solver(-np.sin(x)), np.sin(x)))
+        True
+        >>> bool(np.allclose(solver(-4 * np.sin(2 * x)), np.sin(2 * x)))
+        True
+        """
+        from numgrids.linalg import LinearSolver
+        return LinearSolver(self, bcs, method=method)
 
     def eig(
         self,
@@ -286,6 +360,8 @@ class Operator:
         which: str = "SM",
         dense_threshold: int = 2000,
         M=None,
+        normalize: str = "euclidean",
+        method: str = "auto",
     ) -> tuple[NDArray, NDArray]:
         r"""Solve the eigenvalue problem :math:`L u = \lambda u` or :math:`L u = \lambda M u`.
 
@@ -318,6 +394,20 @@ class Operator:
             the grid) means multiplication by that function; an
             :class:`Operator` or sparse matrix is used as is.  Defaults to
             the identity.
+        normalize : str
+            Normalization of the eigenvectors: ``"euclidean"`` (default) --
+            unit Euclidean norm of the array of values; ``"l2"`` -- unit
+            :math:`L^2` norm on the grid, :math:`\int |u|^2 dV = 1` (see
+            :meth:`Grid.norm <numgrids.grids.Grid.norm>`), as for wave
+            functions; ``"max"`` -- largest absolute value 1.
+        method : str
+            ``"auto"`` (default) or ``"direct"``.  With ``"auto"``, problems
+            that do not depend on one or more periodic axes (e.g. the
+            azimuthal angle of a disk or ball) are decoupled by a Fourier
+            transform along these axes into one small eigenproblem per
+            Fourier mode, which is much faster and gives all eigenvalues
+            to full accuracy.  ``"direct"`` always treats the problem as a
+            whole (dense or sparse, see *dense_threshold*).
 
         Returns
         -------
@@ -326,8 +416,8 @@ class Operator:
             all imaginary parts are negligible.
         eigenvectors : NDArray
             Shape ``(k, *grid.shape)``; ``eigenvectors[i]`` belongs to
-            ``eigenvalues[i]``.  Each eigenvector has unit Euclidean norm
-            (as a flat vector) and its largest component is positive.  For a
+            ``eigenvalues[i]``.  Each eigenvector is normalized (see
+            *normalize*) and its largest component is positive.  For a
             real operator, eigenvectors of real eigenvalues are real, also
             for degenerate eigenvalues (e.g. symmetry-related modes on a
             disk or sphere): a degenerate eigenspace is returned as a real
@@ -350,6 +440,10 @@ class Operator:
 
         if which not in ("SM", "LM", "SR", "LR"):
             raise ValueError(f"Unknown value for which: {which!r}")
+        if normalize not in ("euclidean", "l2", "max"):
+            raise ValueError(f"Unknown normalization: {normalize!r}. Use 'euclidean', 'l2' or 'max'.")
+        if method not in ("auto", "direct"):
+            raise ValueError(f"Unknown method: {method!r}. Use 'auto' or 'direct'.")
 
         size = self.grid.size
         bc_list = resolve_bcs(self.grid, bcs)
@@ -377,6 +471,17 @@ class Operator:
             )
 
         keep = ~dirichlet
+        generalized = M is not None or bool(np.any(bc_rows[keep]))
+        blocks = None
+        if method == "auto":
+            blocks = self._fourier_blocks(A, B)
+        if blocks is not None:
+            # Right-hand side matrix on the full grid, as below.
+            B_full = scipy.sparse.diags((~bc_rows).astype(float))
+            if B is not None:
+                B_full = B_full @ B
+            A_hat = blocks.blocks(A)
+            B_hat = blocks.blocks(B_full) if generalized else None
         A = A[keep][:, keep]
         # Right-hand side matrix: M (or the identity), with the rows of the
         # Neumann/Robin conditions set to zero (they hold for every lambda).
@@ -385,11 +490,13 @@ class Operator:
             B = row_mask
         else:
             B = scipy.sparse.csr_matrix(row_mask @ B[keep][:, keep])
-        generalized = M is not None or bool(np.any(bc_rows[keep]))
         n = A.shape[0]
         k = min(k, n - int(np.sum(bc_rows[keep])))
 
-        if n <= dense_threshold:
+        if blocks is not None:
+            real = not np.iscomplexobj(A) and not np.iscomplexobj(B)
+            vals, vecs = self._eig_fourier(blocks, A_hat, B_hat, keep, k, which, sigma, real)
+        elif n <= dense_threshold:
             Ad = A.toarray()
             if generalized:
                 vals, vecs = scipy.linalg.eig(Ad, B.toarray())
@@ -438,17 +545,77 @@ class Operator:
 
         full = np.zeros((size, len(vals)), dtype=vecs.dtype)
         full[keep, :] = vecs
-        # Normalize: unit Euclidean norm, largest component real and positive.
+        # Normalize, and make the largest component real and positive.
+        weights = self.grid.quadrature_weights.ravel() if normalize == "l2" else None
         for j in range(full.shape[1]):
             v = full[:, j]
             pivot = v[np.argmax(np.abs(v))]
-            full[:, j] = v / np.linalg.norm(v) * (np.abs(pivot) / pivot)
+            if normalize == "l2":
+                norm = np.sqrt(abs(np.sum(weights * np.abs(v) ** 2)))
+            elif normalize == "max":
+                norm = np.abs(pivot)
+            else:
+                norm = np.linalg.norm(v)
+            full[:, j] = v / norm * (np.abs(pivot) / pivot)
         if np.all(np.abs(vals.imag) <= 1e-10 * np.maximum(1.0, np.abs(vals.real))):
             vals = vals.real
             if np.all(np.abs(full.imag) <= 1e-8):
                 full = full.real
         vecs_out = np.moveaxis(full, 1, 0).reshape((len(vals),) + self.grid.shape)
         return vals, vecs_out
+
+    def _fourier_blocks(self, A, B):
+        """Fourier decoupling of the eigenproblem, or ``None`` if it does not apply or pay off."""
+        from numgrids.linalg import _FOURIER_MAX_BYTES, _FOURIER_MAX_WORK, FourierBlocks, shift_invariant_axes
+
+        axes = shift_invariant_axes(A, self.grid)
+        if B is not None and axes:
+            invariant_B = shift_invariant_axes(B, self.grid)
+            axes = [a for a in axes if a in invariant_B]
+        if not axes:
+            return None
+        blocks = FourierBlocks(self.grid, axes)
+        # Dense eigensolvers need about 25 n^3 operations.
+        if blocks.nbytes() > _FOURIER_MAX_BYTES or 25 * blocks.work() > _FOURIER_MAX_WORK:
+            return None
+        return blocks
+
+    def _eig_fourier(self, blocks, A_hat, B_hat, keep, k, which, sigma, real):
+        """Eigenpairs from one small dense eigenproblem per Fourier mode."""
+        keep_rest = keep[blocks.index[:, 0]]
+        all_vals, all_vecs, all_modes = [], [], []
+        done = {}
+        for m in range(blocks.n_modes):
+            conj = blocks.conjugate_mode(m)
+            if real and conj in done:
+                # A real problem has complex conjugate blocks for opposite wave numbers.
+                vals, vecs = done[conj]
+                vals, vecs = vals.conj(), vecs.conj()
+            else:
+                Am = A_hat[m][keep_rest][:, keep_rest]
+                if B_hat is not None:
+                    vals, vecs = scipy.linalg.eig(Am, B_hat[m][keep_rest][:, keep_rest])
+                    finite = np.isfinite(vals)
+                    vals, vecs = vals[finite], vecs[:, finite]
+                else:
+                    vals, vecs = scipy.linalg.eig(Am)
+                done[m] = (vals, vecs)
+            all_vals.append(vals)
+            all_vecs.append(vecs)
+            all_modes.append(np.full(len(vals), m))
+        vals = np.concatenate(all_vals)
+        modes = np.concatenate(all_modes)
+        offsets = np.concatenate([[0], np.cumsum([len(v) for v in all_vals])])
+        order = self._sort_eigenvalues(vals, which, sigma)[:k]
+        index = blocks.index[keep_rest]
+        # Position of the kept grid points in the reduced (Dirichlet points removed) system.
+        position = np.cumsum(keep) - 1
+        vecs = np.zeros((int(np.sum(keep)), len(order)), dtype=complex)
+        for col, i in enumerate(order):
+            m = modes[i]
+            v = all_vecs[m][:, i - offsets[m]]
+            vecs[position[index], col] = np.outer(v, blocks.mode(m))
+        return vals[order], vecs
 
     def _mass_matrix(self, M):
         """Sparse matrix of the right-hand side operator of a generalized eigenproblem."""

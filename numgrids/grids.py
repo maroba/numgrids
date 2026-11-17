@@ -353,6 +353,65 @@ class Grid:
             self.cache["operators"][key] = Operator(self, M)
         return self.cache["operators"][key]
 
+    def gradient_operator(self) -> tuple[Operator, ...]:
+        r"""The components of the gradient as operators.
+
+        Returns one :class:`~numgrids.operators.Operator` per axis, so that
+        ``[G(f) for G in grid.gradient_operator()]`` equals
+        ``grid.gradient(f)``.  Together with :meth:`divergence_operator`
+        this builds operators in divergence form, e.g. diffusion with a
+        variable coefficient :math:`\nabla\cdot(k \nabla u)`:
+
+        >>> import numpy as np
+        >>> from numgrids import Grid, chebyshev
+        >>> grid = Grid(x=chebyshev(20, 0, 1))
+        >>> k = 1 + grid.coords
+        >>> (G,), (D,) = grid.gradient_operator(), grid.divergence_operator()
+        >>> L = D @ (k * G)                                   # u -> (k u')'
+        >>> bool(np.allclose(L(grid.coords ** 2), 2 + 4 * grid.coords))
+        True
+        """
+        return tuple(self.diff_operator(1, i) for i in range(self.ndims))
+
+    def divergence_operator(self) -> tuple[Operator, ...]:
+        r"""The divergence as one operator per vector component.
+
+        :math:`\nabla\cdot\mathbf{v} = \sum_i D_i v_i` for the returned
+        operators :math:`D_i`.  On curvilinear grids they act on the
+        physical components of the vector field and include the scale
+        factors.  See :meth:`gradient_operator` for an example.
+        """
+        return tuple(self.diff_operator(1, i) for i in range(self.ndims))
+
+    def diffusion_operator(self, k=1.0) -> Operator:
+        r"""The operator :math:`u \mapsto \nabla\cdot(k\,\nabla u)` in divergence form.
+
+        Parameters
+        ----------
+        k : float, NDArray or callable
+            The coefficient (e.g. a conductivity or diffusivity): a scalar,
+            an array of grid shape, or a callable evaluated on the grid.
+            With ``k = 1`` this is the Laplacian (but
+            :meth:`laplacian_operator` is the more accurate discretization
+            of it on curvilinear grids).
+
+        Examples
+        --------
+        Steady heat conduction :math:`(k u')' = 0` with
+        :math:`k = 1 + x`, :math:`u(0) = 0`, :math:`u(1) = 1`:
+
+        >>> import numpy as np
+        >>> from numgrids import Grid, chebyshev
+        >>> grid = Grid(x=chebyshev(20, 0, 1))
+        >>> u = grid.diffusion_operator(lambda x: 1 + x).solve(0, bcs={"x_low": 0, "x_high": 1})
+        >>> bool(np.allclose(u, np.log(1 + grid.coords) / np.log(2)))
+        True
+        """
+        if callable(k):
+            k = self.evaluate(k)
+        k = np.broadcast_to(np.asarray(k), self.shape)
+        return sum(D @ (k * G) for D, G in zip(self.divergence_operator(), self.gradient_operator()))
+
     def gradient(self, f: NDArray) -> tuple[NDArray, ...]:
         r"""Gradient :math:`\nabla f` of a scalar field (one array per axis)."""
         f = self._check_field(f)
@@ -391,6 +450,78 @@ class Grid:
         """
         from numgrids.api import integrate
         return integrate(self, f)
+
+    @property
+    def quadrature_weights(self) -> NDArray:
+        """Quadrature weights of all grid points, as an array of grid shape.
+
+        ``np.sum(grid.quadrature_weights * f)`` equals ``grid.integrate(f)``;
+        on curvilinear grids the weights include the volume element.
+
+        Examples
+        --------
+        >>> from numgrids import PolarGrid, radial, periodic
+        >>> disk = PolarGrid(radial(8, 1.0), periodic(16))
+        >>> round(float(disk.quadrature_weights.sum()), 10)         # area of the unit disk
+        3.1415926536
+        """
+        if "weights" not in self.cache:
+            from numgrids.integration import Integral
+            if self.cache["integral"] is None:
+                self.cache["integral"] = Integral(self)
+            W = self.cache["integral"].weight_array
+            W.setflags(write=False)
+            self.cache["weights"] = W
+        return self.cache["weights"]
+
+    def inner(self, f: NDArray, g: NDArray) -> float | complex:
+        r"""The :math:`L^2` inner product :math:`\langle f, g\rangle = \int \bar f\, g\, dV`.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from numgrids import Grid, periodic
+        >>> grid = Grid(x=periodic(16))
+        >>> x = grid.coords
+        >>> round(grid.inner(np.sin(x), np.sin(x)), 10), round(abs(grid.inner(np.sin(x), np.cos(x))), 10)
+        (3.1415926536, 0.0)
+        """
+        f = self._check_field(f, "f")
+        g = self._check_field(g, "g")
+        return self.integrate(np.conj(f) * g)
+
+    def norm(self, f: NDArray, ord: int | float | str = 2) -> float:
+        r"""Norm of a meshed function.
+
+        Parameters
+        ----------
+        f : NDArray
+            Meshed function of shape ``grid.shape``.
+        ord : 2, 1, ``"max"`` or ``numpy.inf``
+            ``2`` (default): the :math:`L^2` norm :math:`(\int |f|^2 dV)^{1/2}`;
+            ``1``: the :math:`L^1` norm :math:`\int |f|\, dV`;
+            ``"max"`` or ``numpy.inf``: the largest absolute value.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from numgrids import Grid, chebyshev
+        >>> grid = Grid(x=chebyshev(20, 0, 2))
+        >>> round(grid.norm(np.ones(grid.shape)), 10), grid.norm(grid.coords, "max")
+        (1.4142135624, 2.0)
+        """
+        f = self._check_field(f)
+        if ord == 2:
+            return float(np.sqrt(abs(self.integrate(np.abs(f) ** 2))))
+        if ord == 1:
+            return float(self.integrate(np.abs(f)))
+        if ord == "max" or ord == np.inf:
+            return float(np.max(np.abs(f)))
+        raise ValueError(f"Unknown norm: {ord!r}. Use 2, 1 or 'max'.")
+
+    def mean(self, f: NDArray) -> float | complex:
+        r"""The average :math:`\int f\, dV / \int dV` of a meshed function over the domain."""
+        return self.integrate(f) / self.integrate(np.ones(self.shape))
 
     def interpolate(self, f: NDArray, locations, method: str = "cubic"):
         """Interpolate a meshed function at arbitrary locations.

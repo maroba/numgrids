@@ -364,6 +364,12 @@ class LogDiff(GridDiff):
 # Radial axes through the origin
 # ---------------------------------------------------------------------------
 
+def _check_parity(parity: int) -> int:
+    if parity not in (1, -1):
+        raise ValueError(f"parity must be +1 or -1, got {parity!r}.")
+    return int(parity)
+
+
 class RadialDiff(GridDiff):
     r"""Chebyshev derivative along a :class:`~numgrids.axes.RadialAxis`.
 
@@ -381,14 +387,20 @@ class RadialDiff(GridDiff):
     accurate for smooth (single-valued) fields and has no singularity at the
     origin.
 
+    Scalar fields are *even* across the origin in this sense. Quantities that
+    change sign when continued across the origin (e.g. the radial component
+    of a vector field, whose unit vector flips) are *odd*:
+    :math:`\partial_r^n f = A\, f - B\, (\mathcal{P} f)`; pass ``parity=-1``.
+
     Reference: Trefethen, *Spectral Methods in MATLAB*, SIAM, 2000, ch. 11.
     """
 
-    def __init__(self, grid: Grid, order: int, axis_index: int) -> None:
+    def __init__(self, grid: Grid, order: int, axis_index: int, parity: int = 1) -> None:
         super().__init__(grid, order, axis_index)
         if not isinstance(self.axis, RadialAxis):
             raise TypeError(f"Axis must be of type RadialAxis. Got: {type(self.axis)}")
         self._antipodal = grid._antipodal_map(axis_index)
+        self._parity = _check_parity(parity)
 
         n = len(self.axis)
         D = chebyshev_diff_matrix(2 * n) / self.axis.high      # ascending diameter nodes
@@ -396,7 +408,7 @@ class RadialDiff(GridDiff):
         # Diameter node q (ascending) <-> radial index: q >= n -> q - n,
         # q < n -> n - 1 - q at the antipodal point.
         self._A = D[n:, n:].copy()
-        self._B = D[n:, :n][:, ::-1].copy()
+        self._B = self._parity * D[n:, :n][:, ::-1]
         self._matrix: spmatrix | None = None
 
         A, B, antipodal = self._A, self._B, self._antipodal
@@ -451,19 +463,23 @@ class ColatitudeDiff(GridDiff):
 
     .. math::
         \partial_\theta^n f = A\, f + B\, (\mathcal{P} f).
+
+    As for :class:`RadialDiff`, ``parity=-1`` differentiates quantities that
+    change sign when continued across a pole.
     """
 
-    def __init__(self, grid: Grid, order: int, axis_index: int) -> None:
+    def __init__(self, grid: Grid, order: int, axis_index: int, parity: int = 1) -> None:
         super().__init__(grid, order, axis_index)
         if not isinstance(self.axis, ColatitudeAxis):
             raise TypeError(f"Axis must be of type ColatitudeAxis. Got: {type(self.axis)}")
         self._antipodal = grid._antipodal_map(axis_index)
+        self._parity = _check_parity(parity)
 
         n = len(self.axis)
         D = fourier_diff_matrix(2 * n, order)
         # Great-circle node j >= n is the point (2 pi - theta_j, phi) = (theta_{2n-1-j}, phi + pi).
         self._A = D[:n, :n].copy()
-        self._B = D[:n, n:][:, ::-1].copy()
+        self._B = self._parity * D[:n, n:][:, ::-1]
         self._matrix: spmatrix | None = None
 
         A, B, antipodal = self._A, self._B, self._antipodal
