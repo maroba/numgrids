@@ -60,6 +60,10 @@ jobs:
 
   minimum-dependencies:
     runs-on: ubuntu-latest
+    env:
+      # Single-threaded BLAS exercises the code paths in which SciPy < 1.11
+      # crashed on GitHub's runners; keep testing them deterministically.
+      OPENBLAS_NUM_THREADS: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -68,7 +72,7 @@ jobs:
       - name: Install oldest supported dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install "numpy==1.22.4" "scipy==1.10.1" "findiff==0.10.0" "matplotlib==3.5.3" pytest
+          python -m pip install "numpy==1.22.4" "scipy==1.11.0" "findiff==0.10.0" "matplotlib==3.5.3" pytest
           python -m pip install --no-deps -e .
       - name: Test
         run: python -m pytest

@@ -4,6 +4,18 @@ All notable changes to **numgrids** are documented on this page.
 
 ## Unreleased
 
+### Breaking changes
+
+- The minimum supported SciPy version is now 1.11. SciPy 1.10's sparse LU
+  solver (used by `Operator.solve` and `Operator.eig`) crashes with a
+  segmentation fault on some CPUs, e.g. on GitHub's CI runners.
+
+### Bug fixes
+
+- `Operator.eig` (sparse path, more than 2000 unknowns): no loss of
+  accuracy for operators with an exact zero eigenvalue, no missed members
+  of degenerate eigenvalue clusters, and reproducible results.
+
 ### New features
 
 - Full disks, cylinders and balls: `radial(n, R)` creates a radial axis
