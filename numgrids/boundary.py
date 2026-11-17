@@ -30,6 +30,8 @@ resolve_bcs
 
 from __future__ import annotations
 
+import copy
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -250,6 +252,47 @@ def _replace_rows(L: spmatrix, rows: NDArray, R: spmatrix) -> spmatrix:
 
 
 # ---------------------------------------------------------------------------
+# Time-dependent boundary values
+# ---------------------------------------------------------------------------
+
+class TimeDependent:
+    """A boundary value that changes in time, for :func:`~numgrids.evolve`.
+
+    Parameters
+    ----------
+    func : callable
+        ``func(t)`` returns the boundary value at time *t*: a scalar, an
+        array matching the face, or a callable of the face coordinates
+        (as for time-independent values).
+
+    Examples
+    --------
+    A rod whose left end is heated periodically, while the right end is
+    insulated:
+
+    >>> import numpy as np
+    >>> from numgrids import Grid, Neumann, TimeDependent, chebyshev, evolve
+    >>> grid = Grid(x=chebyshev(20, 0, 1))
+    >>> bcs = {"x_low": TimeDependent(lambda t: np.sin(t)), "x_high": Neumann(0)}
+    >>> result = evolve(grid, grid.laplacian_operator(), np.zeros(grid.shape), (0, 2),
+    ...                 bcs=bcs, method="BDF")
+    >>> bool(np.isclose(result.final[0], np.sin(2)))
+    True
+    """
+
+    def __init__(self, func: Callable) -> None:
+        if not callable(func):
+            raise TypeError("TimeDependent needs a function of time.")
+        self.func = func
+
+    def __call__(self, t):
+        return self.func(t)
+
+    def __repr__(self) -> str:
+        return f"TimeDependent({self.func!r})"
+
+
+# ---------------------------------------------------------------------------
 # Base class
 # ---------------------------------------------------------------------------
 
@@ -271,21 +314,40 @@ class BoundaryCondition:
         self.face = face
         self._value_spec = value
 
+    @property
+    def time_dependent(self) -> bool:
+        """Whether the boundary value changes in time (see :class:`TimeDependent`)."""
+        return isinstance(self._value_spec, TimeDependent)
+
+    def at_time(self, t: float) -> BoundaryCondition:
+        """The condition with its value at time *t* (the condition itself if constant)."""
+        if not self.time_dependent:
+            return self
+        frozen = copy.copy(self)
+        frozen._value_spec = self._value_spec(t)
+        return frozen
+
     def _resolve_value(self) -> NDArray:
         """Return a 1-D array of values, one per face point."""
         face = self.face
         n = len(face.flat_indices)
+        spec = self._value_spec
+        if isinstance(spec, TimeDependent):
+            raise ValueError(
+                "Time-dependent boundary values are only meaningful in evolve(). "
+                "Evaluate them at a fixed time first, e.g. Dirichlet(g(t))."
+            )
 
-        if callable(self._value_spec) or isinstance(self._value_spec, np.ndarray):
-            g = self._value_spec(face.coords) if callable(self._value_spec) else self._value_spec
+        if callable(spec) or isinstance(spec, np.ndarray):
+            g = spec(face.coords) if callable(spec) else spec
             g = np.asarray(g)
             if g.size == n:
                 return g.ravel()
             return np.broadcast_to(g, face.coords[0].shape).ravel()
-        elif np.iscomplexobj(self._value_spec):
-            return np.full(n, complex(self._value_spec))
+        elif np.iscomplexobj(spec):
+            return np.full(n, complex(spec))
         else:
-            return np.full(n, float(self._value_spec))
+            return np.full(n, float(spec))
 
     # Subclasses override these:
     def apply(self, u: NDArray) -> NDArray:

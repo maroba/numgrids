@@ -36,6 +36,7 @@ from .boundary import (
     NeumannBC,
     Robin,
     RobinBC,
+    TimeDependent,
     apply_bcs,
     resolve_bcs,
 )
@@ -115,6 +116,7 @@ __all__ = [
     "RobinBC",
     "SphericalGrid",
     "SphericalSurfaceGrid",
+    "TimeDependent",
     "adapt",
     "apply_bcs",
     "chebyshev",
