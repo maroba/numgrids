@@ -39,3 +39,8 @@ Nonlinear problems
 .. autofunction:: numgrids.solve_nonlinear
 
 .. autoexception:: numgrids.NonlinearSolverError
+
+.. autofunction:: numgrids.continuation
+
+.. autoclass:: numgrids.ContinuationResult
+   :members:

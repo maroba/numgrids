@@ -55,7 +55,8 @@ from .grids import Grid, MultiGrid
 from .integration import Integral
 from .interpol import Interpolator
 from .io import from_xarray, load_grid, save_grid, to_xarray
-from .nonlinear import NonlinearSolverError, solve_nonlinear
+from .linalg import LinearSolver
+from .nonlinear import ContinuationResult, NonlinearSolverError, continuation, solve_nonlinear
 from .operators import Operator
 
 
@@ -85,6 +86,7 @@ __all__ = [
     "BoundaryFace",
     "ChebyshevAxis",
     "ColatitudeAxis",
+    "ContinuationResult",
     "ConvergenceResult",
     "CurvilinearGrid",
     "CylindricalGrid",
@@ -98,6 +100,7 @@ __all__ = [
     "Grid",
     "Integral",
     "Interpolator",
+    "LinearSolver",
     "LogAxis",
     "MultiGrid",
     "Neumann",
@@ -116,6 +119,7 @@ __all__ = [
     "apply_bcs",
     "chebyshev",
     "colatitude",
+    "continuation",
     "convergence_study",
     "create_axis",
     "diff",
