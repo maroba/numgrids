@@ -67,6 +67,8 @@ All notable changes to **numgrids** are documented on this page.
 - Uses the current findiff API (no deprecation warnings).
 - Type information (`py.typed`), modern CI (lint, tests on Linux, macOS
   and Windows, minimum dependency versions, example notebooks, docs).
+- Automated releases: pushing a version tag publishes to PyPI via Trusted
+  Publishing and creates a GitHub release.
 
 ## 0.4.0
 

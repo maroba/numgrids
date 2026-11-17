@@ -121,4 +121,5 @@ indices and scale factors.
    dev/contributing
    dev/setup
    dev/testing
+   dev/releasing
    dev/changelog
