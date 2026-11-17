@@ -759,9 +759,24 @@ class MultiGrid:
     """
     Represents a multigrid, a hierarchical set of grids of different resolutions
     for the same domain.
+
+    Besides holding the grids (:attr:`levels`) and transferring data between
+    them (:meth:`transfer`), a multigrid can solve linear boundary value
+    problems on its finest grid with the multigrid method (:meth:`solve`),
+    whose cost grows only linearly with the number of grid points.
+
+    Examples
+    --------
+    >>> from numgrids import MultiGrid, equidistant
+    >>> mg = MultiGrid(x=equidistant(33, 0, 1), y=equidistant(33, 0, 1), min_size=5)
+    >>> [level.shape for level in mg.levels]
+    [(33, 33), (17, 17), (9, 9), (5, 5)]
+    >>> u = mg.solve(lambda grid: grid.laplacian_operator(), rhs=1.0, bcs=0)   # lap u = 1
+    >>> round(float(u.min()), 4)
+    -0.0737
     """
 
-    def __init__(self, *axes, min_size: int = 2) -> None:
+    def __init__(self, *axes, min_size: int = 2, **named_axes) -> None:
         """
         Constructor.
 
@@ -781,8 +796,13 @@ class MultiGrid:
         min_size: positive int
             This parameter sets a lower bound for the coarsest grid in the multigrid.
             At the lowest resolution, each axis must have at least min_size grid points.
+
+        named_axes: Axis objects as keyword arguments
+            Further axes, appended after the positional ones.  The keyword
+            is used as the axis name, as for :class:`Grid`.
         """
-        grid = Grid(*axes)
+        grid = Grid(*axes, **named_axes)
+        axes = grid.axes
         self._levels = [grid]
         while True:
             sizes = np.array(grid.shape)
@@ -841,3 +861,117 @@ class MultiGrid:
         f_trans = interp(grid_to)
 
         return f_trans
+
+    def solver(self, operator: Callable[[Grid], Operator], bcs=None, **options):
+        """Set up a reusable multigrid solver for an operator and boundary conditions.
+
+        Use this instead of :meth:`solve` to solve for several right-hand
+        sides: the setup is done only once.
+
+        Parameters
+        ----------
+        operator : callable
+            ``operator(grid)`` returns the operator on the given grid; see :meth:`solve`.
+        bcs : optional
+            Boundary conditions; see :meth:`solve`.
+        **options
+            ``pre``, ``post``, ``cycle`` and ``low_order``; see :meth:`solve`.
+
+        Returns
+        -------
+        numgrids.multigrid.MultiGridSolver
+            Call its :meth:`~numgrids.multigrid.MultiGridSolver.solve` method
+            with the right-hand side.
+        """
+        from numgrids.multigrid import MultiGridSolver
+        return MultiGridSolver(self, operator, bcs, **options)
+
+    def solve(
+        self,
+        operator: Callable[[Grid], Operator],
+        rhs=0.0,
+        bcs=None,
+        *,
+        u0=None,
+        tol: float = 1e-8,
+        maxiter: int = 100,
+        pre: int = 2,
+        post: int = 2,
+        cycle: str = "V",
+        method: str = "gmres",
+        low_order: bool = True,
+        return_info: bool = False,
+    ):
+        r"""Solve the linear problem ``L u = rhs`` on the finest grid with multigrid.
+
+        In contrast to :meth:`Operator.solve <numgrids.operators.Operator.solve>`
+        (sparse LU), time and memory grow only linearly with the number of
+        grid points, which makes large problems feasible, in particular in
+        3D.  The axes must be equidistant (non-periodic) or logarithmic.
+        See :class:`~numgrids.multigrid.MultiGridSolver` for the method and
+        its limitations.
+
+        Parameters
+        ----------
+        operator : callable
+            ``operator(grid)`` returns the operator *L* on the given grid as
+            an :class:`~numgrids.operators.Operator`, e.g. ``lambda grid:
+            grid.laplacian_operator()``.  It is called for every level, so
+            build coefficients from the grid passed in (``grid.evaluate``).
+        rhs : float, NDArray or callable
+            Right-hand side on the finest grid.  Scalars are broadcast;
+            callables are called with the meshed coordinates.
+        bcs : optional
+            Boundary conditions in any form accepted by
+            :func:`~numgrids.boundary.resolve_bcs`, e.g. ``0`` or
+            ``{"x_low": 0, "x_high": Neumann(1)}``.  Every boundary face
+            needs a condition.
+        u0 : float, NDArray or callable, optional
+            Initial guess (default zero).
+        tol : float
+            Tolerance for the residual norm relative to the norm of the
+            right-hand side.
+        maxiter : int
+            Maximum number of iterations (multigrid cycles).
+        pre, post : int
+            Number of smoothing sweeps before and after the coarse-grid
+            correction.
+        cycle : str
+            ``"V"`` (default) or ``"W"``.
+        method : str
+            ``"gmres"`` (default): the multigrid cycle preconditions GMRES;
+            ``"plain"``: the cycle is iterated on its own.
+        low_order : bool
+            Build the multigrid cycle from second-order stencils (default);
+            the solution is still that of the operator as given.
+        return_info : bool
+            Also return a :class:`~numgrids.multigrid.MultiGridInfo` with the
+            number of iterations and the residual history.
+
+        Returns
+        -------
+        NDArray or tuple of (NDArray, MultiGridInfo)
+            The solution on the finest grid.
+
+        Raises
+        ------
+        numgrids.multigrid.MultiGridError
+            If the iteration does not converge.  The exception holds the
+            last iterate and the residual history.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from numgrids import MultiGrid, equidistant
+        >>> mg = MultiGrid(equidistant(65, 0, 1), equidistant(65, 0, 1))
+        >>> exact = lambda x, y: np.sin(np.pi * x) * np.exp(y)
+        >>> f = lambda x, y: (1 - np.pi ** 2) * exact(x, y)
+        >>> u, info = mg.solve(lambda grid: grid.laplacian_operator(), f,
+        ...                    bcs=lambda coords: exact(*coords), return_info=True)
+        >>> bool(np.abs(u - mg.levels[0].evaluate(exact)).max() < 1e-7)
+        True
+        >>> info.converged
+        True
+        """
+        solver = self.solver(operator, bcs, pre=pre, post=post, cycle=cycle, low_order=low_order)
+        return solver.solve(rhs, u0=u0, tol=tol, maxiter=maxiter, method=method, return_info=return_info)

@@ -63,7 +63,7 @@ no mesh generation, no hand-assembled matrices and no special treatment of the c
 - Time evolution (method of lines) for heat, wave, reaction-diffusion and Schrödinger-type equations, with time-dependent boundary values and sources, and an exponential integrator without time stepping error
 
 **Tools**
-- Adaptive mesh refinement, convergence studies, multigrid hierarchies
+- Adaptive mesh refinement, convergence studies, a multigrid solver for large finite-difference problems
 - Plotting, save/load, xarray/NetCDF; all operators export SciPy sparse matrices
 
 ## Installation

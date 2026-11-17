@@ -67,6 +67,7 @@ from .integration import Integral
 from .interpol import Interpolator
 from .io import from_xarray, load_grid, save_grid, to_xarray
 from .linalg import LinearSolver
+from .multigrid import MultiGridError, MultiGridInfo, MultiGridSolver
 from .nonlinear import ContinuationResult, NonlinearSolverError, continuation, solve_nonlinear
 from .operators import Operator
 
@@ -115,6 +116,9 @@ __all__ = [
     "LinearSolver",
     "LogAxis",
     "MultiGrid",
+    "MultiGridError",
+    "MultiGridInfo",
+    "MultiGridSolver",
     "Neumann",
     "NonlinearSolverError",
     "NeumannBC",

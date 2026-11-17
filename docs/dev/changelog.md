@@ -60,6 +60,16 @@ All notable changes to **numgrids** are documented on this page.
   `Operator` or a matrix. It works with all boundary conditions and on the dense
   and sparse paths.
 
+- **Multigrid solver**: `MultiGrid(...).solve(operator, rhs, bcs)` solves
+  linear boundary value problems on finite-difference grids with geometric
+  multigrid (as a preconditioner for GMRES), in time and memory
+  proportional to the number of unknowns. This makes large 3D problems
+  feasible, where sparse LU factorizations run out of time and memory: a
+  Poisson problem on a 65³ grid (275 000 unknowns) takes a few seconds.
+  `operator` is a function that builds the operator on a grid, so variable
+  coefficients work; Dirichlet, Neumann and Robin conditions are supported.
+  `MultiGrid` also accepts named axes now.
+
 **Time evolution**
 
 - **Neumann and Robin conditions in `evolve`**: the boundary values are
