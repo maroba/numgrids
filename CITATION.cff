@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use numgrids in your research, please cite it as below."
+type: software
+title: "numgrids: Working with numerical grids made easy"
+abstract: >-
+  numgrids is a Python package for numerical grids in any dimension and in
+  curvilinear coordinates, with spectral and finite-difference
+  differentiation, integration, interpolation, vector calculus, boundary
+  conditions, and solvers for boundary value, eigenvalue and time-dependent
+  problems.
+authors:
+  - family-names: Baer
+    given-names: Matthias
+repository-code: "https://github.com/maroba/numgrids"
+url: "https://maroba.github.io/numgrids/"
+license: MIT
+keywords:
+  - numerical grids
+  - spectral methods
+  - finite differences
+  - partial differential equations
+  - curvilinear coordinates

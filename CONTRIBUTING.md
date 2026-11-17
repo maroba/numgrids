@@ -24,6 +24,32 @@
 * Do not open an issue on GitHub until you have collected positive feedback about the change. GitHub issues are
   primarily intended for bug reports and fixes.
 
+#### **Setting up a development environment**
+
+Clone the repository and install it in development mode with all extras:
+
+```shell
+git clone https://github.com/maroba/numgrids.git
+cd numgrids
+pip install -e ".[dev]"
+```
+
+Run the tests (including the doctests in the docstrings) and the linter before opening a pull request:
+
+```shell
+python -m pytest
+ruff check numgrids tests
+```
+
+Build the documentation locally:
+
+```shell
+sphinx-build -b html docs docs/_build/html
+```
+
+New features need tests, ideally against analytical solutions, and documentation in `docs/`.
+More details are in the [developer guide](https://maroba.github.io/numgrids/dev/contributing.html).
+
 #### **Do you have questions about the source code?**
 
 * Ask any question about how to use *numgrids* in
