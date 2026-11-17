@@ -25,6 +25,7 @@ SELECTION = {
     "wave-equation-drum": 0,
     "spherical-harmonics": 0,
     "convergence-study": 1,
+    "spectral-resolution": 1,
     "adaptive-refinement-demo": 0,
 }
 SIZE = (480, 360)

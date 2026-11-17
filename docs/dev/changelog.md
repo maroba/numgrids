@@ -99,6 +99,19 @@ All notable changes to **numgrids** are documented on this page.
   gradient and divergence as operators (including the scale factors on
   curvilinear grids), and `grid.diffusion_operator(k)` builds
   $\nabla\cdot(k\,\nabla u)$ for variable coefficients.
+- **Spectral coefficients**: `grid.coefficients(f)` and
+  `grid.from_coefficients(c)` transform between grid values and expansion
+  coefficients (Fourier on periodic axes, Chebyshev on Chebyshev and
+  unbounded axes, and across the origin and the poles on radial and
+  colatitude axes); `grid.resample(f, target)` changes the resolution
+  exactly.
+- **Resolution check**: `grid.resolution(f, tol)` tells from the decay of
+  the coefficients, per axis, whether a function is resolved and how many
+  points it needs, e.g. "axis x: NOT resolved, tail at 1e-03; about 107
+  points needed"; `grid.is_resolved(f, tol)` is the short form, and
+  `result.suggested_grid` the grid to continue with.
+- **Filtering**: `grid.filter(f)` truncates or damps the high modes, e.g.
+  for dealiasing nonlinear terms with the 2/3 rule.
 - **Functions of operators**: `L.function(f, bcs)` builds $f(L)$ from the
   spectrum of the operator with the given boundary conditions, with the
   shortcuts `L.power(s, bcs)`, `L.sqrt(bcs)`, `L.exp(t, bcs)` and
@@ -154,6 +167,8 @@ All notable changes to **numgrids** are documented on this page.
   - *Heat conduction*: variable conductivity, a seasonal temperature wave in
     the ground, a disk with a moving heat source, and implicit time
     stepping with a reused factorization.
+  - *Is my function resolved?*: coefficient spectra, the resolution check
+    in one and two dimensions, choosing the number of points, aliasing.
 - The nonlinear problems notebook traces the bifurcation diagram of the
   Bratu problem with `continuation()`.
 - New user guide sections on unbounded domains, continuation, solver

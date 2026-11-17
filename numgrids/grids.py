@@ -523,6 +523,121 @@ class Grid:
         r"""The average :math:`\int f\, dV / \int dV` of a meshed function over the domain."""
         return self.integrate(f) / self.integrate(np.ones(self.shape))
 
+    def coefficients(self, f: NDArray, axis: int | str | tuple | list | None = None) -> NDArray:
+        r"""Spectral expansion coefficients of a meshed function.
+
+        Fourier coefficients :math:`c_k` along periodic axes, Chebyshev
+        coefficients :math:`a_k` along Chebyshev and unbounded axes. See
+        :func:`numgrids.spectral.coefficients` and :mod:`numgrids.spectral`
+        for the conventions.
+
+        Parameters
+        ----------
+        f : NDArray
+            Meshed function of shape ``grid.shape``.
+        axis : int, str, sequence of those, or None
+            The axis or axes to transform (default: all axes, which gives
+            the coefficients of the tensor-product expansion).
+
+        Examples
+        --------
+        >>> from numgrids import Grid, chebyshev
+        >>> grid = Grid(x=chebyshev(5, -1, 1))
+        >>> grid.coefficients(grid.coords ** 2).round(12) + 0        # x^2 = (T_0 + T_2) / 2
+        array([0.5, 0. , 0.5, 0. , 0. ])
+        """
+        from numgrids.spectral import coefficients
+        return coefficients(self, f, axis=axis)
+
+    def from_coefficients(self, c: NDArray, axis: int | str | tuple | list | None = None) -> NDArray:
+        """Values on the grid of a function given by its expansion coefficients.
+
+        The inverse of :meth:`coefficients` (for the same *axis* argument);
+        see :func:`numgrids.spectral.from_coefficients`.
+        """
+        from numgrids.spectral import from_coefficients
+        return from_coefficients(self, c, axis=axis)
+
+    def resample(self, f: NDArray, target: Grid | int | tuple | list) -> NDArray:
+        """Transfer a meshed function to a grid with other numbers of points.
+
+        The spectral coefficients are padded with zeros (which is spectral
+        interpolation) or truncated; see :func:`numgrids.spectral.resample`.
+
+        Parameters
+        ----------
+        f : NDArray
+            Meshed function of shape ``grid.shape``.
+        target : Grid, int or sequence of int
+            The new numbers of points per axis, or a grid that differs
+            from this one in the numbers of points only.
+        """
+        from numgrids.spectral import resample
+        return resample(self, f, target)
+
+    def resolution(self, f: NDArray, tol: float = 1e-8):
+        """Check whether a meshed function is resolved on this grid.
+
+        Looks at the decay of the spectral coefficients along each axis
+        and returns a :class:`~numgrids.spectral.Resolution` with the
+        verdict and the number of points needed per axis; see
+        :func:`numgrids.spectral.resolution`.
+
+        Parameters
+        ----------
+        f : NDArray
+            Meshed function of shape ``grid.shape``.
+        tol : float
+            Tolerance for the highest modes, relative to the largest one.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from numgrids import Grid, chebyshev
+        >>> grid = Grid(x=chebyshev(30, 0, 1))
+        >>> grid.resolution(np.exp(grid.coords))
+        Resolution at tol=1e-08: resolved
+          axis x: resolved, 10 of 30 points needed
+        >>> grid.is_resolved(np.tanh(20 * (grid.coords - 0.5)))
+        False
+        """
+        from numgrids.spectral import resolution
+        return resolution(self, f, tol)
+
+    def is_resolved(self, f: NDArray, tol: float = 1e-8) -> bool:
+        """Whether a meshed function is resolved on this grid to the tolerance *tol*.
+
+        Short for ``grid.resolution(f, tol).resolved``.
+        """
+        from numgrids.spectral import is_resolved
+        return is_resolved(self, f, tol)
+
+    def filter(self, f: NDArray, method: str = "lowpass", *, keep: float | int = 2 / 3, alpha: float = 36.0,
+               order: float = 8, axis: int | str | tuple | list | None = None) -> NDArray:
+        """Damp or remove the high modes of a meshed function.
+
+        See :func:`numgrids.spectral.spectral_filter`.
+
+        Parameters
+        ----------
+        f : NDArray
+            Meshed function of shape ``grid.shape``.
+        method : str
+            ``"lowpass"`` (default): keep the lowest modes and remove the
+            others; ``"exponential"``: multiply mode *k* by
+            ``exp(-alpha * (k / k_max) ** order)``.
+        keep : float or int
+            For ``"lowpass"``: the fraction of the modes of each axis that
+            is kept (default 2/3, the rule for dealiasing products), or
+            their number.
+        alpha, order : float
+            Strength and exponent of the exponential filter.
+        axis : int, str, sequence of those, or None
+            The axis or axes to filter (default: all spectral axes).
+        """
+        from numgrids.spectral import spectral_filter
+        return spectral_filter(self, f, method, keep=keep, alpha=alpha, order=order, axis=axis)
+
     def interpolate(self, f: NDArray, locations, method: str = "cubic"):
         """Interpolate a meshed function at arbitrary locations.
 

@@ -95,6 +95,7 @@ indices and scale factors.
    guide/plotting
    guide/io
    guide/convergence
+   guide/spectral
    guide/multigrid
    guide/amr
 
@@ -115,6 +116,7 @@ indices and scale factors.
    examples/wave-equation-drum
    examples/adaptive-refinement-demo
    examples/convergence-study
+   examples/spectral-resolution
 
 .. toctree::
    :maxdepth: 2

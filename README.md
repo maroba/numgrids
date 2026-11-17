@@ -54,6 +54,7 @@ no mesh generation, no hand-assembled matrices and no special treatment of the c
 **Calculus**
 - Derivatives with spectral accuracy (FFT, Chebyshev) or finite differences, chosen automatically per axis
 - Gradient, divergence, curl and Laplacian; volume and surface integrals; inner products and norms; spectral interpolation
+- Spectral coefficients and a resolution check that tells whether a function is resolved and how many points it needs
 
 **Solving equations**
 - Write operators like formulas (`-0.5 * D2 + V`), then `solve()` boundary value problems or `eig()` eigenvalue problems (also generalized: `L u = λ M u`)

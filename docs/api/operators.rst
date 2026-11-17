@@ -62,3 +62,29 @@ Nonlinear problems
 
 .. autoclass:: numgrids.ContinuationResult
    :members:
+
+Spectral coefficients
+---------------------
+
+.. automodule:: numgrids.spectral
+   :no-members:
+
+.. autofunction:: numgrids.spectral.coefficients
+
+.. autofunction:: numgrids.spectral.from_coefficients
+
+.. autofunction:: numgrids.spectral.mode_numbers
+
+.. autofunction:: numgrids.spectral.resample
+
+.. autofunction:: numgrids.spectral.resolution
+
+.. autofunction:: numgrids.spectral.is_resolved
+
+.. autoclass:: numgrids.spectral.Resolution
+   :members:
+
+.. autoclass:: numgrids.spectral.AxisResolution
+   :members:
+
+.. autofunction:: numgrids.spectral.spectral_filter
