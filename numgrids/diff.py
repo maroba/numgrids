@@ -25,7 +25,7 @@ from numpy.fft import fft, fftfreq, ifft
 from numpy.typing import NDArray
 from scipy.sparse import spmatrix
 
-from numgrids.axes import EquidistantAxis, LogAxis, RadialAxis
+from numgrids.axes import ColatitudeAxis, EquidistantAxis, LogAxis, RadialAxis
 from numgrids.utils import embed_1d_operator
 
 if TYPE_CHECKING:
@@ -419,3 +419,61 @@ class RadialDiff(GridDiff):
             B = embed_1d_operator(scipy.sparse.csc_matrix(self._B), shape, self.axis_index)
             self._matrix = scipy.sparse.csc_matrix(A + B @ P)
         return self._matrix
+
+
+# ---------------------------------------------------------------------------
+# Colatitude axes through the poles
+# ---------------------------------------------------------------------------
+
+def fourier_diff_matrix(num_points: int, order: int, period: float = 2 * np.pi) -> NDArray:
+    """Dense Fourier spectral differentiation matrix of the given order.
+
+    For an even number of points and odd orders the Nyquist mode is set to
+    zero (as in :class:`FFTDiff`); even orders keep it, so that e.g. the
+    second derivative has no spurious null space.
+    """
+    k = fftfreq(num_points) * num_points
+    W = (1j * k * 2 * np.pi / period) ** order
+    if num_points % 2 == 0 and order % 2 == 1:
+        W[num_points // 2] = 0
+    return np.real(scipy.linalg.circulant(np.real(ifft(W))))
+
+
+class ColatitudeDiff(GridDiff):
+    r"""Fourier derivative along a :class:`~numgrids.axes.ColatitudeAxis`.
+
+    The axis stores the half :math:`0 < \theta < \pi` of the great circle
+    :math:`[0, 2\pi)`. The values on the far half are those at
+    :math:`(\theta, \varphi + \pi)` (supplied by the grid), so the derivative
+    is computed with the Fourier differentiation matrix :math:`D` of the full
+    circle, split into the blocks acting on the near (:math:`A`) and far
+    (:math:`B`) half:
+
+    .. math::
+        \partial_\theta^n f = A\, f + B\, (\mathcal{P} f).
+    """
+
+    def __init__(self, grid: Grid, order: int, axis_index: int) -> None:
+        super().__init__(grid, order, axis_index)
+        if not isinstance(self.axis, ColatitudeAxis):
+            raise TypeError(f"Axis must be of type ColatitudeAxis. Got: {type(self.axis)}")
+        self._antipodal = grid._antipodal_map(axis_index)
+
+        n = len(self.axis)
+        D = fourier_diff_matrix(2 * n, order)
+        # Great-circle node j >= n is the point (2 pi - theta_j, phi) = (theta_{2n-1-j}, phi + pi).
+        self._A = D[:n, :n].copy()
+        self._B = D[:n, n:][:, ::-1].copy()
+        self._matrix: spmatrix | None = None
+
+        A, B, antipodal = self._A, self._B, self._antipodal
+
+        def apply(M: NDArray, f: NDArray) -> NDArray:
+            return np.moveaxis(np.tensordot(M, f, axes=([1], [axis_index])), 0, axis_index)
+
+        def operator(f: NDArray) -> NDArray:
+            return apply(A, f) + apply(B, antipodal(f))
+
+        self.operator = operator
+
+    as_matrix = RadialDiff.as_matrix

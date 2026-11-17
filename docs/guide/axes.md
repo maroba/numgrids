@@ -114,7 +114,20 @@ value at the antipodal point $(r, \varphi + \pi)$. This gives spectral
 accuracy without a coordinate singularity, and only the outer end $r = R$ is
 a boundary. A radial axis can only be used as the first axis of a
 `PolarGrid`, `CylindricalGrid` or `SphericalGrid`; see
-[Curvilinear grids](curvilinear.md#full-disks-cylinders-and-balls).
+[Curvilinear grids](curvilinear.md#full-disks-cylinders-spheres-and-balls).
+
+### Colatitude (through the poles)
+
+```python
+ax = colatitude(16)             # or create_axis("colatitude", 16, 0, np.pi)
+```
+
+The polar angle $\theta \in (0, \pi)$ of a full sphere or ball. The points are
+$\theta_j = (j + \frac12)\pi/n$, so no point lies on a pole. Derivatives use
+Fourier differentiation on the full great circle (a meridian continues across
+the pole at $\varphi + \pi$), integrals use Fejér's quadrature. The axis has no
+boundary. It can only be used as the polar axis of a `SphericalGrid` or
+`SphericalSurfaceGrid`.
 
 ## Choosing the right axis type
 
@@ -125,6 +138,7 @@ a boundary. A radial axis can only be used as the first axis of a
 | Uniform resolution, moderate accuracy needs | `EQUIDISTANT` | Simple, controllable via `acc` parameter |
 | Fine resolution near one boundary (e.g. $r \to 0$) | `LOGARITHMIC` | Concentrates points near `low` |
 | Radial coordinate of a full disk, cylinder or ball | `RADIAL` | Includes the center without a singularity |
+| Polar angle of a full sphere or ball | `COLATITUDE` | Includes the poles without a singularity |
 | Radial coordinate away from origin (annulus, shell) | `CHEBYSHEV` or `LOGARITHMIC` | Depends on whether the lower bound is positive |
 
 ```{tip}

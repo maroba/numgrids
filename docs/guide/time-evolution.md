@@ -65,7 +65,7 @@ Pass a tuple of initial fields to integrate a system; the right-hand side
 then receives and returns one array per field. The wave equation
 $\partial_t^2 u = c^2 \nabla^2 u$ becomes $\partial_t u = v$,
 $\partial_t v = c^2 \nabla^2 u$, here on a circular drum (a full disk with a
-[radial axis](curvilinear.md#full-disks-cylinders-and-balls)):
+[radial axis](curvilinear.md#full-disks-cylinders-spheres-and-balls)):
 
 ```python
 grid = PolarGrid(radial(24, 1.0), periodic(32))

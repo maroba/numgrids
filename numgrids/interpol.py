@@ -8,7 +8,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.interpolate import RegularGridInterpolator, interp1d
 
-from numgrids.axes import Axis, ChebyshevAxis, LogAxis, RadialAxis
+from numgrids.axes import Axis, ChebyshevAxis, ColatitudeAxis, EquidistantAxis, LogAxis, RadialAxis
 from numgrids.grids import Grid
 
 METHODS = ("linear", "quadratic", "cubic", "quintic", "spectral")
@@ -172,10 +172,12 @@ class Interpolator:
 
 
 def _extend_radial_axes(grid: Grid, f: NDArray) -> tuple[list[Axis], NDArray]:
-    """Replace radial axes through the origin by Chebyshev axes on the diameter.
+    """Extend folded axes to their full range.
 
-    The values on the negative half of the diameter are taken from the
-    antipodal points supplied by the grid.
+    Radial axes through the origin become Chebyshev axes on the diameter,
+    colatitude axes become periodic axes on the full great circle. The values
+    on the added halves are taken from the antipodal points supplied by the
+    grid.
     """
     axes = list(grid.axes)
     data = f
@@ -184,6 +186,16 @@ def _extend_radial_axes(grid: Grid, f: NDArray) -> tuple[list[Axis], NDArray]:
             antipodal = grid._antipodal_map(i)
             data = np.concatenate([np.flip(antipodal(data), axis=i), data], axis=i)
             axes[i] = ChebyshevAxis(2 * len(axis), -axis.high, axis.high, name=axis.name)
+    for i, axis in enumerate(grid.axes):
+        if isinstance(axis, ColatitudeAxis):
+            # The full great circle [0, 2 pi) is a periodic coordinate; its far
+            # half holds the values at (theta, phi + pi) in reversed order.
+            # (Composes with the radial extension: (s, 2 pi - theta, phi) is
+            # (s, theta, phi + pi) for any signed radius s.)
+            antipodal = grid._antipodal_map(i)
+            data = np.concatenate([data, np.flip(antipodal(data), axis=i)], axis=i)
+            low = axis.great_circle_coords[0]
+            axes[i] = EquidistantAxis(2 * len(axis), low, low + 2 * np.pi, periodic=True, name=axis.name)
     return axes, data
 
 

@@ -19,6 +19,8 @@ or instantiate one of the concrete classes directly.
 
 .. autofunction:: numgrids.radial
 
+.. autofunction:: numgrids.colatitude
+
 .. autofunction:: numgrids.create_axis
 
 .. autoclass:: numgrids.AxisType
@@ -35,3 +37,6 @@ or instantiate one of the concrete classes directly.
 
 .. autoclass:: numgrids.axes.RadialAxis
    :members: radial_quadrature_weights, diameter_coords
+
+.. autoclass:: numgrids.axes.ColatitudeAxis
+   :members: sine_quadrature_weights, great_circle_coords

@@ -15,6 +15,8 @@ Available axis types:
 - :class:`LogAxis` -- logarithmically spaced points.
 - :class:`RadialAxis` -- radial coordinate through the origin of polar,
   cylindrical and spherical grids (full disks, cylinders and balls).
+- :class:`ColatitudeAxis` -- polar angle of spherical grids that passes
+  through both poles (full spheres and balls).
 """
 
 from __future__ import annotations
@@ -615,3 +617,85 @@ def _radial_weights(r: NDArray, R: float, power: int) -> NDArray:
     half_R2 = R ** 2 / 2
     moments = 0.5 * half_R2 ** beta * half_R2 * (C.chebvander(xg, n - 1).T @ wg)
     return np.linalg.solve(V.T, moments)
+
+
+class ColatitudeAxis(Axis):
+    r"""Polar angle (colatitude) :math:`\theta \in (0, \pi)` that passes through the poles.
+
+    Use this axis for the polar angle of a :class:`~numgrids.SphericalGrid`
+    or :class:`~numgrids.SphericalSurfaceGrid` to cover the *full* sphere
+    including both poles.
+
+    The points are :math:`\theta_j = (j + \tfrac12)\pi/n`, so no point lies
+    on a pole. A meridian continues across a pole on the opposite side: the
+    point :math:`(2\pi - \theta, \varphi)` is the same as
+    :math:`(\theta, \varphi + \pi)`. Derivatives along the axis are therefore
+    computed with Fourier spectral differentiation on the full great circle
+    :math:`\theta \in [0, 2\pi)`, with the values of the far side supplied
+    by the grid ("double Fourier sphere"). This gives spectral accuracy and no
+    pole singularity. Integration uses Fejér's first quadrature rule, which is
+    exact for these nodes.
+
+    Requirements: the azimuthal axis must be periodic over :math:`2\pi` with
+    an even number of points. The axis has no boundary faces.
+
+    Parameters
+    ----------
+    num_points : int
+        Number of points on :math:`(0, \pi)`.
+    low, high : float
+        Must be 0 and :math:`\pi` (kept for a uniform axis signature).
+    """
+
+    def __init__(self, num_points: int, low: float = 0.0, high: float = np.pi, **kwargs) -> None:
+        if low != 0 or not np.isclose(high, np.pi):
+            raise ValueError(
+                f"A ColatitudeAxis always spans [0, pi] (from pole to pole), got [{low}, {high}]."
+            )
+        super().__init__(num_points, 0.0, float(np.pi), periodic=False, **kwargs)
+
+    def _setup_internal_coords(self, *args) -> NDArray:
+        n = len(self)
+        return (np.arange(n) + 0.5) / n
+
+    def _setup_external_coords(self, low: float, high: float) -> NDArray:
+        return self._coords_internal * np.pi
+
+    @property
+    def great_circle_coords(self) -> NDArray:
+        """All ``2 * num_points`` points on the full great circle ``[0, 2*pi)``."""
+        n = len(self)
+        return (np.arange(2 * n) + 0.5) * np.pi / n
+
+    @property
+    def boundary(self) -> slice:
+        return slice(None, None)
+
+    @property
+    def boundary_sides(self) -> tuple[str, ...]:
+        return ()
+
+    def create_diff_operator(self, grid: Grid, order: int, axis_index: int, acc: int = 4) -> GridDiff:
+        """Create the folded Fourier differentiation operator (``acc`` is ignored)."""
+        from numgrids.diff import ColatitudeDiff
+        return ColatitudeDiff(grid, order, axis_index)
+
+    def sine_quadrature_weights(self) -> NDArray:
+        r"""Weights :math:`w_j` with :math:`\int_0^\pi \sin\theta\, f(\theta)\,d\theta \approx \sum_j w_j f(\theta_j)`.
+
+        Fejér's first rule: exact for :math:`f = \cos(k\theta)`,
+        :math:`k < n`, i.e. for polynomials in :math:`\cos\theta` of degree
+        :math:`< n`. Averages of smooth fields over circles of latitude are
+        of this form.
+        """
+        n = len(self)
+        k = np.arange(n)
+        C = np.cos(np.outer(self.coords, k))
+        with np.errstate(divide="ignore", invalid="ignore"):
+            moments = np.where(k == 1, 0.0, (1 + (-1.0) ** k) / (1 - k.astype(float) ** 2))
+        return np.linalg.solve(C.T, moments)
+
+    def _compute_quadrature_weights(self) -> NDArray:
+        # Weights for the integral of g(theta) = sin(theta) * f(theta) dtheta
+        # (spherical grids multiply the integrand by a volume element ~ sin(theta)).
+        return self.sine_quadrature_weights() / np.sin(self.coords)

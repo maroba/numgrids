@@ -12,6 +12,12 @@ All notable changes to **numgrids** are documented on this page.
   singularity at the center, no boundary condition needed there), with
   spectral accuracy for derivatives, Laplacians, integrals and
   interpolation, no spurious eigenvalues, and stable time stepping.
+- Full spheres including the poles: `colatitude(n)` creates a polar-angle
+  axis whose derivatives continue across the poles ("double Fourier
+  sphere"), with Fejér quadrature. Together with `radial(n, R)` this covers
+  full balls without any coordinate singularity.
+- `SphericalSurfaceGrid` for the surface of a sphere; its Laplacian is the
+  Laplace--Beltrami operator (eigenvalues l(l+1)).
 
 ## 0.5.0
 
