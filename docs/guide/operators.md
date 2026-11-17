@@ -156,6 +156,12 @@ The boundary *values* may depend on the angle; only the operator and the
 type of the boundary conditions must not. If a coefficient depends on the
 angle, `"auto"` falls back to the other methods.
 
+Singular systems are solved in the least-squares sense. The typical case
+is a Poisson problem with Neumann conditions on the whole boundary, whose
+solution is only determined up to a constant: `solve` then returns one of
+the solutions (provided the data are compatible), and you can fix the
+constant afterwards, e.g. with `u - grid.mean(u)`.
+
 ### Many right-hand sides: `factorize`
 
 `L.factorize(bcs)` returns a solver that keeps the factorization. Calling

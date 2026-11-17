@@ -14,10 +14,16 @@ much faster:
 
 :class:`LinearSolver` chooses between these and sparse LU, and keeps the
 factorization for solving with many right-hand sides.
+
+Singular systems, such as a Poisson problem with Neumann conditions on the
+whole boundary (which determines the solution only up to a constant), are
+solved in the least-squares sense: if the system is consistent, the result
+is one of its solutions.
 """
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -37,6 +43,8 @@ _METHODS = ("auto", "fourier", "dense", "sparse")
 _DENSE_LIMIT = 8000
 # Up to this many points along the banded axes, a system still counts as dense.
 _BANDED_MIN_POINTS = 8
+# A dense matrix whose smallest LU pivot is below this fraction of the largest is singular.
+_SINGULAR_PIVOT = 1e-13
 # Fourier decoupling: bounds on the memory (bytes) and work (flops) of the dense mode blocks.
 _FOURIER_MAX_BYTES = 1.5e9
 _FOURIER_MAX_WORK = 2e11
@@ -167,6 +175,41 @@ class FourierBlocks:
         return int(np.ravel_multi_index([(-k) % n for k, n in zip(multi, self.mode_shape)], self.mode_shape))
 
 
+def _dense_solver(A: NDArray):
+    """A function solving ``A x = b`` for a dense matrix (least squares if *A* is singular)."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", scipy.linalg.LinAlgWarning)
+        lu, piv = scipy.linalg.lu_factor(A, check_finite=False)
+    pivots = np.abs(np.diag(lu))
+    if not np.all(np.isfinite(pivots)) or pivots.min() <= _SINGULAR_PIVOT * pivots.max():
+        pinv = scipy.linalg.pinv(A)
+        return lambda b: pinv @ b
+    return lambda b: scipy.linalg.lu_solve((lu, piv), b, check_finite=False)
+
+
+def _sparse_solver(A):
+    """A function solving ``A x = b`` for a sparse matrix."""
+    A = scipy.sparse.csc_matrix(A)
+    try:
+        lu = scipy.sparse.linalg.splu(A)
+    except RuntimeError as err:  # exactly singular
+        if A.shape[0] > _DENSE_LIMIT:
+            raise np.linalg.LinAlgError(
+                "The system is singular. If the solution is only determined up to a constant "
+                "(e.g. Neumann conditions on the whole boundary), prescribe its value somewhere."
+            ) from err
+        return _dense_solver(A.toarray())
+    if np.iscomplexobj(A):
+        return lambda b: lu.solve(np.asarray(b, dtype=complex))
+
+    def solve(b):
+        if np.iscomplexobj(b):  # real factorization, complex right-hand side
+            return lu.solve(b.real) + 1j * lu.solve(b.imag)
+        return lu.solve(b)
+
+    return solve
+
+
 class LinearSolver:
     """A factorized linear boundary value problem ``L u = rhs``.
 
@@ -232,17 +275,15 @@ class LinearSolver:
         self._real = not np.iscomplexobj(L)
         self._fourier: FourierBlocks | None = None
         self._sparse_blocks = False
-        self._lu = None
         self.method = self._choose(L, method)
         if self.method == "fourier" and self._sparse_blocks:
-            self._lu = [scipy.sparse.linalg.splu(block) for block in self._fourier.sparse_blocks(L)]
+            self._solve = [_sparse_solver(block) for block in self._fourier.sparse_blocks(L)]
         elif self.method == "fourier":
-            hat = self._fourier.blocks(L)
-            self._lu = [scipy.linalg.lu_factor(block, check_finite=False) for block in hat]
+            self._solve = [_dense_solver(block) for block in self._fourier.blocks(L)]
         elif self.method == "dense":
-            self._lu = scipy.linalg.lu_factor(L.toarray(), check_finite=False)
+            self._solve = _dense_solver(L.toarray())
         else:
-            self._lu = scipy.sparse.linalg.splu(scipy.sparse.csc_matrix(L))
+            self._solve = _sparse_solver(L)
 
     def _choose(self, L, method: str) -> str:
         n = L.shape[0]
@@ -278,23 +319,13 @@ class LinearSolver:
         real = self._real and not np.iscomplexobj(b)
         if self.method == "fourier":
             coeffs = self._fourier.forward(b)
-            for m, lu in enumerate(self._lu):
-                if self._sparse_blocks:
-                    coeffs[:, m] = lu.solve(coeffs[:, m])
-                else:
-                    coeffs[:, m] = scipy.linalg.lu_solve(lu, coeffs[:, m], check_finite=False)
+            for m, solve in enumerate(self._solve):
+                coeffs[:, m] = solve(coeffs[:, m])
             u = self._fourier.backward(coeffs)
-            if real:
-                u = u.real
-        elif self.method == "dense":
-            u = scipy.linalg.lu_solve(self._lu, b, check_finite=False)
         else:
-            if not self._real and not np.iscomplexobj(b):
-                b = b.astype(complex)
-            if real or not self._real:
-                u = self._lu.solve(b)
-            else:  # real factorization, complex right-hand side
-                u = self._lu.solve(b.real) + 1j * self._lu.solve(b.imag)
+            u = self._solve(b)
+        if real:
+            u = np.real(u)
         return np.asarray(u).reshape(grid.shape)
 
     solve = __call__

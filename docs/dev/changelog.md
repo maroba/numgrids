@@ -44,6 +44,9 @@ All notable changes to **numgrids** are documented on this page.
   - *Dense LU* for spectral grids, where sparse LU fills in almost
     completely (several times faster).
   - *Sparse LU* for finite differences, as before.
+- **Singular systems**, such as a Poisson problem with Neumann conditions on
+  the whole boundary, are solved in the least-squares sense: `solve` returns
+  one of the solutions instead of depending on round-off.
 - **Reusable factorizations**: `Operator.factorize(bcs)` returns a
   `LinearSolver` that solves for many right-hand sides with one
   factorization, e.g. for implicit time stepping.

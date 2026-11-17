@@ -169,3 +169,40 @@ def test_banded_points():
     assert banded_points(A, fd, axes=[1]) == 1
     cheb = Grid(x=chebyshev(12, 0, 1), y=chebyshev(12, 0, 1))
     assert banded_points(cheb.laplacian_operator().matrix, cheb) == 1
+
+
+class TestSingularSystems:
+    """Pure Neumann problems determine the solution up to a constant."""
+
+    @pytest.mark.parametrize("method", ["auto", "fourier", "dense", "sparse"])
+    def test_neumann_problem_on_the_disk(self, method):
+        disk = PolarGrid(radial(12, 1.0), periodic(16))
+        X, Y = disk.cartesian_coords
+        u = disk.laplacian_operator().solve(4.0, bcs=Neumann(2.0), method=method)      # u = r^2 + c
+        assert np.all(np.isfinite(u))
+        exact = X ** 2 + Y ** 2
+        np.testing.assert_allclose(u - u.mean(), exact - exact.mean(), atol=1e-8)
+
+    @pytest.mark.parametrize("method", ["auto", "dense", "sparse"])
+    def test_neumann_problem_on_an_interval(self, method):
+        grid = Grid(x=chebyshev(16, 0, 1))
+        x = grid.coords
+        u = grid.diff_operator(2).solve(2.0, bcs={"x_low": Neumann(0), "x_high": Neumann(2)}, method=method)
+        assert np.all(np.isfinite(u))
+        np.testing.assert_allclose(u - u[0], x ** 2, atol=1e-9)
+
+    def test_periodic_poisson_problem(self):
+        grid = Grid(x=periodic(32))
+        x = grid.coords
+        u = grid.diff_operator(2).solve(-np.sin(x))          # u = sin(x) + c
+        np.testing.assert_allclose(u - u.mean(), np.sin(x), atol=1e-11)
+
+    def test_exactly_singular_sparse_matrix(self):
+        from numgrids import Operator
+        grid = Grid(x=equidistant(12, 0, 1))
+        A = np.eye(12)
+        A[5] = A[4]                                           # two equal rows: exactly singular
+        solver = Operator(grid, A).factorize(method="sparse")
+        b = np.arange(12.0)
+        b[5] = b[4]                                           # consistent right-hand side
+        np.testing.assert_allclose(A @ solver(b), b, atol=1e-12)
