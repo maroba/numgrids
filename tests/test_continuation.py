@@ -98,8 +98,9 @@ class TestBratu:
         fd = continuation(rod, F, 0, 0, bcs=0, max_steps=50)
         assert len(exact.folds) == 1
         npt.assert_array_equal(fd.folds, exact.folds)
-        npt.assert_allclose(fd.params, exact.params, atol=1e-6)
-        npt.assert_allclose(fd.u, exact.u, atol=1e-6)
+        # The finite-difference Jacobian places the points slightly differently along the branch.
+        npt.assert_allclose(fd.params, exact.params, atol=1e-5)
+        npt.assert_allclose(fd.u, exact.u, atol=1e-5)
 
     def test_sparse_bordered_system(self, rod, monkeypatch):
         F, J = bratu(rod)
@@ -239,9 +240,12 @@ class TestSystems:
             x = rod.coords
             npt.assert_allclose(u[-1], bratu_exact(x, branch.params[-1], upper=True), atol=1e-7)
             # Two identical fields have the same mean square as one: the same arclength.
-            npt.assert_allclose(branch.params, scalar.params, atol=1e-6)
+            # A finite-difference Jacobian places the points less exactly along the
+            # branch, most of all at the fold, where the solution changes fastest.
+            atol = 1e-5 if jacobian is None else 1e-8
+            npt.assert_allclose(branch.params, scalar.params, atol=atol)
             npt.assert_allclose(branch.measure(lambda u, v: np.max(u + v)), 2 * scalar.measure(np.max),
-                                atol=1e-6)
+                                atol=atol)
 
 
 class TestStoppingAndErrors:
