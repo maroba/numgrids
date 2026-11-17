@@ -486,6 +486,11 @@ class NeumannBC(BoundaryCondition):
 class RobinBC(BoundaryCondition):
     r"""Robin boundary condition: :math:`a\,u + b\,\partial u/\partial n = g`.
 
+    The coefficients may vary along the face: like the value, they can be
+    arrays matching the face or callables of the face coordinates, e.g. for
+    Newton's law of cooling :math:`h\,u + k\,\partial u/\partial n = h\,u_\infty`
+    with a conductivity :math:`k` that depends on the position.
+
     Parameters
     ----------
     face : BoundaryFace
@@ -496,11 +501,6 @@ class RobinBC(BoundaryCondition):
         Coefficient of the normal derivative.
     value : float, NDArray, or callable
         The prescribed value *g*.
-
-    The coefficients may vary along the face: like the value, they can be
-    arrays matching the face or callables of the face coordinates, e.g. for
-    Newton's law of cooling :math:`h\,u + k\,\partial u/\partial n = h\,u_\infty`
-    with a conductivity :math:`k` that depends on the position.
     """
 
     def __init__(self, face: BoundaryFace, a, b, value=0.0) -> None:
