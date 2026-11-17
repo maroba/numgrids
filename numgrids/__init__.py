@@ -17,6 +17,7 @@ from .api import (
     AxisType,
     Diff,
     chebyshev,
+    colatitude,
     create_axis,
     diff,
     equidistant,
@@ -26,7 +27,7 @@ from .api import (
     periodic,
     radial,
 )
-from .axes import ChebyshevAxis, EquidistantAxis, LogAxis, RadialAxis
+from .axes import ChebyshevAxis, ColatitudeAxis, EquidistantAxis, LogAxis, RadialAxis
 from .boundary import (
     BoundaryFace,
     Dirichlet,
@@ -47,6 +48,7 @@ from .curvilinear import (
     PolarGrid,
     ProlateSpheroidalGrid,
     SphericalGrid,
+    SphericalSurfaceGrid,
 )
 from .evolution import EvolutionResult, evolve
 from .grids import Grid, MultiGrid
@@ -81,6 +83,7 @@ __all__ = [
     "AxisType",
     "BoundaryFace",
     "ChebyshevAxis",
+    "ColatitudeAxis",
     "ConvergenceResult",
     "CurvilinearGrid",
     "CylindricalGrid",
@@ -106,9 +109,11 @@ __all__ = [
     "Robin",
     "RobinBC",
     "SphericalGrid",
+    "SphericalSurfaceGrid",
     "adapt",
     "apply_bcs",
     "chebyshev",
+    "colatitude",
     "convergence_study",
     "create_axis",
     "diff",

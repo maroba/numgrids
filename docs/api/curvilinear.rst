@@ -5,13 +5,16 @@ Curvilinear grids extend the base grid infrastructure to non-Cartesian
 coordinate systems.  They provide vector calculus operators -- gradient,
 divergence, curl, and Laplacian -- that account for the metric factors of the
 underlying coordinate system.  Concrete implementations are supplied for
-spherical, cylindrical, polar, elliptic cylindrical, prolate spheroidal and
-oblate spheroidal coordinates.
+spherical, spherical surface, cylindrical, polar, elliptic cylindrical,
+prolate spheroidal and oblate spheroidal coordinates.
 
 .. autoclass:: numgrids.CurvilinearGrid
    :members:
 
 .. autoclass:: numgrids.SphericalGrid
+   :members:
+
+.. autoclass:: numgrids.SphericalSurfaceGrid
    :members:
 
 .. autoclass:: numgrids.CylindricalGrid

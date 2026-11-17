@@ -155,7 +155,7 @@ Grid points *on* a coordinate singularity (such as $r = 0$) yield empty
 operator rows. `solve` raises an error and `eig` warns about spurious zero
 eigenvalues in that case. For full disks, cylinders and balls use a radial
 axis instead, which handles the center without a singularity (see
-[Curvilinear grids](curvilinear.md#full-disks-cylinders-and-balls)).
+[Curvilinear grids](curvilinear.md#full-disks-cylinders-spheres-and-balls)).
 ```
 
 A circular drum:

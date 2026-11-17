@@ -4,6 +4,18 @@ All notable changes to **numgrids** are documented on this page.
 
 ## Unreleased
 
+### Breaking changes
+
+- The minimum supported SciPy version is now 1.11. SciPy 1.10's sparse LU
+  solver (used by `Operator.solve` and `Operator.eig`) crashes with a
+  segmentation fault on some CPUs, e.g. on GitHub's CI runners.
+
+### Bug fixes
+
+- `Operator.eig` (sparse path, more than 2000 unknowns): no loss of
+  accuracy for operators with an exact zero eigenvalue, no missed members
+  of degenerate eigenvalue clusters, and reproducible results.
+
 ### New features
 
 - Full disks, cylinders and balls: `radial(n, R)` creates a radial axis
@@ -12,6 +24,12 @@ All notable changes to **numgrids** are documented on this page.
   singularity at the center, no boundary condition needed there), with
   spectral accuracy for derivatives, Laplacians, integrals and
   interpolation, no spurious eigenvalues, and stable time stepping.
+- Full spheres including the poles: `colatitude(n)` creates a polar-angle
+  axis whose derivatives continue across the poles ("double Fourier
+  sphere"), with Fejér quadrature. Together with `radial(n, R)` this covers
+  full balls without any coordinate singularity.
+- `SphericalSurfaceGrid` for the surface of a sphere; its Laplacian is the
+  Laplace--Beltrami operator (eigenvalues l(l+1)).
 
 ## 0.5.0
 

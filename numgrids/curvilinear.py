@@ -28,12 +28,15 @@ import numpy as np
 import scipy.sparse
 from numpy.typing import NDArray
 
-from numgrids.axes import Axis, RadialAxis
+from numgrids.axes import Axis, ColatitudeAxis, RadialAxis
 from numgrids.grids import Grid
 
 if TYPE_CHECKING:
     from numgrids.operators import Operator
 
+
+#: Axis types whose derivatives fold the domain across a coordinate singularity.
+_FOLDED_AXES = (RadialAxis, ColatitudeAxis)
 
 ScaleFactorFn = Callable[[tuple[NDArray, ...]], NDArray]
 """Type alias: a scale factor receives meshed coordinates and returns an array."""
@@ -164,9 +167,9 @@ class CurvilinearGrid(Grid):
         self._h_arrays: tuple[NDArray, ...] | None = None
         self._jacobian: NDArray | None = None
         self._lap_coeffs: list | None = None
-        # Fail early if a radial axis through the origin cannot be supported:
+        # Fail early if an axis through the origin or the poles cannot be supported:
         for i, ax in enumerate(self.axes):
-            if isinstance(ax, RadialAxis):
+            if isinstance(ax, _FOLDED_AXES):
                 self._antipodal_map(i)
 
     def _antipodal_map(self, axis_index: int):
@@ -365,9 +368,9 @@ class CurvilinearGrid(Grid):
             with np.errstate(divide="ignore", invalid="ignore"):
                 for i in range(self.ndims):
                     c = _finite_or_zero(J / h[i] ** 2)
-                    if isinstance(self.axes[i], RadialAxis):
-                        # The coefficient (e.g. c = r) is not an even field on the
-                        # diameter, so the folded derivative does not apply to it.
+                    if isinstance(self.axes[i], _FOLDED_AXES):
+                        # The coefficient (e.g. c = r or sin(theta)) is not an even field
+                        # across the origin/poles, so the folded derivative does not apply.
                         dc = self._coefficient_derivative(i)
                     else:
                         dc = self.diff(c, 1, i)
@@ -516,9 +519,10 @@ def _ones(c):
 
 
 def _check_radial_index(grid, axis_index: int) -> None:
-    if axis_index != 0:
+    if axis_index != 0 or not isinstance(grid.axes[axis_index], RadialAxis):
         raise ValueError(
-            f"Only the first (radial) axis of a {type(grid).__name__} can be a RadialAxis."
+            f"Only the first (radial) axis of a {type(grid).__name__} can be a RadialAxis, "
+            "and no other axis can be folded across a singularity."
         )
 
 
@@ -527,7 +531,7 @@ def _half_turn_shift(grid, phi_index: int) -> int:
     axis = grid.axes[phi_index]
     if not axis.periodic or len(axis) % 2 or not np.isclose(axis.period, 2 * np.pi):
         raise ValueError(
-            "A RadialAxis through the origin requires a periodic azimuthal axis over 2*pi "
+            "A RadialAxis or ColatitudeAxis requires a periodic azimuthal axis over 2*pi "
             f"with an even number of points; got {axis!r}."
         )
     return len(axis) // 2
@@ -541,14 +545,22 @@ def _polar_antipodal(grid, axis_index: int):
 
 
 def _spherical_antipodal(grid, axis_index: int):
-    """Antipodal map (r, theta, phi) -> (r, pi - theta, phi + pi) for spherical grids."""
+    """Antipodal maps of spherical grids.
+
+    Radial axis: (-r, theta, phi) is (r, pi - theta, phi + pi).
+    Colatitude axis: (2 pi - theta, phi) is (theta, phi + pi); the reversal of
+    theta is part of the folded differentiation matrix, so only phi is shifted.
+    """
+    if axis_index == 1 and isinstance(grid.axes[1], ColatitudeAxis):
+        shift = _half_turn_shift(grid, 2)
+        return lambda f: np.roll(f, shift, axis=2)
     _check_radial_index(grid, axis_index)
     shift = _half_turn_shift(grid, 2)
     theta = grid.axes[1].coords
     if not np.allclose(theta + theta[::-1], np.pi, atol=1e-12):
         raise ValueError(
             "A RadialAxis through the origin of a SphericalGrid requires a polar axis "
-            "that is symmetric about pi/2 (e.g. chebyshev(n, eps, pi - eps))."
+            "that is symmetric about pi/2 (e.g. colatitude(n) or chebyshev(n, eps, pi - eps))."
         )
     return lambda f: np.roll(np.flip(f, axis=1), shift, axis=2)
 
@@ -848,5 +860,69 @@ class OblateSpheroidalGrid(CurvilinearGrid):
                 a * np.cosh(c[0]) * np.cos(c[1]) * np.cos(c[2]),
                 a * np.cosh(c[0]) * np.cos(c[1]) * np.sin(c[2]),
                 a * np.sinh(c[0]) * np.sin(c[1]),
+            ),
+        )
+
+
+def _surface_antipodal(grid, axis_index: int):
+    """Antipodal map (2 pi - theta, phi) -> (theta, phi + pi) on the sphere surface."""
+    if axis_index != 0 or not isinstance(grid.axes[0], ColatitudeAxis):
+        raise ValueError(
+            "Only the first (polar angle) axis of a SphericalSurfaceGrid can be a ColatitudeAxis."
+        )
+    shift = _half_turn_shift(grid, 1)
+    return lambda f: np.roll(f, shift, axis=1)
+
+
+class SphericalSurfaceGrid(CurvilinearGrid):
+    r"""A 2D grid on the surface of a sphere of radius *R*, coordinates :math:`(\theta, \varphi)`.
+
+    .. math::
+        x = R\sin\theta\cos\varphi, \quad
+        y = R\sin\theta\sin\varphi, \quad
+        z = R\cos\theta; \qquad
+        h_\theta = R,\ h_\varphi = R\sin\theta
+
+    The Laplacian is the Laplace--Beltrami operator of the sphere, whose
+    eigenfunctions are the spherical harmonics. With a
+    :func:`~numgrids.colatitude` axis the whole sphere including both poles is
+    covered with spectral accuracy:
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from numgrids import SphericalSurfaceGrid, colatitude, periodic
+    >>> sphere = SphericalSurfaceGrid(colatitude(16), periodic(32))
+    >>> vals, _ = (-sphere.laplacian_operator()).eig(k=9)
+    >>> np.round(vals, 8) + 0.0     # l (l + 1) with multiplicity 2 l + 1
+    array([0., 2., 2., 2., 6., 6., 6., 6., 6.])
+    >>> round(sphere.integrate(np.ones(sphere.shape)), 12) == round(4 * np.pi, 12)
+    True
+
+    Unnamed axes are named ``"theta"`` and ``"phi"``.
+
+    Parameters
+    ----------
+    theta_axis, phi_axis : Axis
+        Polar angle (e.g. :func:`~numgrids.colatitude`) and azimuth
+        (periodic over :math:`2\pi`).
+    radius : float
+        Radius *R* of the sphere (default 1).
+    """
+
+    _default_axis_names = ("theta", "phi")
+
+    def __init__(self, theta_axis: Axis, phi_axis: Axis, radius: float = 1.0) -> None:
+        self.radius = radius
+        self._params = {"radius": radius}
+        self._antipodal_fn = _surface_antipodal
+        R = radius
+        super().__init__(
+            theta_axis, phi_axis,
+            scale_factors=(lambda c: R * np.ones_like(c[0]), lambda c: R * np.sin(c[0])),
+            cartesian=lambda c: (
+                R * np.sin(c[0]) * np.cos(c[1]),
+                R * np.sin(c[0]) * np.sin(c[1]),
+                R * np.cos(c[0]),
             ),
         )

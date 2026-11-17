@@ -46,7 +46,7 @@ packages (installed automatically by pip):
 | Package       | Minimum version | Purpose                                  |
 |---------------|-----------------|------------------------------------------|
 | numpy         | >= 1.22         | Array operations and meshgrid generation |
-| scipy         | >= 1.10.1       | Sparse matrices, interpolation, linear algebra, ODE solvers |
+| scipy         | >= 1.11         | Sparse matrices, interpolation, linear algebra, ODE solvers |
 | findiff       | >= 0.10         | Finite-difference stencil generation     |
 | matplotlib    | >= 3.5          | Plotting (optional, `numgrids[plot]`)    |
 | xarray        | >= 2023.1       | Labelled data and NetCDF (optional, `numgrids[xarray]`) |

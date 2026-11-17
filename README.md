@@ -16,8 +16,8 @@ of bookkeeping grid indices and scale factors.
 - Numerical grids in any dimension from **equidistant**, **Chebyshev**, **logarithmic**, and **periodic** axes
 - High-precision **spectral methods** (FFT + Chebyshev) selected automatically where possible
 - Differentiation, integration (Clenshaw–Curtis, trapezoidal), and interpolation (spline or spectral)
-- **Curvilinear coordinates**: spherical, cylindrical, polar, elliptic cylindrical, prolate and oblate spheroidal — or your own via scale factors
-- **Full disks, cylinders and balls**: a radial axis through the origin handles the center without a coordinate singularity
+- **Curvilinear coordinates**: spherical (volume and surface), cylindrical, polar, elliptic cylindrical, prolate and oblate spheroidal — or your own via scale factors
+- **Full disks, cylinders, spheres and balls**: axes through the origin and the poles handle these points without coordinate singularities
 - **Vector calculus**: gradient, divergence, curl, and Laplacian on Cartesian and curvilinear grids; volume and surface integrals
 - **Operator algebra** — write `-0.5 * D2 + V` — with built-in `solve()` for boundary value problems and `eig()` for eigenvalue problems
 - **Boundary conditions**: Dirichlet, Neumann, and Robin, specified as compactly as `bcs={"x_low": 0, "x_high": Neumann(1)}`

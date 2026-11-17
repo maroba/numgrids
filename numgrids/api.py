@@ -9,7 +9,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.sparse import spmatrix
 
-from numgrids.axes import Axis, ChebyshevAxis, EquidistantAxis, LogAxis, RadialAxis
+from numgrids.axes import Axis, ChebyshevAxis, ColatitudeAxis, EquidistantAxis, LogAxis, RadialAxis
 from numgrids.curvilinear import (  # noqa: F401  (re-exported for backward compatibility)
     CurvilinearGrid,
     CylindricalGrid,
@@ -18,6 +18,7 @@ from numgrids.curvilinear import (  # noqa: F401  (re-exported for backward comp
     PolarGrid,
     ProlateSpheroidalGrid,
     SphericalGrid,
+    SphericalSurfaceGrid,
 )
 from numgrids.grids import Grid
 
@@ -160,12 +161,16 @@ class AxisType(str, enum.Enum):
     RADIAL
         Radial coordinate through the origin of polar, cylindrical and
         spherical grids (requires ``low = 0``).
+    COLATITUDE
+        Polar angle of spherical grids through both poles (requires
+        ``low = 0, high = pi``).
     """
     EQUIDISTANT = "equidistant"
     EQUIDISTANT_PERIODIC = "equidistant_periodic"
     CHEBYSHEV = "chebyshev"
     LOGARITHMIC = "log"
     RADIAL = "radial"
+    COLATITUDE = "colatitude"
 
 
 _AXIS_TYPE_ALIASES = {
@@ -222,6 +227,8 @@ def create_axis(axis_type: AxisType | str, num_points: int, low: float, high: fl
         return LogAxis(num_points, low, high, **kwargs)
     elif axis_type == AxisType.RADIAL:
         return RadialAxis(num_points, low, high, **kwargs)
+    elif axis_type == AxisType.COLATITUDE:
+        return ColatitudeAxis(num_points, low, high, **kwargs)
     else:
         raise NotImplementedError(f"No such axis type: {axis_type}")
 
@@ -301,6 +308,27 @@ def radial(num_points: int, radius: float = 1.0, name: str | None = None) -> Rad
     ['0_high']
     """
     return RadialAxis(num_points, 0.0, radius, name=name)
+
+
+def colatitude(num_points: int, name: str | None = None) -> ColatitudeAxis:
+    """Polar angle on ``(0, pi)`` that passes through both poles.
+
+    Use it as the polar axis of a :class:`SphericalGrid` or
+    :class:`SphericalSurfaceGrid` to cover the full sphere including the
+    poles. There is no grid point on a pole and no boundary condition is
+    needed there; see :class:`~numgrids.axes.ColatitudeAxis`.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from numgrids import SphericalGrid, colatitude, periodic, radial
+    >>> ball = SphericalGrid(radial(12, 1.0), colatitude(12), periodic(24))
+    >>> round(ball.integrate(np.ones(ball.shape)), 12) == round(4 / 3 * np.pi, 12)
+    True
+    >>> list(ball.faces)      # only the surface of the ball is a boundary
+    ['0_high']
+    """
+    return ColatitudeAxis(num_points, 0.0, np.pi, name=name)
 
 
 # ── convenience functions ─────────────────────────────────────────
