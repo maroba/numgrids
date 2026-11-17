@@ -70,6 +70,7 @@ from .linalg import LinearSolver
 from .multigrid import MultiGridError, MultiGridInfo, MultiGridSolver
 from .nonlinear import ContinuationResult, NonlinearSolverError, continuation, solve_nonlinear
 from .operators import Operator
+from .stability import Bifurcation, StabilityResult, linear_stability
 
 
 def Axis(*args, **kwargs):
@@ -95,6 +96,7 @@ __all__ = [
     "AdaptationResult",
     "Axis",
     "AxisType",
+    "Bifurcation",
     "BoundaryFace",
     "ChebyshevAxis",
     "ColatitudeAxis",
@@ -132,6 +134,7 @@ __all__ = [
     "SemiInfiniteAxis",
     "SphericalGrid",
     "SphericalSurfaceGrid",
+    "StabilityResult",
     "TimeDependent",
     "adapt",
     "apply_bcs",
@@ -148,6 +151,7 @@ __all__ = [
     "infinite",
     "integrate",
     "interpolate",
+    "linear_stability",
     "load_grid",
     "logarithmic",
     "periodic",

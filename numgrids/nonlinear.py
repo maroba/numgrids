@@ -7,7 +7,11 @@ numgrids tools (``grid.diff``, ``grid.laplacian``, operators, ...).
 
 :func:`continuation` follows the solutions of :math:`F(u, \\lambda) = 0`
 while the parameter :math:`\\lambda` changes (pseudo-arclength
-continuation), also around folds, where the branch turns back.
+continuation), also around folds, where the branch turns back.  It
+locates the folds and, on request, computes the stability of the solutions
+and detects the bifurcations along the branch.  :func:`linear_stability`
+(see :mod:`numgrids.stability`) tells if a single solution is stable as a
+steady state of the evolution equation :math:`u_t = F(u)`.
 
 Examples
 --------
@@ -34,8 +38,29 @@ import scipy.sparse
 import scipy.sparse.linalg
 from numpy.typing import NDArray
 
+from numgrids.stability import (
+    _NEUTRAL,
+    Bifurcation,
+    StabilityResult,
+    _analyze_branch,
+    _Linearization,
+    _parabola_extremum,
+    _turning_points,
+    linear_stability,
+)
+
 if TYPE_CHECKING:
     from numgrids.grids import Grid
+
+__all__ = [
+    "Bifurcation",
+    "ContinuationResult",
+    "NonlinearSolverError",
+    "StabilityResult",
+    "continuation",
+    "linear_stability",
+    "solve_nonlinear",
+]
 
 
 # Linear systems up to this size are solved with dense LU.
@@ -167,19 +192,45 @@ class ContinuationResult:
         valid.
     message : str
         Why the continuation stopped.
+    eigenvalues : NDArray, optional
+        With ``stability=k``: the *k* leading eigenvalues of the
+        linearization at each point, shape ``(n, k)``, largest real part
+        first (see :func:`~numgrids.linear_stability`).  A real
+        array if all of them are real.
+    stable : NDArray of bool, optional
+        With ``stability=k``: whether the solution at each point is
+        linearly stable (all computed eigenvalues have a negative real
+        part).
+    n_unstable : NDArray of int, optional
+        With ``stability=k``: the number of eigenvalues with a positive
+        real part at each point, among the computed ones.
+    bifurcations : list of Bifurcation, optional
+        The bifurcations in the order in which they occur along the
+        branch: the folds and, with ``stability=k``, the branch points and
+        Hopf bifurcations (see :class:`~numgrids.Bifurcation`).
     """
 
     params: NDArray
     u: Any
     success: bool
     message: str
+    eigenvalues: NDArray | None = None
+    stable: NDArray | None = None
+    n_unstable: NDArray | None = None
+    bifurcations: list[Bifurcation] | None = None
 
     def __repr__(self) -> str:
         if len(self.params) == 0:
             return "ContinuationResult(0 points)"
-        return (f"ContinuationResult({len(self.params)} points, parameter from "
-                f"{self.params[0]:.6g} to {self.params[-1]:.6g}, {len(self.folds)} fold(s), "
-                f"success={self.success})")
+        text = (f"ContinuationResult({len(self.params)} points, parameter from "
+                f"{self.params[0]:.6g} to {self.params[-1]:.6g}, {len(self.folds)} fold(s)")
+        if self.stable is not None:
+            text += f", {int(np.sum(self.stable))} stable point(s)"
+            kinds = [bif.kind for bif in self.bifurcations or []]
+            for kind, name in (("branch_point", "branch point(s)"), ("hopf", "Hopf bifurcation(s)")):
+                if kind in kinds:
+                    text += f", {kinds.count(kind)} {name}"
+        return text + f", success={self.success})"
 
     def __len__(self) -> int:
         """Number of points on the branch."""
@@ -192,15 +243,47 @@ class ContinuationResult:
         At a fold (turning point, saddle-node bifurcation) the branch
         reverses its direction in the parameter: :math:`d\lambda / ds`
         changes sign.  ``params[folds]`` are the largest (or smallest)
-        parameters reached there; they approximate the critical parameters
-        the better, the smaller the step *ds* of the continuation.
+        parameters among the points of the branch; the folds themselves
+        lie between the points, see :attr:`fold_params`.
         """
-        d = np.diff(self.params)
-        # Steps without a significant change of the parameter (vertical parts of a
-        # branch) carry no direction, only rounding noise.
-        steps = np.flatnonzero(np.abs(d) > 1e-9 * (1 + np.abs(self.params[:-1])))
-        signs = np.sign(d[steps])
-        return steps[1:][signs[1:] != signs[:-1]]
+        return _turning_points(self.params)[1]
+
+    @property
+    def fold_params(self) -> NDArray:
+        r"""The parameters of the folds, one for each entry of :attr:`folds`.
+
+        :func:`continuation` locates each fold on the branch as the point
+        where :math:`d\lambda / ds = 0`, to the accuracy of the solver
+        (not of the step *ds*).  Without that (``refine=False``), the
+        values are estimates: the extremum of a parabola through the three
+        points of the branch around the fold.
+        """
+        if self.bifurcations is not None:
+            return np.array([bif.param for bif in self.bifurcations if bif.kind == "fold"])
+        fields = self.u if isinstance(self.u, tuple) else (self.u,)
+        found = []
+        for k in self.folds:
+            # Chord lengths in the arclength of the continuation.
+            chords = [np.sqrt(np.mean([np.mean((f[j + 1] - f[j]) ** 2) for f in fields])
+                              + (self.params[j + 1] - self.params[j]) ** 2) for j in (k - 1, k)]
+            found.append(_parabola_extremum(np.cumsum([0.0, *chords]), self.params[k - 1:k + 2]))
+        return np.array(found)
+
+    @property
+    def fold_u(self):
+        """The solutions at the folds, shape ``(len(folds), *grid.shape)``.
+
+        A tuple with one such array per field for coupled systems.  If the
+        folds have not been located (see :attr:`fold_params`), the nearest
+        points of the branch.
+        """
+        if self.bifurcations is None:
+            return tuple(f[self.folds] for f in self.u) if isinstance(self.u, tuple) else self.u[self.folds]
+        at_folds = [bif.u for bif in self.bifurcations if bif.kind == "fold"]
+        if isinstance(self.u, tuple):
+            return tuple(np.array([u[f] for u in at_folds]).reshape(-1, *field.shape[1:])
+                         for f, field in enumerate(self.u))
+        return np.array(at_folds).reshape(-1, *self.u.shape[1:])
 
     def measure(self, func: Callable) -> NDArray:
         """Evaluate a function on every solution of the branch.
@@ -240,6 +323,11 @@ def continuation(
     maxiter: int = 20,
     callback: Callable | None = None,
     verbose: bool = False,
+    stability: int | None = None,
+    mass=None,
+    sign: int = 1,
+    refine: bool = True,
+    tangent=None,
 ) -> ContinuationResult:
     r"""Follow a branch of solutions of :math:`F(u, \lambda) = 0` in the parameter.
 
@@ -307,13 +395,43 @@ def continuation(
         continuation stops.
     verbose : bool
         Print the parameter and the step size after each step.
+    stability : int, optional
+        Compute this many leading eigenvalues of the linearization at
+        every point of the branch (see
+        :func:`~numgrids.linear_stability`), and detect the
+        bifurcations where eigenvalues cross the imaginary axis.  The
+        result then has the attributes ``eigenvalues``, ``stable`` and
+        ``n_unstable``, and ``bifurcations`` lists branch points and Hopf
+        bifurcations besides the folds.  The eigenvalues belong to the
+        evolution equation :math:`u_t = F(u, \lambda)`.
+    mass : optional
+        With *stability*: the operator :math:`M` of the evolution equation
+        :math:`M u_t = F(u, \lambda)`, as in
+        :func:`~numgrids.linear_stability`.
+    sign : {1, -1}
+        With *stability*: ``-1`` for the evolution equation
+        :math:`u_t = -F(u, \lambda)`.
+    refine : bool
+        Locate the folds and the other bifurcations on the branch, to the
+        accuracy of the solver (a few additional solves for each of them).
+        If ``False``, they are only interpolated between the points of the
+        branch.
+    tangent : NDArray or tuple of NDArray, optional
+        Branch switching: start from *u0* at *param* along this direction
+        in the solution (fields like *u0*) instead of along the parameter;
+        *direction* selects the side.  For a branch point ``bp`` detected
+        on another branch, ``u0=bp.u, param=bp.param, tangent=bp.mode``
+        follows the branch that bifurcates there.  *u0* is taken as the
+        solution at *param* without correcting it (the Jacobian is
+        singular at a branch point).
 
     Returns
     -------
     ContinuationResult
         The branch: parameters ``params``, solutions ``u``, the indices
-        ``folds`` of the turning points, and ``measure(func)`` to reduce
-        each solution to a number for a bifurcation diagram.
+        ``folds`` of the turning points with their accurate parameters
+        ``fold_params``, the ``bifurcations``, and ``measure(func)`` to
+        reduce each solution to a number for a bifurcation diagram.
 
     Raises
     ------
@@ -322,8 +440,18 @@ def continuation(
 
     Notes
     -----
-    Branch points, where several branches cross, are not detected: the
-    continuation stays on the branch it follows.
+    The continuation stays on the branch it follows, also at branch points,
+    where several branches cross.  With *stability* the branch points are
+    detected, and *tangent* starts a continuation of the other branch.
+
+    Bifurcations are found from the eigenvalues at neighbouring points of
+    the branch: an eigenvalue that crosses the imaginary axis and returns
+    within one step goes unnoticed, as does one that is not among the
+    *stability* leading eigenvalues at these points.  In particular,
+    ``n_unstable`` cannot exceed the number of computed eigenvalues; choose
+    it larger than the number of unstable modes of interest.  Branch
+    switching with *tangent* assumes that the new branch leaves the branch
+    point roughly along the critical mode, as at a pitchfork bifurcation.
 
     Examples
     --------
@@ -343,12 +471,32 @@ def continuation(
     >>> round(float(branch.params[branch.folds[0]]), 2)
     3.51
 
+    The fold itself lies between two points of the branch and is located
+    accurately:
+
+    >>> round(float(branch.fold_params[0]), 8)
+    3.51383072
+
     Beyond the fold, the parameter decreases again, on the upper branch of
     solutions:
 
     >>> max_u = branch.measure(np.max)
     >>> bool(branch.params[-1] < 3.51 and max_u[-1] > max_u[branch.folds[0]])
     True
+
+    With ``stability=k``, the *k* leading eigenvalues of the linearization
+    are computed along the branch.  The solutions are stable up to the
+    fold and unstable (with one growing mode) behind it:
+
+    >>> branch = continuation(grid, lambda u, lam: D2(u) + lam * np.exp(u), u0=0, param=0,
+    ...                       bcs=0, jacobian=lambda u, lam: D2 + lam * np.exp(u),
+    ...                       ds=0.05, max_steps=100, stability=4)
+    >>> branch
+    ContinuationResult(101 points, parameter from 0 to 2.42244, 1 fold(s), 74 stable point(s), success=True)
+    >>> branch.bifurcations
+    [Bifurcation(fold at param = 3.513830719, between the points 73 and 74)]
+    >>> bool(np.all(branch.stable[:74])), int(branch.n_unstable[-1])
+    (True, 1)
     """
     problem = _Problem(grid, residual, u0, bcs, jacobian)
     if np.iscomplexobj(problem.y0):
@@ -362,6 +510,7 @@ def continuation(
     lo, hi = (-np.inf, np.inf) if param_range is None else sorted(map(float, param_range))
     if not lo <= lam0 <= hi:
         raise ValueError(f"param = {param} lies outside of param_range = {tuple(param_range)}.")
+    linearization = None if stability is None else _Linearization(problem, stability, mass, sign)
 
     n = problem.y0.size
     eps = np.sqrt(np.finfo(float).eps)
@@ -370,12 +519,17 @@ def continuation(
         # Mean instead of sum over the grid: arclengths independent of the resolution.
         return float(y1 @ y2) / n + l1 * l2
 
-    def bordered(y, r, lam, ty, tl):
+    def bordered(y, r, lam, ty, tl, accurate=False):
         """Factorize [[dF/dy, dF/dlam], [ty / n, tl]], the matrix of the bordered systems."""
-        h = eps * max(1.0, abs(lam))
-        h = (lam + h) - lam  # exactly representable step
-        Fl = (problem.F(y, lam + h) - r) / h
-        J = problem.jacobian(y, r, lam)
+        if accurate:
+            # Central difference: tangents to 1e-10, as needed to locate bifurcations.
+            h = np.cbrt(np.finfo(float).eps) * max(1.0, abs(lam))
+            Fl = (problem.F(y, lam + h) - problem.F(y, lam - h)) / ((lam + h) - (lam - h))
+        else:
+            h = eps * max(1.0, abs(lam))
+            h = (lam + h) - lam  # exactly representable step
+            Fl = (problem.F(y, lam + h) - r) / h
+        J = problem.jacobian(y, r, lam, accurate=accurate)
         if scipy.sparse.issparse(J):
             M = scipy.sparse.bmat([[J, scipy.sparse.csr_matrix(Fl[:, None])],
                                    [scipy.sparse.csr_matrix(ty[None, :] / n), np.array([[tl]])]],
@@ -385,7 +539,7 @@ def continuation(
             M[:n, :n], M[:n, n], M[n, :n], M[n, n] = J, Fl, ty / n, tl
         return _factorize(M)
 
-    def tangent(solve):
+    def unit_tangent(solve):
         """Unit tangent, and the cosine of its angle with the tangent in the border row."""
         e = np.zeros(n + 1)
         e[n] = 1.0
@@ -393,7 +547,7 @@ def continuation(
         norm = np.sqrt(dot(t[:n], t[n], t[:n], t[n]))
         return t[:n] / norm, t[n] / norm, 1 / norm
 
-    def advance(y, lam, ty, tl, h):
+    def advance(y, lam, ty, tl, h, accurate=False):
         """One predictor-corrector step of length *h*; ``None`` if it fails."""
         y_pred, lam_pred = y + h * ty, lam + h * tl
         y, lam = y_pred, lam_pred
@@ -405,7 +559,7 @@ def continuation(
                 r = problem.F(y, lam)
                 if not np.all(np.isfinite(r)):
                     return None
-                solve = bordered(y, r, lam, ty, tl)
+                solve = bordered(y, r, lam, ty, tl, accurate)
                 dz = solve(-np.append(r, dot(ty, tl, y - y_pred, lam - lam_pred)))
                 y, lam = y + dz[:n], lam + dz[n]
                 if np.max(np.abs(dz)) <= tol * (1 + np.max(np.abs(y))):
@@ -414,7 +568,7 @@ def continuation(
                 return None
             # The matrix of the last Newton step also yields the tangent at the new point,
             # oriented like the old one.
-            ty_new, tl_new, cos = tangent(solve)
+            ty_new, tl_new, cos = unit_tangent(solve)
         except np.linalg.LinAlgError:
             return None
         # A long way from the predictor or a sharp turn: the step is too long for the
@@ -426,23 +580,42 @@ def continuation(
 
     ys: list[NDArray] = []
     lams: list[float] = []
+    # Unit tangent (ty, tl) of the branch at each point, None where it is not known.
+    tangents: list[tuple[NDArray, float] | None] = []
+    eigs: list[NDArray] = []
 
-    def accept(y, lam, info=""):
+    def accept(y, lam, info="", t=None):
         ys.append(y)
         lams.append(lam)
+        tangents.append(t)
+        if linearization is not None:
+            try:
+                eigs.append(linearization.leading(y, (lam,))[0])
+            except np.linalg.LinAlgError:
+                # The eigensolver failed; the branch itself is not affected.
+                eigs.append(np.full(linearization.k, np.nan, dtype=complex))
+            info += f", {int(np.sum(eigs[-1].real > _NEUTRAL))} unstable mode(s)"
         if verbose:
             print(f"Continuation step {len(lams) - 1}: param = {lam:.8g}{info}")
         return callback is not None and bool(callback(*problem.split(y), lam))
 
-    def trace(y, lam):
-        """Trace the branch from the solution *y* at *lam*; returns ``(success, message)``."""
+    def trace(y, lam, start):
+        """Trace the branch from the solution *y* at *lam*; returns ``(success, message)``.
+
+        *start* is the tangent to start along; by default the tangent of
+        the branch through the starting point.
+        """
         if accept(y, lam):
             return True, "Stopped by the callback."
-        try:
-            ty, tl, _ = tangent(bordered(y, problem.F(y, lam), lam, np.zeros(n), float(direction)))
-        except np.linalg.LinAlgError:
-            return False, ("The branch has no unique tangent at the starting point "
-                           "(singular Jacobian).")
+        if start is None:
+            try:
+                ty, tl, _ = unit_tangent(bordered(y, problem.F(y, lam), lam, np.zeros(n), float(direction)))
+            except np.linalg.LinAlgError:
+                return False, ("The branch has no unique tangent at the starting point "
+                               "(singular Jacobian).")
+        else:
+            ty, tl = start
+        tangents[0] = (ty, tl)
         h = min(ds, ds_max)
         while len(lams) <= max_steps:  # the starting point does not count
             step = advance(y, lam, ty, tl, h)
@@ -466,25 +639,59 @@ def continuation(
                     except NonlinearSolverError:
                         pass
                     else:
-                        accept(y_end, end, " (end of param_range)")
+                        t_end = None
+                        if refine:
+                            try:
+                                # Oriented like the tangent at the point beyond the end.
+                                t_end = unit_tangent(bordered(y_end, problem.F(y_end, end), end, ty, tl))[:2]
+                            except np.linalg.LinAlgError:
+                                pass
+                        accept(y_end, end, " (end of param_range)", t_end)
                 return True, f"The parameter reached the end of param_range at {end:g}."
             y, lam = y_new, lam_new
-            if accept(y, lam, f", ds = {h:.3g}, {its} Newton steps"):
+            if accept(y, lam, f", ds = {h:.3g}, {its} Newton steps", (ty, tl)):
                 return True, "Stopped by the callback."
             if its <= _FAST_CORRECTOR:
                 h = min(_GROWTH * h, ds_max)
         return True, f"Reached max_steps = {max_steps}."
 
-    y0 = _newton(problem, problem.y0, (lam0,), tol, maxiter, False)
+    def step(y, lam, ty, tl, h):
+        """The point of the branch at the arclength *h* from a point with tangent ``(ty, tl)``."""
+        out = advance(y, lam, ty, tl, h, accurate=True)
+        return None if out is None else out[:4]
+
+    if tangent is None:
+        y0 = _newton(problem, problem.y0, (lam0,), tol, maxiter, False)
+        start = None
+    else:
+        # Branch switching: the starting point is a branch point, where Newton's method
+        # for a fixed parameter has a singular Jacobian.
+        y0 = problem.y0
+        ty0 = problem.stack(tangent)
+        norm = np.sqrt(dot(ty0, 0.0, ty0, 0.0)) if not np.iscomplexobj(ty0) else 0.0
+        if not norm > 0:
+            raise ValueError("tangent must be a real, nonzero direction.")
+        start = (direction * ty0 / norm, 0.0)
     # Rejected trial steps may leave the domain of the residual; that is no reason to warn.
     with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
-        success, message = trace(y0, lam0)
+        success, message = trace(y0, lam0, start)
+        eigenvalues = stable = n_unstable = None
+        if linearization is not None:
+            eigenvalues = np.full((len(eigs), max(len(e) for e in eigs)), np.nan, dtype=complex)
+            for j, e in enumerate(eigs):
+                eigenvalues[j, :len(e)] = e
+            stable = np.all(eigenvalues.real < -_NEUTRAL, axis=1)
+            n_unstable = np.sum(eigenvalues.real > _NEUTRAL, axis=1)
+        bifurcations = _analyze_branch(problem, ys, lams, tangents, eigenvalues, step, dot,
+                                       linearization, refine, tangent is not None)
+        if eigenvalues is not None and np.all(eigenvalues.imag == 0):
+            eigenvalues = eigenvalues.real
 
     size = grid.size
     Y = np.array(ys)
     fields = [Y[:, f * size:(f + 1) * size].reshape(-1, *grid.shape) for f in range(problem.nfields)]
     return ContinuationResult(np.array(lams), tuple(fields) if problem.system else fields[0],
-                              success, message)
+                              success, message, eigenvalues, stable, n_unstable, bifurcations)
 
 
 class _Problem:
@@ -503,18 +710,10 @@ class _Problem:
         self.residual = residual
         self.user_jacobian = jacobian
         self.system = isinstance(u0, (tuple, list))
-        guesses = list(u0) if self.system else [u0]
-        self.nfields = nfields = len(guesses)
+        self.nfields = nfields = len(u0) if self.system else 1
         size = grid.size
-        shape = grid.shape
 
-        fields = []
-        for g in guesses:
-            if callable(g):
-                g = grid.evaluate(g)
-            g = np.broadcast_to(np.asarray(g), shape)
-            fields.append(np.array(g, dtype=np.result_type(g, float)))
-        self.y0 = np.concatenate([f.ravel() for f in fields])
+        self.y0 = self.stack(u0)
 
         # Boundary conditions per field: rows R u = g replace the residual there.
         per_field = (self.system and isinstance(bcs, (tuple, list)) and len(bcs) == nfields
@@ -534,6 +733,19 @@ class _Problem:
         self.g = np.concatenate(g_parts)
         self.keep_rows = scipy.sparse.diags((~bc_rows).astype(float))
         self.R_dense_rows = self.R[np.flatnonzero(bc_rows)].toarray() if jacobian is None else None
+
+    def stack(self, u) -> NDArray:
+        """The stacked vector of fields given like the initial guess (scalars, arrays, callables)."""
+        guesses = list(u) if self.system and isinstance(u, (tuple, list)) else [u]
+        if len(guesses) != self.nfields:
+            raise ValueError(f"Expected {self.nfields} field(s), got {len(guesses)}.")
+        fields = []
+        for g in guesses:
+            if callable(g):
+                g = self.grid.evaluate(g)
+            g = np.broadcast_to(np.asarray(g), self.grid.shape)
+            fields.append(np.array(g, dtype=np.result_type(g, float)))
+        return np.concatenate([f.ravel() for f in fields])
 
     def split(self, y: NDArray) -> list[NDArray]:
         """The fields in the stacked vector *y*, in grid shape."""
@@ -559,14 +771,17 @@ class _Problem:
         r[self.bc_rows] = (self.R @ y - self.g)[self.bc_rows]
         return r
 
-    def jacobian(self, y: NDArray, r: NDArray, *args):
+    def jacobian(self, y: NDArray, r: NDArray, *args, accurate: bool = False):
         """The Jacobian dF/dy at *y*, where ``F(y, *args) = r``, with the boundary rows.
 
         Dense for the finite-difference approximation and for moderate
-        sizes, sparse (CSC) otherwise.
+        sizes, sparse (CSC) otherwise.  With *accurate*, the approximation
+        uses central differences: twice the work, but errors of 1e-10
+        instead of 1e-7 (relative).  Newton's method does not need that,
+        eigenvalues do.
         """
         if self.user_jacobian is None:
-            Jm = _fd_jacobian(lambda v: self.F(v, *args), y, r)
+            Jm = _fd_jacobian(lambda v: self.F(v, *args), y, r, central=accurate)
             Jm[self.bc_rows] = self.R_dense_rows
             return Jm
         Jm = _assemble_jacobian(self.grid, self.user_jacobian(*self.split(y), *args), self.nfields)
@@ -658,17 +873,26 @@ def _factorize(M) -> Callable[[NDArray], NDArray]:
     return solve
 
 
-def _fd_jacobian(F, y: NDArray, r: NDArray) -> NDArray:
-    """Forward-difference approximation of the Jacobian of *F* at *y*."""
+def _fd_jacobian(F, y: NDArray, r: NDArray, central: bool = False) -> NDArray:
+    """Finite-difference approximation of the Jacobian of *F* at *y*, where ``F(y) = r``.
+
+    Forward differences, or central differences (more accurate, twice the
+    number of evaluations).
+    """
     n = y.size
-    eps = np.sqrt(np.finfo(float).eps)
+    eps = np.cbrt(np.finfo(float).eps) if central else np.sqrt(np.finfo(float).eps)
     Jm = np.empty((n, n), dtype=np.result_type(r, y))
     for j in range(n):
         h = eps * max(1.0, abs(y[j]))
         yp = y.copy()
         yp[j] += h
-        h = yp[j] - y[j]  # exactly representable step
-        Jm[:, j] = (F(yp) - r) / h
+        if central:
+            ym = y.copy()
+            ym[j] -= h
+            Jm[:, j] = (F(yp) - F(ym)) / (yp[j] - ym[j])
+        else:
+            h = yp[j] - y[j]  # exactly representable step
+            Jm[:, j] = (F(yp) - r) / h
     return Jm
 
 

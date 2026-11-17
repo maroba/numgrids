@@ -63,6 +63,15 @@ Nonlinear problems
 .. autoclass:: numgrids.ContinuationResult
    :members:
 
+.. automodule:: numgrids.stability
+   :no-members:
+
+.. autofunction:: numgrids.linear_stability
+
+.. autoclass:: numgrids.StabilityResult
+
+.. autoclass:: numgrids.Bifurcation
+
 Spectral coefficients
 ---------------------
 

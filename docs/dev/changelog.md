@@ -35,6 +35,18 @@ All notable changes to **numgrids** are documented on this page.
   solving at a fixed parameter fails, adapts its step size, and returns a
   `ContinuationResult` with the branch, its folds and `measure()` for
   bifurcation diagrams.
+- **Linear stability**: `linear_stability(grid, residual, u, bcs)` computes
+  the leading eigenvalues and modes of the linearization about a steady
+  state of $u_t = F(u)$, with the boundary conditions built in, for single
+  fields and systems (also with a mass matrix), and tells whether the state
+  is stable.
+- **Stability and bifurcations along a branch**: `continuation(..., stability=k)`
+  follows the leading eigenvalues along the branch and reports where the
+  stability changes: folds, branch points (pitchfork, transcritical) and
+  Hopf bifurcations, each located on the branch (`result.bifurcations`,
+  `result.stable`). Folds are located to solver accuracy
+  (`result.fold_params`; the fold of the Bratu problem to 14 digits), and
+  `tangent=` switches to the branch that bifurcates at a branch point.
 - **Fast linear solvers**: `Operator.solve` now chooses between three direct
   methods (`method="auto"`, `"fourier"`, `"dense"`, `"sparse"`):
   - *Fourier decoupling*: problems that do not depend on a periodic axis
@@ -170,7 +182,8 @@ All notable changes to **numgrids** are documented on this page.
   - *Is my function resolved?*: coefficient spectra, the resolution check
     in one and two dimensions, choosing the number of points, aliasing.
 - The nonlinear problems notebook traces the bifurcation diagram of the
-  Bratu problem with `continuation()`.
+  Bratu problem with `continuation()`, including the stability of the two
+  branches.
 - New user guide sections on unbounded domains, continuation, solver
   methods and factorizations, operators in divergence form, inner products
   and norms, time-dependent boundary values, source terms and the
