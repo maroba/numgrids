@@ -227,6 +227,79 @@ class TestEig:
         assert vals[0] == pytest.approx(np.pi ** 2, rel=1e-6)
 
 
+class TestGeneralizedEig:
+    """L u = lambda M u."""
+
+    @pytest.fixture
+    def string(self):
+        # -u'' = lambda u / x^2 on [1, e] with u = 0 at the ends:
+        # u = sqrt(x) sin(n pi ln x), lambda = 1/4 + n^2 pi^2
+        grid = Grid(x=chebyshev(40, 1, np.e))
+        return grid, 0.25 + np.pi ** 2 * np.arange(1, 5) ** 2
+
+    @pytest.mark.parametrize("kind", ["array", "callable", "operator", "sparse", "dense"])
+    def test_density_forms(self, string, kind):
+        grid, exact = string
+        rho = 1 / grid.coords ** 2
+        M = {
+            "array": rho,
+            "callable": lambda x: 1 / x ** 2,
+            "operator": Operator.multiplication(grid, rho),
+            "sparse": scipy.sparse.diags(rho),
+            "dense": np.diag(rho),
+        }[kind]
+        vals, vecs = (-grid.diff_operator(2)).eig(k=4, bcs=0, M=M)
+        npt.assert_allclose(vals, exact, rtol=1e-10)
+        assert np.isrealobj(vecs)
+        x = grid.coords
+        u = np.sqrt(x) * np.sin(np.pi * np.log(x))
+        npt.assert_allclose(vecs[0], u / np.linalg.norm(u), atol=1e-8)
+
+    def test_sparse_path(self, string):
+        grid, exact = string
+        vals, _ = (-grid.diff_operator(2)).eig(k=4, bcs=0, M=1 / grid.coords ** 2,
+                                               dense_threshold=10)
+        npt.assert_allclose(vals, exact, rtol=1e-10)
+        vals, _ = (-grid.diff_operator(2)).eig(k=1, bcs=0, M=1 / grid.coords ** 2,
+                                               sigma=40, dense_threshold=10)
+        npt.assert_allclose(vals, exact[1], rtol=1e-10)
+
+    def test_scalar_mass_with_neumann(self):
+        grid = Grid(chebyshev(30, 0, np.pi))
+        L = -grid.diff_operator(2)
+        vals, _ = L.eig(k=3, bcs=Neumann(0), M=4.0)
+        npt.assert_allclose(vals, [0, 0.25, 1], atol=1e-10)
+        vals, _ = L.eig(k=2, bcs=Neumann(0), M=4.0, sigma=0.3, dense_threshold=5)
+        npt.assert_allclose(sorted(vals), [0, 0.25], atol=1e-10)   # closest to 0.3
+
+    def test_membrane_with_variable_density_2d(self):
+        # rho(x, y) = 1 / x^2 in x only: separable, lambda = 1/4 + m^2 pi^2 + n^2
+        grid = Grid(x=chebyshev(24, 1, np.e), y=chebyshev(16, 0, np.pi))
+        X, Y = grid.meshed_coords
+        L = -grid.diff_operator(2, "x") - (1 / X ** 2) * grid.diff_operator(2, "y")
+        vals, _ = L.eig(k=2, bcs=0, M=1 / X ** 2)
+        npt.assert_allclose(vals, [0.25 + np.pi ** 2 + 1, 0.25 + np.pi ** 2 + 4], rtol=1e-8)
+
+    def test_drum_with_hemisphere_density(self):
+        # Stereographic projection maps the unit disk with density 4 / (1 + r^2)^2 onto a
+        # hemisphere; the clamped rim is the equator: eigenvalues l (l + 1) with l + m odd.
+        grid = PolarGrid(radial(24, 1.0), periodic(32))
+        R, _ = grid.meshed_coords
+        vals, vecs = (-grid.laplacian_operator()).eig(k=10, bcs=0, M=4 / (1 + R ** 2) ** 2)
+        npt.assert_allclose(vals, [2, 6, 6, 12, 12, 12, 20, 20, 20, 20], rtol=1e-9)
+        assert np.isrealobj(vecs)
+
+    def test_invalid_mass(self, string):
+        grid, _ = string
+        L = grid.diff_operator(2)
+        with pytest.raises(ValueError):
+            L.eig(M=scipy.sparse.identity(3))
+        with pytest.raises(TypeError):
+            L.eig(M="heavy")
+        with pytest.raises(NotImplementedError, match="generalized"):
+            L.eig(k=1, bcs=0, M=2.0, which="LM", dense_threshold=5)
+
+
 def _assert_eigenpairs(L, vals, vecs, bcs, atol=1e-7):
     """Check L v = lambda v away from the boundary points."""
     interior = np.ones(L.grid.size, dtype=bool)

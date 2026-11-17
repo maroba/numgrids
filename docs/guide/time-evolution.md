@@ -47,17 +47,39 @@ result = evolve(grid, kappa * grid.laplacian_operator(), np.sin(np.pi * x),
 
 ## Boundary conditions
 
-`bcs` accepts the [compact specifications](boundary-conditions.md) for
-**Dirichlet** conditions. The boundary values are imposed on the initial
-state and held fixed: the time derivative vanishes on those faces. Other
-conditions (Neumann, Robin, time-dependent values) can be built into the
-right-hand side.
+`bcs` accepts the [compact specifications](boundary-conditions.md) of
+**Dirichlet, Neumann and Robin** conditions. The conditions hold at every
+instant: the boundary values are not evolved themselves but computed from
+the interior values so that the conditions are satisfied. The initial state
+is adjusted accordingly. For Dirichlet conditions this simply means the
+prescribed values.
 
 ```python
 # Temperature 1 on the left, 3 on the right; relaxes to a linear profile
 result = evolve(grid, grid.laplacian_operator(), np.zeros(grid.shape), (0, 5),
                 bcs={"x_low": 1, "x_high": 3}, method="Radau")
 ```
+
+An insulated rod ($\partial u / \partial n = 0$ at both ends) keeps its
+total heat, and the temperature levels out:
+
+```python
+u0 = 1 + np.cos(np.pi * x)
+result = evolve(grid, grid.laplacian_operator(), u0, (0, 2), bcs=Neumann(0), method="BDF")
+grid.integrate(result.final)       # 1.0, as at t = 0
+```
+
+Newton's law of cooling at a surface, $-k\,\partial u / \partial n = h\,(u - u_\infty)$,
+is a Robin condition $h u + k\,\partial u / \partial n = h u_\infty$:
+
+```python
+h, k, u_inf = 2.0, 1.0, 0.0
+result = evolve(grid, grid.laplacian_operator(), np.ones(grid.shape), (0, 1),
+                bcs={"x_low": Neumann(0), "x_high": Robin(h, k, u_inf)}, method="BDF")
+```
+
+The values of the conditions are constant in time. Time-dependent boundary
+data can be built into the right-hand side.
 
 ## Coupled fields: the wave equation
 
@@ -82,6 +104,25 @@ result = evolve(
 )
 u, v = result.u          # each of shape (50, 24, 32)
 grid.plot(u[-1])
+```
+
+For systems, a single boundary condition specification applies to the
+first field, and the other fields are held fixed on the same boundary
+points. That is what $\partial_t u = v$ formulations need. To give each
+field its own conditions, pass a tuple with one specification per field
+(`None` for none). Here is a reaction-diffusion system with no-flux
+boundaries for both species:
+
+```python
+grid = Grid(x=chebyshev(40, 0, 10))
+x = grid.coords
+result = evolve(
+    grid,
+    lambda t, a, b: (grid.laplacian(a) + a - a * b, 0.5 * grid.laplacian(b) + a * b - b),
+    (1 + 0.5 * np.cos(np.pi * x / 10), np.ones(grid.shape)),
+    t_span=(0, 5),
+    bcs=(Neumann(0), Neumann(0)),
+)
 ```
 
 ## Complex fields: the Schrödinger equation

@@ -99,7 +99,8 @@ modified sparse system `(matrix, rhs_vector)`.
 
 ## Eigenvalue problems: `eig`
 
-`L.eig(k, bcs)` computes `k` eigenpairs of $L u = \lambda u$:
+`L.eig(k, bcs)` computes `k` eigenpairs of $L u = \lambda u$ (or of
+$L u = \lambda M u$, see [below](#generalized-eigenvalue-problems)):
 
 ```python
 grid = Grid(x=chebyshev(80, -10, 10))
@@ -165,3 +166,40 @@ grid = PolarGrid(radial(24, 1.0), periodic(32))
 vals, modes = (-grid.laplacian_operator()).eig(k=6, bcs=0)
 np.sqrt(vals)     # 2.4048, 3.8317, 3.8317, 5.1356, 5.1356, 5.5201 (Bessel zeros)
 ```
+
+For real operators, the eigenvectors are real, even for degenerate
+eigenvalues such as the pairs above. Each degenerate eigenspace comes as a
+real orthonormal basis.
+
+### Generalized eigenvalue problems
+
+Many physical eigenvalue problems have the form $L u = \lambda M u$, e.g.
+a string or a membrane with a varying mass density $\rho$:
+$-\nabla^2 u = \lambda \rho u$. Pass $M$ to `eig`. It can be an array of
+grid shape or a function of the coordinates (multiplication by that
+function), an `Operator`, or a matrix:
+
+```python
+# A string on [1, e] with density 1/x^2: eigenvalues 1/4 + n^2 pi^2
+grid = Grid(x=chebyshev(40, 1, np.e))
+vals, modes = (-grid.diff_operator(2)).eig(k=3, bcs=0, M=lambda x: 1 / x**2)
+vals                   # [10.1196, 39.7284, 89.0764]
+```
+
+A circular drum whose density decreases from the center to the rim as
+$\rho = 4 / (1 + r^2)^2$ sounds like a hemisphere. Stereographic projection
+maps it onto one, and the clamped rim becomes the equator. Its eigenvalues
+are $l(l+1)$:
+
+```python
+grid = PolarGrid(radial(24, 1.0), periodic(32))
+R, _ = grid.meshed_coords
+vals, modes = (-grid.laplacian_operator()).eig(k=6, bcs=0, M=4 / (1 + R**2)**2)
+vals                   # [2, 6, 6, 12, 12, 12]
+```
+
+Boundary conditions and the selection of eigenvalues (`which`, `sigma`)
+work as for the standard problem.
+
+For **nonlinear** boundary value problems, see
+[Nonlinear problems](nonlinear.md).

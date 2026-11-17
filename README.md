@@ -55,9 +55,10 @@ no mesh generation, no hand-assembled matrices and no special treatment of the c
 - Gradient, divergence, curl and Laplacian; volume and surface integrals; spectral interpolation
 
 **Solving equations**
-- Write operators like formulas (`-0.5 * D2 + V`), then `solve()` boundary value problems or `eig()` eigenvalue problems
+- Write operators like formulas (`-0.5 * D2 + V`), then `solve()` boundary value problems or `eig()` eigenvalue problems (also generalized: `L u = λ M u`)
+- Nonlinear boundary value problems with Newton's method: `solve_nonlinear()` only needs the residual
 - Dirichlet, Neumann and Robin conditions in one line: `bcs={"x_low": 0, "x_high": Neumann(1)}`
-- Time evolution (method of lines) for heat, wave and Schrödinger-type equations
+- Time evolution (method of lines) for heat, wave, reaction-diffusion and Schrödinger-type equations
 
 **Tools**
 - Adaptive mesh refinement, convergence studies, multigrid hierarchies
@@ -119,16 +120,19 @@ The [documentation](https://maroba.github.io/numgrids/) has a user guide for eve
 
 <table>
   <tr>
-    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/operators-and-solvers.html"><img src="docs/assets/gallery/operators-and-solvers.png" alt="Operators and solvers"><br><b>Operators and solvers</b></a><br><sub>Poisson, eigenmodes, time evolution</sub></td>
-    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/wave-equation-drum.html"><img src="docs/assets/gallery/wave-equation-drum.png" alt="Vibrations of a drum"><br><b>Vibrations of a drum</b></a><br><sub>Eigenmodes of the full disk</sub></td>
-    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/spherical-harmonics.html"><img src="docs/assets/gallery/spherical-harmonics.png" alt="Spherical harmonics"><br><b>Spherical harmonics</b></a><br><sub>Laplacian on the full sphere</sub></td>
-    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/quantum-harmonic-oscillator.html"><img src="docs/assets/gallery/quantum-harmonic-oscillator.png" alt="Quantum harmonic oscillator"><br><b>Quantum oscillator</b></a><br><sub>Schrödinger eigenvalue problem</sub></td>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/operators-and-solvers.html"><img src="docs/assets/gallery/operators-and-solvers.png" alt="Operators and solvers"><br><b>Operators and solvers</b></a><br><sub>Poisson, eigenmodes, time evolution</sub></td>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/nonlinear-problems.html"><img src="docs/assets/gallery/nonlinear-problems.png" alt="Nonlinear problems"><br><b>Nonlinear problems</b></a><br><sub>Newton's method, continuation</sub></td>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/wave-equation-drum.html"><img src="docs/assets/gallery/wave-equation-drum.png" alt="Vibrations of a drum"><br><b>Vibrations of a drum</b></a><br><sub>Eigenmodes of the full disk</sub></td>
   </tr>
   <tr>
-    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/poisson-equation-2d.html"><img src="docs/assets/gallery/poisson-equation-2d.png" alt="Poisson equation"><br><b>Poisson equation</b></a><br><sub>Boundary value problem in 2D</sub></td>
-    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/heat-equation-rod.html"><img src="docs/assets/gallery/heat-equation-rod.png" alt="Heat equation"><br><b>Heat equation</b></a><br><sub>Time evolution</sub></td>
-    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/convergence-study.html"><img src="docs/assets/gallery/convergence-study.png" alt="Convergence study"><br><b>Convergence study</b></a><br><sub>Spectral vs. finite differences</sub></td>
-    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/adaptive-refinement-demo.html"><img src="docs/assets/gallery/adaptive-refinement-demo.png" alt="Adaptive mesh refinement"><br><b>Adaptive refinement</b></a><br><sub>Resolution where it is needed</sub></td>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/spherical-harmonics.html"><img src="docs/assets/gallery/spherical-harmonics.png" alt="Spherical harmonics"><br><b>Spherical harmonics</b></a><br><sub>Laplacian on the full sphere</sub></td>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/quantum-harmonic-oscillator.html"><img src="docs/assets/gallery/quantum-harmonic-oscillator.png" alt="Quantum oscillator"><br><b>Quantum oscillator</b></a><br><sub>Schrödinger eigenvalue problem</sub></td>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/poisson-equation-2d.html"><img src="docs/assets/gallery/poisson-equation-2d.png" alt="Poisson equation"><br><b>Poisson equation</b></a><br><sub>Boundary value problem in 2D</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/heat-equation-rod.html"><img src="docs/assets/gallery/heat-equation-rod.png" alt="Heat equation"><br><b>Heat equation</b></a><br><sub>Insulated, cooled and fixed ends</sub></td>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/convergence-study.html"><img src="docs/assets/gallery/convergence-study.png" alt="Convergence study"><br><b>Convergence study</b></a><br><sub>Spectral vs. finite differences</sub></td>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/adaptive-refinement-demo.html"><img src="docs/assets/gallery/adaptive-refinement-demo.png" alt="Adaptive refinement"><br><b>Adaptive refinement</b></a><br><sub>Resolution where it is needed</sub></td>
   </tr>
 </table>
 

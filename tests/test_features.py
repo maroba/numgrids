@@ -326,8 +326,8 @@ def test_evolve_schroedinger_complex():
 def test_evolve_errors():
     grid = Grid(x=chebyshev(8, 0, 1))
     u0 = np.zeros(8)
-    with pytest.raises(TypeError):
-        evolve(grid, lambda t, u: u, u0, (0, 1), bcs=Neumann(0))
+    with pytest.raises(ValueError, match="singular boundary system"):
+        evolve(grid, lambda t, u: u, u0, (0, 1), bcs=Robin(0, 0))
     with pytest.raises(ValueError):
         evolve(grid, lambda t, u: u[:3], u0, (0, 1))
     with pytest.raises(ValueError):

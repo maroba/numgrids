@@ -29,3 +29,13 @@ Operator algebra and solvers
 
 .. autoclass:: numgrids.Operator
    :members:
+
+Nonlinear problems
+------------------
+
+.. automodule:: numgrids.nonlinear
+   :no-members:
+
+.. autofunction:: numgrids.solve_nonlinear
+
+.. autoexception:: numgrids.NonlinearSolverError

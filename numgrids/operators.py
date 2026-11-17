@@ -285,8 +285,9 @@ class Operator:
         sigma: float | complex | None = None,
         which: str = "SM",
         dense_threshold: int = 2000,
+        M=None,
     ) -> tuple[NDArray, NDArray]:
-        r"""Solve the eigenvalue problem :math:`L u = \lambda u`.
+        r"""Solve the eigenvalue problem :math:`L u = \lambda u` or :math:`L u = \lambda M u`.
 
         Boundary conditions are treated as *homogeneous* (their values are
         ignored).  Dirichlet points are eliminated from the problem, and
@@ -310,6 +311,13 @@ class Operator:
             Problems with at most this many unknowns are solved with dense
             linear algebra (robust); larger ones with sparse shift-invert
             Arnoldi iterations.
+        M : Operator, array, callable or scalar, optional
+            Right-hand side operator of the *generalized* eigenvalue problem
+            :math:`L u = \lambda M u`, e.g. a mass density or a weight
+            function.  An array of grid shape (or a callable evaluated on
+            the grid) means multiplication by that function; an
+            :class:`Operator` or sparse matrix is used as is.  Defaults to
+            the identity.
 
         Returns
         -------
@@ -324,6 +332,19 @@ class Operator:
             for degenerate eigenvalues (e.g. symmetry-related modes on a
             disk or sphere): a degenerate eigenspace is returned as a real
             orthonormal basis.
+
+        Examples
+        --------
+        A string with density :math:`\rho = 1/x^2` on :math:`[1, e]`,
+        :math:`-u'' = \lambda \rho u`, has the eigenvalues
+        :math:`1/4 + n^2 \pi^2`:
+
+        >>> import numpy as np
+        >>> from numgrids import Grid, chebyshev
+        >>> grid = Grid(x=chebyshev(40, 1, np.e))
+        >>> vals, _ = (-grid.diff_operator(2)).eig(k=2, bcs=0, M=1 / grid.coords ** 2)
+        >>> bool(np.allclose(vals, 0.25 + np.pi ** 2 * np.array([1, 4])))
+        True
         """
         from numgrids.boundary import DirichletBC, resolve_bcs
 
@@ -334,6 +355,7 @@ class Operator:
         bc_list = resolve_bcs(self.grid, bcs)
 
         A = scipy.sparse.csr_matrix(self.matrix, dtype=np.result_type(self.matrix.dtype, float))
+        B = self._mass_matrix(M)
         bc_rows = np.zeros(size, dtype=bool)
         dirichlet = np.zeros(size, dtype=bool)
         for bc in bc_list:
@@ -356,21 +378,27 @@ class Operator:
 
         keep = ~dirichlet
         A = A[keep][:, keep]
-        B_diag = (~bc_rows[keep]).astype(float)
-        generalized = not np.all(B_diag == 1.0)
+        # Right-hand side matrix: M (or the identity), with the rows of the
+        # Neumann/Robin conditions set to zero (they hold for every lambda).
+        row_mask = scipy.sparse.diags((~bc_rows[keep]).astype(float))
+        if B is None:
+            B = row_mask
+        else:
+            B = scipy.sparse.csr_matrix(row_mask @ B[keep][:, keep])
+        generalized = M is not None or bool(np.any(bc_rows[keep]))
         n = A.shape[0]
-        k = min(k, n - int(np.sum(B_diag == 0)))
+        k = min(k, n - int(np.sum(bc_rows[keep])))
 
         if n <= dense_threshold:
             Ad = A.toarray()
             if generalized:
-                vals, vecs = scipy.linalg.eig(Ad, np.diag(B_diag))
+                vals, vecs = scipy.linalg.eig(Ad, B.toarray())
                 finite = np.isfinite(vals)
                 vals, vecs = vals[finite], vecs[:, finite]
             else:
                 vals, vecs = scipy.linalg.eig(Ad)
         else:
-            M = scipy.sparse.diags(B_diag) if generalized else None
+            Bs = scipy.sparse.csr_matrix(B) if generalized else None
             # Compute more eigenpairs than requested: Arnoldi iterations can miss
             # members of (nearly) degenerate eigenvalue clusters at the edge of
             # the requested set. The surplus is discarded after sorting.
@@ -384,28 +412,28 @@ class Operator:
                     shift = -1e-8 * scipy.sparse.linalg.norm(A, 1)
                 else:
                     shift = sigma
-                I_n = M if M is not None else scipy.sparse.identity(n)
+                I_n = Bs if Bs is not None else scipy.sparse.identity(n)
                 lu = scipy.sparse.linalg.splu(scipy.sparse.csc_matrix(A - shift * I_n))
                 dtype = np.result_type(A.dtype, type(shift))
-                if M is None:
+                if Bs is None:
                     matvec = lu.solve
                 else:
                     def matvec(x):
-                        return lu.solve(np.asarray(M @ x, dtype=dtype))
+                        return lu.solve(np.asarray(Bs @ x, dtype=dtype))
                 opinv = scipy.sparse.linalg.LinearOperator((n, n), matvec=matvec, dtype=dtype)
                 mu, vecs = scipy.sparse.linalg.eigs(opinv, k=k_arnoldi, which="LM", v0=v0)
                 vals = shift + 1.0 / mu
             elif generalized:
                 raise NotImplementedError(
-                    "For large problems with Neumann/Robin conditions, pass `sigma` "
-                    "to select the eigenvalues of interest."
+                    "For large generalized problems (with M or Neumann/Robin conditions), "
+                    "pass `sigma` to select the eigenvalues of interest."
                 )
             else:
                 vals, vecs = scipy.sparse.linalg.eigs(A, k=k_arnoldi, which=which, v0=v0)
 
         order = self._sort_eigenvalues(vals, which, sigma)[:k]
         vals, vecs = vals[order], vecs[:, order]
-        if not np.iscomplexobj(A):
+        if not np.iscomplexobj(A) and not np.iscomplexobj(B):
             vals, vecs = _real_eigenbasis(vals, vecs)
 
         full = np.zeros((size, len(vals)), dtype=vecs.dtype)
@@ -421,6 +449,25 @@ class Operator:
                 full = full.real
         vecs_out = np.moveaxis(full, 1, 0).reshape((len(vals),) + self.grid.shape)
         return vals, vecs_out
+
+    def _mass_matrix(self, M):
+        """Sparse matrix of the right-hand side operator of a generalized eigenproblem."""
+        if M is None:
+            return None
+        if callable(M) and not isinstance(M, Operator) and not hasattr(M, "as_matrix"):
+            M = self.grid.evaluate(M)
+        if scipy.sparse.issparse(M):
+            matrix = scipy.sparse.csr_matrix(M)
+            if matrix.shape != self.matrix.shape:
+                raise ValueError(f"M has shape {matrix.shape}, expected {self.matrix.shape}.")
+        elif isinstance(M, np.ndarray) and M.ndim == 2 and M.shape == self.matrix.shape \
+                and M.shape != self.grid.shape:
+            matrix = scipy.sparse.csr_matrix(M)
+        else:
+            matrix = Operator.identity(self.grid)._coerce(M)
+            if matrix is None:
+                raise TypeError(f"Cannot use an object of type {type(M).__name__} as M.")
+        return scipy.sparse.csr_matrix(matrix, dtype=np.result_type(matrix.dtype, float))
 
     @staticmethod
     def _sort_eigenvalues(vals: NDArray, which: str, sigma) -> NDArray:

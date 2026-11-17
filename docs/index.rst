@@ -49,12 +49,20 @@ indices and scale factors.
       Combine operators like formulas, then ``solve()`` boundary
       value problems or ``eig()`` eigenvalue problems.
 
+   .. grid-item-card:: Nonlinear Problems
+      :link: guide/nonlinear
+      :link-type: doc
+
+      Newton's method for nonlinear boundary value problems:
+      just write down the residual.
+
    .. grid-item-card:: Time Evolution
       :link: guide/time-evolution
       :link-type: doc
 
       Method-of-lines time stepping for heat, wave and
-      Schrödinger equations with a single call.
+      Schrödinger equations, with Dirichlet, Neumann and Robin
+      boundaries.
 
 
 .. toctree::
@@ -78,6 +86,7 @@ indices and scale factors.
    guide/curvilinear
    guide/boundary-conditions
    guide/operators
+   guide/nonlinear
    guide/time-evolution
    guide/plotting
    guide/io
@@ -91,6 +100,7 @@ indices and scale factors.
    :hidden:
 
    examples/operators-and-solvers
+   examples/nonlinear-problems
    examples/heat-equation-rod
    examples/poisson-equation-2d
    examples/spherical-harmonics

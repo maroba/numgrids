@@ -47,7 +47,8 @@ Each `BoundaryFace` exposes:
 ## Compact boundary condition specifications
 
 Most of the time you do not need to construct `DirichletBC` objects by
-hand. [`Operator.solve`](operators.md), `Operator.eig`, `evolve` and
+hand. [`Operator.solve`](operators.md), `Operator.eig`,
+[`solve_nonlinear`](nonlinear.md), [`evolve`](time-evolution.md) and
 `apply_bcs(..., grid=grid)` accept compact specifications:
 
 ```python

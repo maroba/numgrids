@@ -15,6 +15,7 @@ from PIL import Image, ImageChops
 #: notebook name -> index of the figure to use
 SELECTION = {
     "operators-and-solvers": 2,
+    "nonlinear-problems": 1,
     "heat-equation-rod": 0,
     "poisson-equation-2d": 0,
     "quantum-harmonic-oscillator": 0,

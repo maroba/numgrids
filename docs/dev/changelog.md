@@ -2,6 +2,37 @@
 
 All notable changes to **numgrids** are documented on this page.
 
+## 0.7.0
+
+### New features
+
+- **Nonlinear boundary value problems**: `solve_nonlinear(grid, residual, u0, bcs=...)`
+  solves $F(u) = 0$ with a damped Newton method. The residual is an ordinary
+  function of grid-shaped arrays. The Jacobian is computed by finite
+  differences, or passed exactly via `jacobian=` (e.g. written in operator
+  algebra: `lambda u: D2 + np.exp(u)`). It supports Dirichlet, Neumann and Robin
+  conditions, curvilinear grids and coupled systems (with block Jacobians). It
+  raises `NonlinearSolverError` (with the last iterate and the residual
+  history) if Newton's method does not converge.
+- **Neumann and Robin conditions in `evolve`**: the boundary values are
+  computed from the interior values at every instant, so the conditions hold
+  exactly (e.g. an insulated body conserves its heat). Coupled systems accept
+  one boundary specification per field, e.g. `bcs=(Neumann(0), Neumann(0))`
+  for reaction-diffusion systems with no-flux boundaries.
+- **Generalized eigenvalue problems** $L u = \lambda M u$: `Operator.eig(..., M=rho)`
+  with a mass density or weight function given as an array, a callable, an
+  `Operator` or a matrix. It works with all boundary conditions and on the dense
+  and sparse paths.
+
+### Documentation
+
+- New user guide page *Nonlinear problems* and example notebook
+  *Nonlinear boundary value problems* (Bratu problem, continuation and
+  bifurcation diagram, exact Jacobians, full disk, temperature-dependent
+  conductivity).
+- The heat equation notebook covers insulated and cooled ends, and the drum
+  notebook covers a membrane with variable density.
+
 ## 0.6.1
 
 ### Bug fixes

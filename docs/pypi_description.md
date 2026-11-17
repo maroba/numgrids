@@ -34,8 +34,9 @@ These are the zeros of the Bessel functions, correct to 13 digits on a 30 × 40 
   full disks, cylinders, spheres and balls without coordinate singularities
 - **Calculus**: spectral (FFT, Chebyshev) or finite-difference derivatives; gradient, divergence, curl,
   Laplacian; volume and surface integrals; spectral interpolation
-- **Solving equations**: operator algebra, `solve()` for boundary value problems, `eig()` for eigenvalue
-  problems, Dirichlet/Neumann/Robin conditions in one line, time evolution (method of lines)
+- **Solving equations**: operator algebra, `solve()` for boundary value problems, `eig()` for (generalized)
+  eigenvalue problems, `solve_nonlinear()` for nonlinear problems, Dirichlet/Neumann/Robin conditions in one
+  line, time evolution (method of lines)
 - **Tools**: adaptive mesh refinement, convergence studies, plotting, save/load, xarray/NetCDF;
   all operators export SciPy sparse matrices
 
