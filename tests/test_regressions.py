@@ -20,12 +20,14 @@ from numgrids import (
 
 @pytest.mark.parametrize("order", [1, 2, 3, 4, 5])
 def test_chebyshev_higher_order_derivatives(order):
-    grid = Grid(chebyshev(30, 0.5, 2))
+    # x^7 is represented exactly with 16 nodes. Few nodes keep the round-off of
+    # high derivatives (which grows like N^(2*order)) far below the tolerance.
+    grid = Grid(chebyshev(16, 0.5, 2))
     x = grid.coords
     f = x ** 7
     coeff = np.prod(np.arange(7, 7 - order, -1))
     expected = coeff * x ** (7 - order)
-    npt.assert_allclose(Diff(grid, order)(f), expected, rtol=1e-5, atol=1e-5)
+    npt.assert_allclose(Diff(grid, order)(f), expected, rtol=0, atol=1e-7 * np.abs(expected).max())
 
 
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
