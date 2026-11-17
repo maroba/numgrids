@@ -12,10 +12,15 @@ from numgrids import (
     PolarGrid,
     Robin,
     SphericalGrid,
+    SphericalSurfaceGrid,
     chebyshev,
+    colatitude,
     equidistant,
     periodic,
+    radial,
 )
+from numgrids.boundary import resolve_bcs
+from numgrids.operators import _real_eigenbasis
 
 
 @pytest.fixture
@@ -220,6 +225,89 @@ class TestEig:
         vals, vecs = L.eig(k=1, bcs={"r_low": 0, "r_high": 0, "theta_low": Neumann(0),
                                      "theta_high": Neumann(0)})
         assert vals[0] == pytest.approx(np.pi ** 2, rel=1e-6)
+
+
+def _assert_eigenpairs(L, vals, vecs, bcs, atol=1e-7):
+    """Check L v = lambda v away from the boundary points."""
+    interior = np.ones(L.grid.size, dtype=bool)
+    for bc in resolve_bcs(L.grid, bcs):
+        interior[bc.face.flat_indices] = False
+    for lam, v in zip(vals, vecs):
+        residual = L.matrix @ v.ravel() - lam * v.ravel()
+        assert np.max(np.abs(residual[interior])) <= atol * max(1.0, abs(lam))
+
+
+class TestRealEigenvectors:
+    """Degenerate eigenvalues of real operators come with real eigenvectors."""
+
+    @pytest.mark.parametrize("dense_threshold", [2000, 10])
+    def test_square(self, dense_threshold):
+        grid = Grid(chebyshev(20, 0, 1), chebyshev(20, 0, 1))
+        L = -grid.laplacian_operator()
+        vals, vecs = L.eig(k=4, bcs=0, dense_threshold=dense_threshold)
+        assert np.isrealobj(vals) and np.isrealobj(vecs)
+        npt.assert_allclose(vals, np.pi ** 2 * np.array([2, 5, 5, 8]), rtol=1e-6)
+        _assert_eigenpairs(L, vals, vecs, 0)
+        # The degenerate pair is an orthonormal basis of its eigenspace.
+        pair = vecs[1:3].reshape(2, -1)
+        npt.assert_allclose(pair @ pair.T, np.eye(2), atol=1e-10)
+
+    @pytest.mark.parametrize("dense_threshold", [2000, 10])
+    def test_drum(self, dense_threshold):
+        L = -PolarGrid(radial(20, 1.0), periodic(32)).laplacian_operator()
+        vals, vecs = L.eig(k=6, bcs=0, dense_threshold=dense_threshold)
+        assert np.isrealobj(vals) and np.isrealobj(vecs)
+        npt.assert_allclose(np.sqrt(vals), [2.404825557695773, 3.831705970207512, 3.831705970207512,
+                                            5.135622301840683, 5.135622301840683, 5.520078110286311],
+                            rtol=1e-8)
+        _assert_eigenpairs(L, vals, vecs, 0)
+
+    def test_sphere_surface(self):
+        L = -SphericalSurfaceGrid(colatitude(16), periodic(32)).laplacian_operator()
+        vals, vecs = L.eig(k=9, dense_threshold=10)
+        assert np.isrealobj(vals) and np.isrealobj(vecs)
+        npt.assert_allclose(vals, [0, 2, 2, 2, 6, 6, 6, 6, 6], atol=1e-8)
+        _assert_eigenpairs(L, vals, vecs, None)
+        block = vecs[4:9].reshape(5, -1)
+        npt.assert_allclose(block @ block.T, np.eye(5), atol=1e-8)
+
+    def test_neumann_generalized_problem(self):
+        grid = Grid(chebyshev(16, 0, np.pi), chebyshev(16, 0, np.pi))
+        L = -grid.laplacian_operator()
+        vals, vecs = L.eig(k=3, bcs=Neumann(0))
+        assert np.isrealobj(vals) and np.isrealobj(vecs)
+        npt.assert_allclose(vals, [0, 1, 1], atol=1e-8)
+
+    def test_complex_eigenvalues_stay_complex(self):
+        # d/dx on a periodic axis has eigenvalues i m with eigenvectors exp(i m x).
+        grid = Grid(periodic(15, 0, 2 * np.pi))     # odd: no Nyquist mode
+        D = grid.diff_operator(1)
+        vals, vecs = D.eig(k=3)
+        assert np.iscomplexobj(vals) and np.iscomplexobj(vecs)
+        npt.assert_allclose(np.sort(vals.imag), [-1, 0, 1], atol=1e-10)
+        _assert_eigenpairs(D, vals, vecs, None)
+
+    def test_conjugate_pair_is_made_real(self):
+        rng = np.random.default_rng(0)
+        a, b = rng.standard_normal((2, 10))
+        v = (a + 1j * b) / np.linalg.norm(a + 1j * b)
+        vals = np.array([3.0 + 1e-12j, 3.0 - 1e-12j, 5.0])
+        vecs = np.column_stack([v, v.conj(), rng.standard_normal(10)])
+        new_vals, new_vecs = _real_eigenbasis(vals, vecs)
+        npt.assert_array_equal(new_vals.imag, 0)
+        assert not np.any(new_vecs.imag)
+        # Same span as the real and imaginary parts of the input pair:
+        basis = new_vecs[:, :2].real
+        npt.assert_allclose(basis @ (basis.T @ np.column_stack([a, b])), np.column_stack([a, b]),
+                            atol=1e-12)
+        npt.assert_allclose(new_vecs[:, 2], vecs[:, 2])
+
+    def test_genuinely_complex_pair_is_unchanged(self):
+        vals = np.array([1 + 2j, 1 - 2j])
+        vecs = np.array([[1, 1], [1j, -1j]]) / np.sqrt(2)
+        new_vals, new_vecs = _real_eigenbasis(vals, vecs)
+        npt.assert_array_equal(new_vals, vals)
+        npt.assert_array_equal(new_vecs, vecs)
 
 
 def test_remaining_operator_dunders():

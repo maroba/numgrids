@@ -22,7 +22,7 @@ disk = PolarGrid(radial(40, 1.0), periodic(64))
 vals, modes = (-disk.laplacian_operator()).eig(k=12, bcs=0)
 ax = fig.add_subplot(1, 3, 1)
 mode = modes[10] / np.abs(modes[10]).max()
-disk.plot(np.real(mode), ax=ax, cmap="RdBu_r", colorbar=False, vmin=-1, vmax=1)
+disk.plot(mode, ax=ax, cmap="RdBu_r", colorbar=False, vmin=-1, vmax=1)
 rim = np.linspace(0, 2 * np.pi, 400)
 ax.plot(np.cos(rim), np.sin(rim), color="#7b8794", lw=1.5)
 ax.set_axis_off()
@@ -30,15 +30,17 @@ ax.set_axis_off()
 # 2) An eigenfunction of the Laplacian on the full sphere (through the poles)
 sphere = SphericalSurfaceGrid(colatitude(40), periodic(80))
 svals, smodes = (-sphere.laplacian_operator()).eig(k=36)
-f = smodes[30]                                  # an l = 5 eigenfunction
-# The operator is real, so the real (or imaginary) part is an eigenfunction, too.
-f = np.real(f) if np.linalg.norm(np.real(f)) >= np.linalg.norm(np.imag(f)) else np.imag(f)
+# The l = 5 eigenvalue is 11-fold degenerate; pick the sectoral mode Y_5^5 from its eigenspace.
+space = smodes[np.isclose(svals, 30.0)].reshape(-1, sphere.size)
+TH, PH = sphere.meshed_coords
+target = (np.sin(TH) ** 5 * np.cos(5 * PH)).ravel()
+f = (np.linalg.lstsq(space.T, target, rcond=None)[0] @ space).reshape(sphere.shape)
 # Spectral interpolation onto a fine mesh (including the poles) for a smooth picture
 theta = np.linspace(0, np.pi, 121)
 phi = np.linspace(0, 2 * np.pi, 241)
 T, P = np.meshgrid(theta, phi, indexing="ij")
 pts = np.column_stack([T.ravel(), np.mod(P.ravel(), 2 * np.pi)])
-vals_s = np.real(sphere.interpolate(f, pts, method="spectral")).reshape(T.shape)
+vals_s = sphere.interpolate(f, pts, method="spectral").reshape(T.shape)
 vals_s /= np.abs(vals_s).max()
 ax = fig.add_subplot(1, 3, 2, projection="3d")
 ax.plot_surface(np.sin(T) * np.cos(P), np.sin(T) * np.sin(P), np.cos(T),
