@@ -31,12 +31,17 @@ so no API token needs to be stored in the repository.
 1. Update the version in `pyproject.toml` and add a section to the
    [changelog](changelog.md).
 2. Merge the changes into `main`.
-3. Tag the release and push the tag:
+3. Create the tag, either on the command line:
 
    ```bash
    git tag v0.5.0
    git push origin v0.5.0
    ```
+
+   or in the browser: on GitHub open *Releases* → *Draft a new release*, type the
+   new tag `v0.5.0` under *Choose a tag* (select *Create new tag on publish*), keep
+   the target branch `main`, enter a title such as `numgrids 0.5.0` and click
+   *Publish release*.
 
 The workflow then
 
@@ -45,7 +50,8 @@ The workflow then
 * builds the sdist and the wheel, checks them with `twine check --strict` and
   smoke-tests the wheel in a clean environment,
 * uploads the files to PyPI, and
-* creates a GitHub release with the distribution files attached.
+* creates a GitHub release with the distribution files attached (or attaches the
+  files to the release you created in the browser).
 
 The release fails safely: if any check fails, nothing is uploaded.
 

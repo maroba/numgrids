@@ -121,11 +121,17 @@ jobs:
         with:
           name: dist
           path: dist/
-      - name: Create release with the distribution files
+      - name: Create the release, or attach the files to an existing one
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "numgrids ${GITHUB_REF_NAME#v}" \
-            --notes "See the [changelog](https://maroba.github.io/numgrids/dev/changelog.html) for details."
+          # The release may already exist if the tag was created on github.com
+          # via "Releases -> Draft a new release".
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "numgrids ${GITHUB_REF_NAME#v}" \
+              --notes "See the [changelog](https://maroba.github.io/numgrids/dev/changelog.html) for details."
+          fi
