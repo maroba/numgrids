@@ -47,18 +47,20 @@ no mesh generation, no hand-assembled matrices and no special treatment of the c
 
 **Grids and coordinates**
 - Grids in any dimension from Chebyshev, equidistant, periodic and logarithmic axes
+- Unbounded domains: the half line and the whole real line, without cutting the domain off
 - Polar, cylindrical, spherical (volume and surface), elliptic and spheroidal coordinates, or your own via scale factors
 - Full disks, cylinders, spheres and balls: the center and the poles are handled without coordinate singularities
 
 **Calculus**
 - Derivatives with spectral accuracy (FFT, Chebyshev) or finite differences, chosen automatically per axis
-- Gradient, divergence, curl and Laplacian; volume and surface integrals; spectral interpolation
+- Gradient, divergence, curl and Laplacian; volume and surface integrals; inner products and norms; spectral interpolation
 
 **Solving equations**
 - Write operators like formulas (`-0.5 * D2 + V`), then `solve()` boundary value problems or `eig()` eigenvalue problems (also generalized: `L u = λ M u`)
-- Nonlinear boundary value problems with Newton's method: `solve_nonlinear()` only needs the residual
+- Fast direct solvers, chosen automatically: problems on disks, spheres and balls decouple into small problems per Fourier mode; `factorize()` reuses a factorization for many right-hand sides
+- Nonlinear boundary value problems with Newton's method: `solve_nonlinear()` only needs the residual, and `continuation()` follows solution branches around folds
 - Dirichlet, Neumann and Robin conditions in one line: `bcs={"x_low": 0, "x_high": Neumann(1)}`
-- Time evolution (method of lines) for heat, wave, reaction-diffusion and Schrödinger-type equations
+- Time evolution (method of lines) for heat, wave, reaction-diffusion and Schrödinger-type equations, with time-dependent boundary values and sources, and an exponential integrator without time stepping error
 
 **Tools**
 - Adaptive mesh refinement, convergence studies, multigrid hierarchies
@@ -112,6 +114,30 @@ X, Y, Z = ball.cartesian_coords
 ball.integrate(np.ones(ball.shape))      # 4.18879... = 4π/3, the volume element is built in
 ball.laplacian(X**2 + Y**2 + Z**2)       # 6 everywhere, including the center and the poles
 ball.faces["r_high"].integrate(Z**2)     # surface integral over the sphere: 4π/3
+```
+
+### Unbounded domains
+
+```python
+atom = Grid(r=semi_infinite(48, scale=10))          # the half line [0, ∞): no cutoff radius
+r = atom.coords
+V = np.append(0, -1 / r[1:])                        # Coulomb potential (the node r = 0 is a boundary point)
+H = -0.5 * atom.diff_operator(2) + V
+
+energies, states = H.eig(k=3, bcs=0, which="SR")
+# [-0.5, -0.125, -0.05555556]: the levels -1/(2n²) of the hydrogen atom, correct to 12 digits
+```
+
+### Quantum dynamics
+
+```python
+grid = Grid(x=periodic(512, -60, 60))
+x = grid.coords
+H = -0.5 * grid.diff_operator(2) + 2.5 * np.exp(-x**2)          # a potential barrier
+psi0 = np.exp(-(x + 20)**2 / 9 + 2j * x)                        # a wave packet moving towards it
+
+result = evolve(grid, -1j * H, psi0, t_span=(0, 24), method="expm")   # exact in time, conserves the norm
+grid.norm(result.final) / grid.norm(psi0)                             # 1.0
 ```
 
 The [documentation](https://maroba.github.io/numgrids/) has a user guide for every feature and the full API reference.

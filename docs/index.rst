@@ -18,7 +18,8 @@ indices and scale factors.
       :link: guide/axes
       :link-type: doc
 
-      Equidistant, Chebyshev, logarithmic, and periodic axes.
+      Equidistant, Chebyshev, logarithmic, and periodic axes,
+      and axes for unbounded domains.
       Tensor-product grids in any dimension.
 
    .. grid-item-card:: Spectral Differentiation
@@ -47,14 +48,16 @@ indices and scale factors.
       :link-type: doc
 
       Combine operators like formulas, then ``solve()`` boundary
-      value problems or ``eig()`` eigenvalue problems.
+      value problems or ``eig()`` eigenvalue problems, with fast
+      direct solvers chosen automatically.
 
    .. grid-item-card:: Nonlinear Problems
       :link: guide/nonlinear
       :link-type: doc
 
       Newton's method for nonlinear boundary value problems:
-      just write down the residual.
+      just write down the residual. Continuation follows
+      solution branches around folds.
 
    .. grid-item-card:: Time Evolution
       :link: guide/time-evolution
@@ -62,7 +65,8 @@ indices and scale factors.
 
       Method-of-lines time stepping for heat, wave and
       Schrödinger equations, with Dirichlet, Neumann and Robin
-      boundaries.
+      boundaries, time-dependent boundary values and an
+      exponential integrator.
 
 
 .. toctree::
