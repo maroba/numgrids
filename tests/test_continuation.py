@@ -317,3 +317,10 @@ class TestStoppingAndErrors:
         out = capsys.readouterr().out
         assert "Continuation step 12" in out
         assert "corrector failed" in out
+
+
+def test_repr_is_concise():
+    grid = Grid(x=chebyshev(15, 0, 1))
+    branch = continuation(grid, lambda u, lam: grid.diff(u, 2) + lam, u0=0, param=0, bcs=0, ds=0.2, max_steps=3)
+    text = repr(branch)
+    assert text.startswith("ContinuationResult(4 points") and len(text) < 120

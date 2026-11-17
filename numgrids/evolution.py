@@ -22,6 +22,9 @@ if TYPE_CHECKING:
     from numgrids.grids import Grid
 
 _IMPLICIT = ("Radau", "BDF", "LSODA")
+# Implicit methods get a dense Jacobian up to this size, if the matrix is at least this dense.
+_JAC_DENSE_LIMIT = 4000
+_JAC_DENSE_DENSITY = 0.01
 # Up to this many unknowns, the exponential integrator uses dense matrix exponentials.
 _EXPM_DENSE_LIMIT = 2000
 
@@ -344,7 +347,10 @@ def evolve(
             return A @ y if q is None else A @ y + q
 
         if method in _IMPLICIT:
-            jac = A
+            # Spectral matrices fill in under the sparse LU of the implicit solvers;
+            # a dense Jacobian makes them use dense LU, which is much faster there.
+            n = A.shape[0]
+            jac = A.toarray() if n <= _JAC_DENSE_LIMIT and A.nnz >= _JAC_DENSE_DENSITY * n * n else A
     else:
         if method == "expm":
             raise ValueError(

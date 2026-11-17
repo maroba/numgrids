@@ -151,8 +151,13 @@ The [documentation](https://maroba.github.io/numgrids/) has a user guide for eve
     <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/wave-equation-drum.html"><img src="docs/assets/gallery/wave-equation-drum.png" alt="Vibrations of a drum"><br><b>Vibrations of a drum</b></a><br><sub>Eigenmodes of the full disk</sub></td>
   </tr>
   <tr>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/quantum-dynamics.html"><img src="docs/assets/gallery/quantum-dynamics.png" alt="Quantum dynamics"><br><b>Quantum dynamics</b></a><br><sub>Wave packets and tunneling</sub></td>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/hydrogen-atom.html"><img src="docs/assets/gallery/hydrogen-atom.png" alt="Hydrogen atom"><br><b>Hydrogen atom</b></a><br><sub>Unbounded domains</sub></td>
     <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/spherical-harmonics.html"><img src="docs/assets/gallery/spherical-harmonics.png" alt="Spherical harmonics"><br><b>Spherical harmonics</b></a><br><sub>Laplacian on the full sphere</sub></td>
+  </tr>
+  <tr>
     <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/quantum-harmonic-oscillator.html"><img src="docs/assets/gallery/quantum-harmonic-oscillator.png" alt="Quantum oscillator"><br><b>Quantum oscillator</b></a><br><sub>Schrödinger eigenvalue problem</sub></td>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/heat-conduction.html"><img src="docs/assets/gallery/heat-conduction.png" alt="Heat conduction"><br><b>Heat conduction</b></a><br><sub>Variable conductivity, moving boundary data</sub></td>
     <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/poisson-equation-2d.html"><img src="docs/assets/gallery/poisson-equation-2d.png" alt="Poisson equation"><br><b>Poisson equation</b></a><br><sub>Boundary value problem in 2D</sub></td>
   </tr>
   <tr>

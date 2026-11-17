@@ -151,6 +151,15 @@ Calling `apply()` raises `NotImplementedError`.
 L, rhs = bc.apply_to_system(L, rhs)
 ```
 
+The coefficients `a` and `b` may vary along the face. Like the value, they
+can be arrays matching the face or functions of the face coordinates. An
+example is Newton's law of cooling, $h\,u + k\,\partial u/\partial n = h\,u_\infty$,
+at a surface whose conductivity $k$ depends on the position:
+
+```python
+bcs = {"y_high": Robin(2.0, lambda c: 1 + c[0], 0.0)}      # k = 1 + x along the face y = y_max
+```
+
 ## Applying multiple BCs at once
 
 The `apply_bcs()` function takes a list of boundary conditions and applies

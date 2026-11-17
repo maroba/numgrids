@@ -262,3 +262,23 @@ class TestExponentialIntegrator:
             evolve(rod, L, u0, (0, 1), bcs=0, method="expm", t_eval=[0, 2])
         with pytest.raises(ValueError, match="sorted"):
             evolve(rod, L, u0, (0, 1), bcs=0, method="expm", t_eval=[0.5, 0.2])
+
+
+def test_implicit_methods_get_a_dense_jacobian_on_spectral_grids(monkeypatch):
+    import scipy.integrate
+    import scipy.sparse
+    seen = {}
+    original = scipy.integrate.solve_ivp
+
+    def spy(*args, **kwargs):
+        seen["dense"] = not scipy.sparse.issparse(kwargs["jac"])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(numgrids.evolution, "solve_ivp", spy)
+    spectral = Grid(x=chebyshev(12, 0, 1), y=chebyshev(12, 0, 1))
+    res = evolve(spectral, spectral.laplacian_operator(), np.zeros(spectral.shape), (0, 0.1), bcs=1, method="BDF")
+    assert res.success and seen["dense"]
+    from numgrids import equidistant
+    banded = Grid(x=equidistant(1000, 0, 1))
+    res = evolve(banded, banded.laplacian_operator(), np.zeros(banded.shape), (0, 0.1), bcs=1, method="BDF")
+    assert res.success and not seen["dense"]

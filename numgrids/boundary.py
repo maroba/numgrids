@@ -490,15 +490,20 @@ class RobinBC(BoundaryCondition):
     ----------
     face : BoundaryFace
         The boundary face.
-    a : float
+    a : float, NDArray, or callable
         Coefficient of *u*.
-    b : float
+    b : float, NDArray, or callable
         Coefficient of the normal derivative.
     value : float, NDArray, or callable
         The prescribed value *g*.
+
+    The coefficients may vary along the face: like the value, they can be
+    arrays matching the face or callables of the face coordinates, e.g. for
+    Newton's law of cooling :math:`h\,u + k\,\partial u/\partial n = h\,u_\infty`
+    with a conductivity :math:`k` that depends on the position.
     """
 
-    def __init__(self, face: BoundaryFace, a: float, b: float, value=0.0) -> None:
+    def __init__(self, face: BoundaryFace, a, b, value=0.0) -> None:
         super().__init__(face, value)
         self.a = a
         self.b = b
@@ -514,10 +519,19 @@ class RobinBC(BoundaryCondition):
 
     def apply_to_system(self, L: spmatrix, rhs: NDArray) -> tuple[spmatrix, NDArray]:
         """Replace boundary rows with ``a * I + b * sign * D``."""
-        n = self.face.grid.size
-        R = (self.a * scipy.sparse.identity(n, format="csr")
-             + self.b * self.face.normal_sign * scipy.sparse.csr_matrix(self._diff.as_matrix()))
+        D = self.face.normal_sign * scipy.sparse.csr_matrix(self._diff.as_matrix())
+        R = self._coefficient(self.a) + self._coefficient(self.b) @ D
         return _replace_rows(L, self.face.flat_indices, R), self._set_rhs(rhs)
+
+    def _coefficient(self, spec) -> spmatrix:
+        """Diagonal matrix with the values of a coefficient on the points of the face."""
+        n = self.face.grid.size
+        if np.isscalar(spec):
+            return spec * scipy.sparse.identity(n, format="csr")
+        values = BoundaryCondition(self.face, spec)._resolve_value()
+        diagonal = np.zeros(n, dtype=values.dtype)
+        diagonal[self.face.flat_indices] = values
+        return scipy.sparse.diags(diagonal, format="csr")
 
     def __repr__(self) -> str:
         return f"RobinBC({self.face!r}, a={self.a!r}, b={self.b!r}, value={self._value_spec!r})"
@@ -568,9 +582,13 @@ class Neumann(BCSpec):
 
 
 class Robin(BCSpec):
-    """Robin condition *a u + b du/dn = value*, to be bound to a face later."""
+    """Robin condition *a u + b du/dn = value*, to be bound to a face later.
 
-    def __init__(self, a: float, b: float, value=0.0) -> None:
+    *a*, *b* and *value* are numbers, arrays matching the face, or callables
+    of the face coordinates.
+    """
+
+    def __init__(self, a, b, value=0.0) -> None:
         self.a = a
         self.b = b
         self.value = value

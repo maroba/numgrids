@@ -110,6 +110,8 @@ indices and scale factors.
    examples/spherical-harmonics
    examples/quantum-harmonic-oscillator
    examples/quantum-dynamics
+   examples/hydrogen-atom
+   examples/heat-conduction
    examples/wave-equation-drum
    examples/adaptive-refinement-demo
    examples/convergence-study

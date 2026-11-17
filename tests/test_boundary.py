@@ -445,3 +445,31 @@ class TestWithChebyshevAxis(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRobinCoefficientsAlongTheFace(unittest.TestCase):
+    """Newton cooling h u + k du/dn = h u_inf with a conductivity that varies along the boundary."""
+
+    def test_array_and_callable_coefficients(self):
+        from numgrids import Grid, Neumann, Robin, chebyshev
+        grid = Grid(x=chebyshev(16, 0, 1), y=chebyshev(16, 0, 1))
+        X, Y = grid.meshed_coords
+        k = 1 + X
+        L = grid.diffusion_operator(k)
+        face = grid.faces["y_high"]
+        # Manufactured solution u = (1 + x) y^2 + 1: on y = 1, 2 u + k u_y = 2 (2 + x) + 2 (1 + x)^2
+        u_exact = (1 + X) * Y ** 2 + 1
+        f = L(u_exact)
+        g = lambda c: 2 * (2 + c[0]) + 2 * (1 + c[0]) ** 2
+        base = {"x_low": lambda c: c[1] ** 2 + 1, "x_high": lambda c: 2 * c[1] ** 2 + 1, "y_low": 1.0}
+        for b in (face.restrict(k), lambda c: 1 + c[0]):
+            u = L.solve(f, bcs={**base, "y_high": Robin(2.0, b, g)})
+            np.testing.assert_allclose(u, u_exact, atol=1e-9)
+        # Both coefficients varying, written as h u + k u_n = h u_inf with h = 2 (1 + x)
+        h = lambda c: 2 * (1 + c[0])
+        u = L.solve(f, bcs={**base, "y_high": Robin(h, lambda c: (1 + c[0]) ** 2,
+                                                    lambda c: (1 + c[0]) * g(c))})
+        np.testing.assert_allclose(u, u_exact, atol=1e-9)
+        # Scalars still work, also in eigenvalue problems
+        vals, _ = (-grid.laplacian_operator()).eig(k=2, bcs={"all": Neumann(0), "y_high": Robin(1.0, 1.0)})
+        self.assertTrue(np.all(vals > 0))

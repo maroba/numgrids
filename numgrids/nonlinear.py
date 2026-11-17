@@ -174,6 +174,13 @@ class ContinuationResult:
     success: bool
     message: str
 
+    def __repr__(self) -> str:
+        if len(self.params) == 0:
+            return "ContinuationResult(0 points)"
+        return (f"ContinuationResult({len(self.params)} points, parameter from "
+                f"{self.params[0]:.6g} to {self.params[-1]:.6g}, {len(self.folds)} fold(s), "
+                f"success={self.success})")
+
     def __len__(self) -> int:
         """Number of points on the branch."""
         return len(self.params)

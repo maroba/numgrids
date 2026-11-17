@@ -16,6 +16,9 @@ from PIL import Image, ImageChops
 SELECTION = {
     "operators-and-solvers": 2,
     "nonlinear-problems": 1,
+    "quantum-dynamics": 1,
+    "hydrogen-atom": 0,
+    "heat-conduction": 2,
     "heat-equation-rod": 0,
     "poisson-equation-2d": 0,
     "quantum-harmonic-oscillator": 0,

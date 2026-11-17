@@ -85,6 +85,9 @@ All notable changes to **numgrids** are documented on this page.
   exact Jacobian.
 - **Linear systems as operator blocks**: `evolve(grid, [[None, 1], [L, None]], (u0, v0), ...)`
   for the wave equation and other coupled linear systems.
+- Implicit methods (`"BDF"`, `"Radau"`) with an operator right-hand side are
+  several times faster on spectral grids (they now get a dense Jacobian,
+  which avoids the fill-in of sparse factorizations).
 - **Exponential integrator**: `method="expm"` evaluates the solution of linear
   problems with matrix exponentials, directly at the output times. There is
   no time stepping error, complex fields and stiff operators work together,
@@ -98,6 +101,9 @@ All notable changes to **numgrids** are documented on this page.
   $\nabla\cdot(k\,\nabla u)$ for variable coefficients.
 - `Operator.T`, `Operator.H`, `Operator.adjoint()` (adjoint in the $L^2$ inner
   product of the grid) and `Operator.toarray()`.
+- The coefficients of `Robin(a, b, value)` may vary along the face (arrays or
+  functions of the face coordinates), e.g. for Newton's law of cooling with
+  a position-dependent conductivity.
 - `grid.inner(f, g)`, `grid.norm(f)` ($L^2$, $L^1$ or maximum norm),
   `grid.mean(f)` and `grid.quadrature_weights`.
 
@@ -118,9 +124,17 @@ All notable changes to **numgrids** are documented on this page.
   conductivity).
 - The heat equation notebook covers insulated and cooled ends, and the drum
   notebook covers a membrane with variable density.
-- New example notebook *Quantum dynamics*: a spreading wave packet,
-  tunneling through a barrier (compared with stationary scattering) and a
-  coherent state, computed with the exponential integrator.
+- New example notebooks:
+  - *Quantum dynamics*: a spreading wave packet, tunneling through a barrier
+    (compared with stationary scattering) and a coherent state, computed
+    with the exponential integrator.
+  - *The hydrogen atom*: energy levels and wave functions on the half line,
+    the role of the scale length, and a comparison with a truncated domain.
+  - *Heat conduction*: variable conductivity, a seasonal temperature wave in
+    the ground, a disk with a moving heat source, and implicit time
+    stepping with a reused factorization.
+- The nonlinear problems notebook traces the bifurcation diagram of the
+  Bratu problem with `continuation()`.
 - New user guide sections on unbounded domains, continuation, solver
   methods and factorizations, operators in divergence form, inner products
   and norms, time-dependent boundary values, source terms and the
