@@ -319,7 +319,11 @@ class Operator:
         eigenvectors : NDArray
             Shape ``(k, *grid.shape)``; ``eigenvectors[i]`` belongs to
             ``eigenvalues[i]``.  Each eigenvector has unit Euclidean norm
-            (as a flat vector) and its largest component is positive.
+            (as a flat vector) and its largest component is positive.  For a
+            real operator, eigenvectors of real eigenvalues are real, also
+            for degenerate eigenvalues (e.g. symmetry-related modes on a
+            disk or sphere): a degenerate eigenspace is returned as a real
+            orthonormal basis.
         """
         from numgrids.boundary import DirichletBC, resolve_bcs
 
@@ -401,6 +405,8 @@ class Operator:
 
         order = self._sort_eigenvalues(vals, which, sigma)[:k]
         vals, vecs = vals[order], vecs[:, order]
+        if not np.iscomplexobj(A):
+            vals, vecs = _real_eigenbasis(vals, vecs)
 
         full = np.zeros((size, len(vals)), dtype=vecs.dtype)
         full[keep, :] = vecs
@@ -427,6 +433,43 @@ class Operator:
         if which == "SR":
             return np.argsort(vals.real)
         return np.argsort(-vals.real)
+
+
+def _real_eigenbasis(vals: NDArray, vecs: NDArray, rtol: float = 1e-8) -> tuple[NDArray, NDArray]:
+    r"""Replace complex eigenvectors of a real problem by real ones.
+
+    For a real matrix, the eigenspace of a real eigenvalue has a real basis,
+    but eigensolvers may return complex vectors for it.  This happens when
+    the eigenvalue is degenerate: any complex combination of the basis is an
+    eigenvector, and a nonsymmetric discretization may even split the
+    eigenvalue into a pair :math:`\lambda \pm i\epsilon` with complex
+    conjugate eigenvectors.  For each cluster of (numerically) equal, real
+    eigenvalues, the real and imaginary parts of its eigenvectors span the
+    real eigenspace; an orthonormal basis of that span replaces the cluster's
+    eigenvectors (also if they were real but not orthogonal).  Genuinely
+    complex eigenvalues are left unchanged.
+    """
+    vals = np.array(vals, dtype=complex)
+    vecs = np.array(vecs, dtype=complex)
+    scale = rtol * np.maximum(1.0, np.abs(vals))
+    real_valued = np.abs(vals.imag) <= scale
+    unassigned = set(np.flatnonzero(real_valued))
+    while unassigned:
+        i = min(unassigned)
+        cluster = [j for j in sorted(unassigned)
+                   if abs(vals[j].real - vals[i].real) <= max(scale[i], scale[j])]
+        unassigned.difference_update(cluster)
+        V = vecs[:, cluster]
+        m = len(cluster)
+        vals[cluster] = vals[cluster].real
+        if m == 1 and not np.any(V.imag):
+            continue
+        U, s, _ = np.linalg.svd(np.hstack([V.real, V.imag]), full_matrices=False)
+        if s[m - 1] <= 1e-6 * s[0]:
+            # The vectors do not span an m-dimensional space; leave them alone.
+            continue
+        vecs[:, cluster] = U[:, :m]
+    return vals, vecs
 
 
 def _count_zero_rows(M) -> int:

@@ -2,6 +2,23 @@
 
 All notable changes to **numgrids** are documented on this page.
 
+## 0.6.1
+
+### Bug fixes
+
+- `Operator.eig` returns real eigenvectors for real operators, also for
+  degenerate eigenvalues (e.g. symmetry-related modes on a disk, square or
+  sphere). Previously, the eigenvectors of such modes could be complex
+  combinations, and the sparse path never returned real arrays. A degenerate
+  eigenspace is now returned as a real orthonormal basis. Genuinely complex
+  eigenvalues and their eigenvectors are unchanged.
+
+### Documentation
+
+- New README and PyPI project description with a title image, a short
+  introductory example and a gallery of the example notebooks.
+- `CITATION.cff` for citing numgrids ("Cite this repository" on GitHub).
+
 ## 0.6.0
 
 ### Breaking changes
