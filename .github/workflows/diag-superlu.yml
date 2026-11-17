@@ -1,0 +1,45 @@
+name: Diagnose SuperLU crash (temporary)
+
+on:
+  push:
+    branches: [sphere-poles]
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - scipy: "1.10.1"
+            threads: ""
+          - scipy: "1.10.1"
+            threads: "1"
+          - scipy: "1.11.4"
+            threads: ""
+          - scipy: "1.12.0"
+            threads: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "numpy==1.22.4" "scipy==${{ matrix.scipy }}" "findiff==0.10.0" threadpoolctl
+          python -m pip install --no-deps -e .
+      - name: Machine
+        run: |
+          lscpu | grep -E "Model name|^CPU\(s\)"
+          python -c "import threadpoolctl, scipy.sparse.linalg, pprint; pprint.pprint(threadpoolctl.threadpool_info())"
+      - name: Repeat the ball solve 30 times
+        env:
+          OPENBLAS_NUM_THREADS: ${{ matrix.threads }}
+        run: |
+          crashes=0
+          for i in $(seq 30); do
+            python -X faulthandler ci_diag/segtest.py > out.txt 2>&1 || { crashes=$((crashes+1)); tail -5 out.txt; }
+          done
+          echo "SCIPY=${{ matrix.scipy }} THREADS=${{ matrix.threads || 'default' }} CRASHES=$crashes/30"
+          test $crashes -eq 0
