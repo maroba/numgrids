@@ -252,6 +252,21 @@ class Grid:
     def __hash__(self) -> int:
         return hash(tuple(map(hash, self.axes)))
 
+    def _antipodal_map(self, axis_index: int) -> Callable[[NDArray], NDArray]:
+        """Map a field to its values at the antipodal points of a radial axis.
+
+        Only grids in which a :class:`~numgrids.axes.RadialAxis` passes
+        through the origin (polar, cylindrical, spherical) provide it.
+        """
+        raise ValueError(
+            "A RadialAxis passes through the coordinate origin and can only be used as the "
+            "radial axis of a PolarGrid, CylindricalGrid or SphericalGrid."
+        )
+
+    def _quadrature_weights(self, axis_index: int) -> NDArray:
+        """Quadrature weights used for integrating along an axis of this grid."""
+        return self.axes[axis_index].quadrature_weights
+
     def _check_field(self, f, name: str = "f") -> NDArray:
         """Validate that *f* is an array matching the grid shape."""
         f = np.asarray(f)
@@ -443,18 +458,18 @@ class Grid:
 
         Keys follow the pattern ``'{axis_index}_{side}'``, e.g.
         ``'0_low'``, ``'0_high'``.  For named axes, ``'{name}_{side}'``
-        (e.g. ``'x_low'``) is accepted as well.  Periodic axes are skipped.
+        (e.g. ``'x_low'``) is accepted as well.  Periodic axes are skipped,
+        and radial axes through the origin only have a ``"high"`` face.
         """
         if self.cache["faces"] is None:
             from numgrids.boundary import BoundaryFace
             result = {}
             aliases = {}
             for i, axis in enumerate(self.axes):
-                if not axis.periodic:
-                    for side in ("low", "high"):
-                        result[f"{i}_{side}"] = BoundaryFace(self, i, side)
-                        if axis.name is not None:
-                            aliases[f"{axis.name}_{side}"] = f"{i}_{side}"
+                for side in axis.boundary_sides:
+                    result[f"{i}_{side}"] = BoundaryFace(self, i, side)
+                    if axis.name is not None:
+                        aliases[f"{axis.name}_{side}"] = f"{i}_{side}"
             self.cache["faces"] = _FaceDict(result, aliases)
         return self.cache["faces"]
 

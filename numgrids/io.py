@@ -39,7 +39,7 @@ def _ensure_registries() -> None:
     """Lazily populate the class look-up tables."""
     if _AXIS_CLASSES:
         return
-    from numgrids.axes import ChebyshevAxis, EquidistantAxis, LogAxis
+    from numgrids.axes import ChebyshevAxis, EquidistantAxis, LogAxis, RadialAxis
     from numgrids.curvilinear import (
         CylindricalGrid,
         EllipticCylindricalGrid,
@@ -54,6 +54,7 @@ def _ensure_registries() -> None:
         "EquidistantAxis": EquidistantAxis,
         "ChebyshevAxis": ChebyshevAxis,
         "LogAxis": LogAxis,
+        "RadialAxis": RadialAxis,
     })
     _GRID_CLASSES.update({
         "Grid": _Grid,

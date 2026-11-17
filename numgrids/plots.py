@@ -110,6 +110,15 @@ def plot_field(
     if not use_cartesian:
         X, Y = grid.meshed_coords[i0][index], grid.meshed_coords[i1][index]
 
+    # A radial axis through the origin has no point at r = 0: add the center
+    # (value from spectral interpolation) so that disks are drawn without a hole.
+    from numgrids.axes import RadialAxis
+    if use_cartesian and isinstance(grid.axes[i0], RadialAxis):
+        center = float(np.real(grid.interpolate(f, (0.0, grid.axes[i1].coords[0]), method="spectral")))
+        F = np.vstack([np.full((1, F.shape[1]), center), F])
+        X = np.vstack([np.zeros((1, X.shape[1])), X])
+        Y = np.vstack([np.zeros((1, Y.shape[1])), Y])
+
     # Close periodic axes so that there is no gap in the plot.
     for local, i in enumerate((i0, i1)):
         axis = grid.axes[i]

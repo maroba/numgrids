@@ -64,12 +64,13 @@ result = evolve(grid, grid.laplacian_operator(), np.zeros(grid.shape), (0, 5),
 Pass a tuple of initial fields to integrate a system; the right-hand side
 then receives and returns one array per field. The wave equation
 $\partial_t^2 u = c^2 \nabla^2 u$ becomes $\partial_t u = v$,
-$\partial_t v = c^2 \nabla^2 u$, here on an annulus:
+$\partial_t v = c^2 \nabla^2 u$, here on a circular drum (a full disk with a
+[radial axis](curvilinear.md#full-disks-cylinders-and-balls)):
 
 ```python
-grid = PolarGrid(chebyshev(25, 0.5, 2.0), periodic(48))
+grid = PolarGrid(radial(24, 1.0), periodic(32))
 X, Y = grid.cartesian_coords
-u0 = np.exp(-10 * ((X - 1.2)**2 + Y**2))
+u0 = np.exp(-20 * ((X - 0.3)**2 + Y**2))
 
 result = evolve(
     grid,
@@ -79,7 +80,7 @@ result = evolve(
     t_eval=np.linspace(0, 2, 50),
     bcs=0,
 )
-u, v = result.u          # each of shape (50, 25, 48)
+u, v = result.u          # each of shape (50, 24, 32)
 grid.plot(u[-1])
 ```
 

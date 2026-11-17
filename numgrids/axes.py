@@ -13,6 +13,8 @@ Available axis types:
 - :class:`EquidistantAxis` -- uniformly spaced points, optional periodicity.
 - :class:`ChebyshevAxis` -- Chebyshev-node spacing for spectral accuracy.
 - :class:`LogAxis` -- logarithmically spaced points.
+- :class:`RadialAxis` -- radial coordinate through the origin of polar,
+  cylindrical and spherical grids (full disks, cylinders and balls).
 """
 
 from __future__ import annotations
@@ -240,6 +242,16 @@ class Axis:
             return slice(None, None)
         else:
             return slice(1, -1)
+
+    @property
+    def boundary_sides(self) -> tuple[str, ...]:
+        """The sides of this axis that are part of the grid boundary.
+
+        ``("low", "high")`` for ordinary axes, ``()`` for periodic axes and
+        ``("high",)`` for :class:`RadialAxis`, whose low end is the
+        coordinate origin rather than a boundary.
+        """
+        return () if self.periodic else ("low", "high")
 
     def __len__(self) -> int:
         """Returns the number of grid points on the axis."""
@@ -492,3 +504,114 @@ class LogAxis(Axis):
         """Create logarithmic differentiation operator."""
         from numgrids.diff import LogDiff
         return LogDiff(grid, order, axis_index, acc=acc)
+
+
+class RadialAxis(Axis):
+    r"""Radial axis that passes through the coordinate origin.
+
+    Use this axis for the radial coordinate of a :class:`~numgrids.PolarGrid`,
+    :class:`~numgrids.CylindricalGrid` or :class:`~numgrids.SphericalGrid` to
+    cover a *full* disk, cylinder or ball, including the center.
+
+    The points are the positive half of ``2 * num_points`` Chebyshev nodes on
+    the diameter :math:`[-R, R]`; no point lies exactly on the origin, so
+    there is no coordinate singularity. A point :math:`(-r, \varphi)` is the
+    same as :math:`(r, \varphi + \pi)`, so derivatives along the axis are
+    computed on the whole diameter with the values of the antipodal half
+    supplied by the grid (Fornberg's / Trefethen's method). This gives
+    spectral accuracy, no spurious eigenvalues, and no boundary condition is
+    needed at the center.
+
+    Requirements: the grid must provide the antipodal map -- the azimuthal
+    axis must be periodic over :math:`2\pi` with an even number of points
+    (and, for spherical grids, the polar axis must be symmetric about
+    :math:`\pi/2`).
+
+    Only the outer end :math:`r = R` is a boundary (face ``"high"``).
+
+    Parameters
+    ----------
+    num_points : int
+        Number of radial points (on :math:`0 < r \le R`).
+    low : float
+        Must be 0 (kept for a uniform axis signature).
+    high : float
+        The outer radius :math:`R`.
+    """
+
+    def __init__(self, num_points: int, low: float = 0.0, high: float = 1.0, **kwargs) -> None:
+        if low != 0:
+            raise ValueError(f"A RadialAxis always starts at the origin (low=0), got low={low}.")
+        super().__init__(num_points, low, high, periodic=False, **kwargs)
+
+    def _setup_internal_coords(self, *args) -> NDArray:
+        """Positive Chebyshev nodes of the full diameter on ``[-1, 1]``, ascending."""
+        n = len(self)
+        N = 2 * n - 1
+        x = np.sin(np.pi * (N - 2 * np.arange(N + 1)) / (2 * N))   # descending
+        return x[:n][::-1].copy()
+
+    def _setup_external_coords(self, low: float, high: float) -> NDArray:
+        coords = self._coords_internal * high
+        coords[-1] = high
+        return coords
+
+    @property
+    def diameter_coords(self) -> NDArray:
+        """All ``2 * num_points`` Chebyshev nodes on the diameter ``[-R, R]``, ascending."""
+        return np.concatenate([-self.coords[::-1], self.coords])
+
+    @property
+    def boundary(self) -> slice:
+        return slice(None, -1)
+
+    @property
+    def boundary_sides(self) -> tuple[str, ...]:
+        return ("high",)
+
+    def create_diff_operator(self, grid: Grid, order: int, axis_index: int, acc: int = 4) -> GridDiff:
+        """Create the folded Chebyshev differentiation operator (``acc`` is ignored)."""
+        from numgrids.diff import RadialDiff
+        return RadialDiff(grid, order, axis_index)
+
+    def radial_quadrature_weights(self, power: int = 1) -> NDArray:
+        r"""Weights :math:`w_k` with :math:`\int_0^R r^m h(r)\,dr \approx \sum_k w_k h(r_k)`.
+
+        Exact for even polynomials :math:`h` (in :math:`r`) up to degree
+        :math:`2n - 2`; *h* is assumed even, which holds for angular averages
+        of smooth fields on disks and balls.
+
+        Parameters
+        ----------
+        power : int
+            The exponent :math:`m` of the radial weight: 1 for disks and
+            cylinders, 2 for balls.
+        """
+        return _radial_weights(self.coords, self.high, power)
+
+    def _compute_quadrature_weights(self) -> NDArray:
+        # Weights for the integral of g(r) = r * h(r) dr (polar and cylindrical
+        # grids multiply the integrand by the volume element r).
+        return self.radial_quadrature_weights(1) / self.coords
+
+
+def _radial_weights(r: NDArray, R: float, power: int) -> NDArray:
+    r"""Interpolatory weights for :math:`\int_0^R r^m h(r) dr` with even *h*.
+
+    With :math:`t = r^2` the integral becomes
+    :math:`\frac12 \int_0^{R^2} t^{(m-1)/2} H(t)\,dt` with smooth *H*; the
+    nodes :math:`t_k = r_k^2` are Chebyshev--Lobatto points on
+    :math:`[0, R^2]` (without :math:`t = 0`), so polynomial interpolation in
+    *t* is well conditioned.
+    """
+    from numpy.polynomial import chebyshev as C
+    from scipy.special import roots_jacobi
+
+    n = len(r)
+    tau = 2 * r ** 2 / R ** 2 - 1
+    V = C.chebvander(tau, n - 1)
+    beta = (power - 1) / 2
+    xg, wg = roots_jacobi(2 * n + 20, 0.0, beta)          # weight (1 + x)^beta on [-1, 1]
+    half_R2 = R ** 2 / 2
+    moments = 0.5 * half_R2 ** beta * half_R2 * (C.chebvander(xg, n - 1).T @ wg)
+    return np.linalg.solve(V.T, moments)

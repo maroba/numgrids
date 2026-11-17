@@ -25,7 +25,7 @@ from numpy.fft import fft, fftfreq, ifft
 from numpy.typing import NDArray
 from scipy.sparse import spmatrix
 
-from numgrids.axes import EquidistantAxis, LogAxis
+from numgrids.axes import EquidistantAxis, LogAxis, RadialAxis
 from numgrids.utils import embed_1d_operator
 
 if TYPE_CHECKING:
@@ -358,3 +358,64 @@ class LogDiff(GridDiff):
             D = term if D is None else D + term
         x_pow = np.broadcast_to(self._x_pow, shape).ravel()
         return scipy.sparse.diags(x_pow) @ D
+
+
+# ---------------------------------------------------------------------------
+# Radial axes through the origin
+# ---------------------------------------------------------------------------
+
+class RadialDiff(GridDiff):
+    r"""Chebyshev derivative along a :class:`~numgrids.axes.RadialAxis`.
+
+    The radial axis stores the positive half of the Chebyshev nodes of the
+    diameter :math:`[-R, R]`. The values on the negative half are those at
+    the antipodal points :math:`(r, \varphi + \pi)` (and :math:`\pi - \theta`
+    on spherical grids), which the grid supplies. With the full Chebyshev
+    differentiation matrix :math:`D` split into the blocks acting on the
+    positive (:math:`A`) and negative (:math:`B`) half,
+
+    .. math::
+        \partial_r^n f = A\, f + B\, (\mathcal{P} f),
+
+    where :math:`\mathcal{P}` is the antipodal map. This is spectrally
+    accurate for smooth (single-valued) fields and has no singularity at the
+    origin.
+
+    Reference: Trefethen, *Spectral Methods in MATLAB*, SIAM, 2000, ch. 11.
+    """
+
+    def __init__(self, grid: Grid, order: int, axis_index: int) -> None:
+        super().__init__(grid, order, axis_index)
+        if not isinstance(self.axis, RadialAxis):
+            raise TypeError(f"Axis must be of type RadialAxis. Got: {type(self.axis)}")
+        self._antipodal = grid._antipodal_map(axis_index)
+
+        n = len(self.axis)
+        D = chebyshev_diff_matrix(2 * n) / self.axis.high      # ascending diameter nodes
+        D = np.linalg.matrix_power(D, order)
+        # Diameter node q (ascending) <-> radial index: q >= n -> q - n,
+        # q < n -> n - 1 - q at the antipodal point.
+        self._A = D[n:, n:].copy()
+        self._B = D[n:, :n][:, ::-1].copy()
+        self._matrix: spmatrix | None = None
+
+        A, B, antipodal = self._A, self._B, self._antipodal
+
+        def apply(M: NDArray, f: NDArray) -> NDArray:
+            return np.moveaxis(np.tensordot(M, f, axes=([1], [axis_index])), 0, axis_index)
+
+        def operator(f: NDArray) -> NDArray:
+            return apply(A, f) + apply(B, antipodal(f))
+
+        self.operator = operator
+
+    def as_matrix(self) -> spmatrix:
+        if self._matrix is None:
+            shape = self.grid.shape
+            size = int(np.prod(shape))
+            perm = self._antipodal(np.arange(size).reshape(shape)).ravel()
+            P = scipy.sparse.csr_matrix((np.ones(size), (np.arange(size), perm)), shape=(size, size))
+            A = embed_1d_operator(scipy.sparse.csc_matrix(self._A), shape, self.axis_index)
+            B = embed_1d_operator(scipy.sparse.csc_matrix(self._B), shape, self.axis_index)
+            self._matrix = scipy.sparse.csc_matrix(A + B @ P)
+        return self._matrix

@@ -213,23 +213,62 @@ vals, modes = (-L).eig(k=6, bcs=0)             # Laplace eigenmodes
 `grid.integrate(f)` includes the volume element, i.e. it computes
 $\int f\, dV$; see [Integration](integration.md).
 
+## Full disks, cylinders and balls
+
+To include the center $r = 0$, use a **radial axis** as the first axis of a
+`PolarGrid`, `CylindricalGrid` or `SphericalGrid`:
+
+```python
+disk = PolarGrid(radial(24, 1.0), periodic(32))
+cylinder = CylindricalGrid(radial(16, 1.0), periodic(32), chebyshev(16, 0, 2))
+ball = SphericalGrid(radial(16, 1.0), chebyshev(16, 1e-3, np.pi - 1e-3), periodic(32))
+```
+
+The radial points are the positive half of Chebyshev nodes on the diameter
+$[-R, R]$; no point lies on the origin. Radial derivatives are computed on
+the whole diameter, using that the point $(-r, \varphi)$ is the same as
+$(r, \varphi + \pi)$ (and $(r, \pi - \theta, \varphi + \pi)$ on a ball). As
+a result
+
+* there is **no singularity and no boundary condition** at the center -- the
+  only boundary face is the rim `"r_high"`,
+* derivatives, Laplacians, integrals and interpolation (also exactly at the
+  center) are **spectrally accurate**,
+* operators have **no spurious eigenvalues**, and their spectrum is real and
+  negative, so **time stepping is stable**.
+
+```python
+disk = PolarGrid(radial(24, 1.0), periodic(32))
+vals, modes = (-disk.laplacian_operator()).eig(k=6, bcs=0)
+np.sqrt(vals)       # 2.4048, 3.8317, 3.8317, 5.1356, 5.1356, 5.5201 (Bessel zeros)
+
+X, Y = disk.cartesian_coords
+u = disk.laplacian_operator().solve(4.0, bcs=1.0)    # u = x^2 + y^2
+disk.integrate(np.ones(disk.shape))                  # pi
+```
+
+Requirements: the azimuthal axis must be periodic over $2\pi$ with an even
+number of points, and on a `SphericalGrid` the polar axis must be symmetric
+about $\pi/2$ (e.g. `chebyshev(n, eps, pi - eps)`). A `ValueError` explains
+what is missing otherwise.
+
 ## Singularity handling
 
 Curvilinear coordinates often have singularities where scale factors vanish --
-for example $r = 0$ in spherical or cylindrical coordinates, or
+for example $r = 0$ in polar, spherical or cylindrical coordinates, or
 $\theta = 0, \pi$ in spherical coordinates. At these points, expressions like
 $1/h_i$ produce infinities.
 
-numgrids handles this gracefully: all non-finite values (infinity, NaN) are
-replaced by zero in the operator output. This means you can safely include
-points near (or at) coordinate singularities, though accuracy at those
-specific points will be limited.
+* **The center $r = 0$**: use a radial axis, see above.
+* **The poles $\theta = 0, \pi$** of spherical grids: start the polar axis
+  slightly away from the poles, e.g. `chebyshev(n, 1e-3, np.pi - 1e-3)`. The
+  equation is then enforced at the points next to the poles; this is accurate
+  for eigenvalue problems, and integrals miss only the tiny polar caps
+  (relative error of order $\epsilon^2$).
 
-```{tip}
-For best results, avoid placing grid boundaries exactly at singularities.
-Instead, start the radial axis at a small positive value like `0.01`
-instead of `0`, and the polar axis at `0.01` instead of `0`.
-```
+Grid points placed *exactly* on a singularity yield non-finite coefficients,
+which are replaced by zero; the resulting empty operator rows are reported by
+`Operator.solve` (error) and `Operator.eig` (warning).
 
 ## Custom curvilinear coordinates
 

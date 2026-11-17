@@ -66,9 +66,15 @@ class BoundaryFace:
             raise ValueError(
                 f"axis_index {axis_index} out of range for {grid.ndims}-dimensional grid"
             )
-        if grid.get_axis(axis_index).periodic:
+        axis = grid.get_axis(axis_index)
+        if axis.periodic:
             raise ValueError(
                 f"Axis {axis_index} is periodic and has no boundary faces"
+            )
+        if side not in axis.boundary_sides:
+            raise ValueError(
+                f"Axis {axis_index} has no {side!r} boundary face (a radial axis through the "
+                "origin only has the outer face 'high')."
             )
         self.grid = grid
         self.axis_index = axis_index
@@ -204,7 +210,7 @@ class BoundaryFace:
             )
         f = f * self.area_element
         result = f
-        weights = [ax.quadrature_weights for i, ax in enumerate(self.grid.axes)
+        weights = [self.grid._quadrature_weights(i) for i in range(self.grid.ndims)
                    if i != self.axis_index]
         for w in reversed(weights):
             result = result @ w

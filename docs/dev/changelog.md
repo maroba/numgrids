@@ -2,6 +2,17 @@
 
 All notable changes to **numgrids** are documented on this page.
 
+## Unreleased
+
+### New features
+
+- Full disks, cylinders and balls: `radial(n, R)` creates a radial axis
+  through the origin for `PolarGrid`, `CylindricalGrid` and `SphericalGrid`.
+  Radial derivatives use the whole diameter (no grid point and no
+  singularity at the center, no boundary condition needed there), with
+  spectral accuracy for derivatives, Laplacians, integrals and
+  interpolation, no spurious eigenvalues, and stable time stepping.
+
 ## 0.5.0
 
 ### Breaking changes
