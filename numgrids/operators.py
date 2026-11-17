@@ -367,8 +367,19 @@ class Operator:
                 vals, vecs = scipy.linalg.eig(Ad)
         else:
             M = scipy.sparse.diags(B_diag) if generalized else None
+            # Compute more eigenpairs than requested: Arnoldi iterations can miss
+            # members of (nearly) degenerate eigenvalue clusters at the edge of
+            # the requested set. The surplus is discarded after sorting.
+            k_arnoldi = min(n - 2, max(2 * k, k + 10))
+            # A fixed (pseudo-random) start vector makes the results reproducible.
+            v0 = np.random.default_rng(20231117).standard_normal(n)
             if sigma is not None or which == "SM":
-                shift = 0.0 if sigma is None else sigma
+                if sigma is None:
+                    # Shift slightly off zero: an exact zero eigenvalue (e.g. constants
+                    # on a closed surface) would make the shifted matrix singular.
+                    shift = -1e-8 * scipy.sparse.linalg.norm(A, 1)
+                else:
+                    shift = sigma
                 I_n = M if M is not None else scipy.sparse.identity(n)
                 lu = scipy.sparse.linalg.splu(scipy.sparse.csc_matrix(A - shift * I_n))
                 dtype = np.result_type(A.dtype, type(shift))
@@ -378,7 +389,7 @@ class Operator:
                     def matvec(x):
                         return lu.solve(np.asarray(M @ x, dtype=dtype))
                 opinv = scipy.sparse.linalg.LinearOperator((n, n), matvec=matvec, dtype=dtype)
-                mu, vecs = scipy.sparse.linalg.eigs(opinv, k=k, which="LM")
+                mu, vecs = scipy.sparse.linalg.eigs(opinv, k=k_arnoldi, which="LM", v0=v0)
                 vals = shift + 1.0 / mu
             elif generalized:
                 raise NotImplementedError(
@@ -386,7 +397,7 @@ class Operator:
                     "to select the eigenvalues of interest."
                 )
             else:
-                vals, vecs = scipy.sparse.linalg.eigs(A, k=k, which=which)
+                vals, vecs = scipy.sparse.linalg.eigs(A, k=k_arnoldi, which=which, v0=v0)
 
         order = self._sort_eigenvalues(vals, which, sigma)[:k]
         vals, vecs = vals[order], vecs[:, order]

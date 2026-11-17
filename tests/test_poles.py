@@ -240,3 +240,26 @@ def test_chebyshev_polar_axis_still_works():
     g = SphericalGrid(chebyshev(8, 0.5, 1.0), chebyshev(10, 0.2, np.pi - 0.2), periodic(12))
     R = g.meshed_coords[0]
     npt.assert_allclose(g.laplacian(R ** 2), 6.0, atol=1e-8)
+
+
+# ── robustness of the sparse eigenvalue solver ─────────────────────────
+
+def test_sparse_eig_with_zero_eigenvalue_and_degeneracies():
+    # The sphere has an exact zero eigenvalue (constants) and degenerate
+    # clusters; the iterative solver must neither lose accuracy nor members.
+    s = sphere(24, 48)
+    expected = [l * (l + 1) for l in range(4) for _ in range(2 * l + 1)]
+    vals, _ = (-s.laplacian_operator()).eig(k=16, dense_threshold=10)
+    assert np.isrealobj(vals)
+    npt.assert_allclose(vals, expected, atol=1e-9)
+
+
+def test_sparse_eig_does_not_miss_degenerate_eigenvalues():
+    b = ball()
+    assert b.size > 2000      # uses the sparse (Arnoldi) path
+    expected = [np.pi] + [4.493409457909064] * 3 + [5.763459196894550] * 5
+    vals, _ = (-b.laplacian_operator()).eig(k=9, bcs=0)
+    npt.assert_allclose(np.sqrt(vals), expected, rtol=1e-10)
+    # Results are reproducible:
+    vals2, _ = (-b.laplacian_operator()).eig(k=9, bcs=0)
+    npt.assert_array_equal(vals, vals2)

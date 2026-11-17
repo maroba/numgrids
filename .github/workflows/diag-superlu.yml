@@ -12,13 +12,13 @@ jobs:
       matrix:
         include:
           - scipy: "1.10.1"
-            threads: ""
-          - scipy: "1.10.1"
+            threads: "1"
+          - scipy: "1.11.0"
             threads: "1"
           - scipy: "1.11.4"
-            threads: ""
+            threads: "1"
           - scipy: "1.12.0"
-            threads: ""
+            threads: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
