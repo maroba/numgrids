@@ -2,7 +2,7 @@
 
 All notable changes to **numgrids** are documented on this page.
 
-## Unreleased
+## 0.6.0
 
 ### Breaking changes
 

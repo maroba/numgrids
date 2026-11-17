@@ -68,7 +68,7 @@ python -c "import numgrids; print(numgrids.__version__)"
 You should see output like:
 
 ```text
-0.5.0
+0.6.0
 ```
 
 ```{tip}
