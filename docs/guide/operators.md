@@ -50,6 +50,11 @@ L.as_matrix()        # scipy.sparse CSR matrix of shape (grid.size, grid.size)
 | `A * B`, `A @ B`  | composition (apply `B` first)                   |
 | `A ** n`          | `n`-fold composition                            |
 
+`A.T` is the transposed operator, `A.H` its conjugate transpose, and
+`A.adjoint()` the adjoint with respect to the $L^2$
+[inner product](integration.md#inner-products-and-norms) of the grid.
+`A.toarray()` returns the matrix as a dense array.
+
 This makes it easy to write down operators with variable coefficients:
 
 ```python
@@ -58,6 +63,33 @@ x = grid.coords
 grid = Grid(x=chebyshev(80, -10, 10))
 x = grid.coords
 H = -0.5 * grid.diff_operator(2) + 0.5 * x**2
+```
+
+### Gradient, divergence and operators in divergence form
+
+`grid.gradient_operator()` and `grid.divergence_operator()` return one
+operator per axis. On curvilinear grids they include the scale factors,
+like `grid.gradient` and `grid.divergence`, and they also work across the
+center of a disk or ball. Composed, they give operators in divergence form
+such as $\nabla\cdot(k\,\nabla u)$ for heat conduction or diffusion with a
+variable coefficient:
+
+```python
+grid = Grid(x=chebyshev(30, 0, 1), y=chebyshev(30, 0, 1))
+X, Y = grid.meshed_coords
+k = 1 + X * Y                                   # conductivity
+
+G = grid.gradient_operator()                    # (d/dx, d/dy)
+D = grid.divergence_operator()
+L = sum(Di @ (k * Gi) for Di, Gi in zip(D, G))  # u -> div(k grad u)
+```
+
+For this common case there is a shortcut, `grid.diffusion_operator(k)`,
+where `k` is a number, an array or a function of the coordinates:
+
+```python
+L = grid.diffusion_operator(lambda x, y: 1 + x * y)
+u = L.solve(-1.0, bcs=0)                        # steady temperature of a heated plate
 ```
 
 ## Boundary value problems: `solve`
@@ -97,6 +129,53 @@ u = (grid.diff_operator(2) - 1).solve(-2 * np.sin(x))   # u = sin(x)
 If you want to call a solver yourself, `L.with_bcs(rhs, bcs)` returns the
 modified sparse system `(matrix, rhs_vector)`.
 
+### How the system is solved
+
+`solve` picks the fastest of three direct methods; `method=` selects one
+explicitly:
+
+| `method`    | What it does                                                    | Best for |
+|-------------|-----------------------------------------------------------------|----------|
+| `"fourier"` | Fourier transform along the periodic axes that neither the operator nor the boundary conditions depend on; one small system per Fourier mode | disks, cylinders, spheres, balls, periodic boxes |
+| `"dense"`   | dense LU factorization                                          | spectral grids of moderate size |
+| `"sparse"`  | sparse LU factorization                                         | finite differences |
+| `"auto"`    | the first of these that applies (default)                       | |
+
+Spectral differentiation matrices are dense along each axis, so sparse LU
+factorizations fill in almost completely on them and dense LU is several
+times faster. The Fourier decoupling is far faster still. On a full ball,
+the Laplacian does not depend on the azimuthal angle, so the problem splits
+into independent problems in $(r, \theta)$:
+
+```python
+ball = SphericalGrid(radial(16, 1.0), colatitude(16), periodic(32))   # 8192 unknowns
+u = ball.laplacian_operator().solve(1.0, bcs=0)                       # a fraction of a second
+```
+
+The boundary *values* may depend on the angle; only the operator and the
+type of the boundary conditions must not. If a coefficient depends on the
+angle, `"auto"` falls back to the other methods.
+
+### Many right-hand sides: `factorize`
+
+`L.factorize(bcs)` returns a solver that keeps the factorization. Calling
+it with a right-hand side costs only a back substitution. This is what
+implicit time stepping schemes, iterations and parameter studies need:
+
+```python
+grid = Grid(x=chebyshev(40, 0, 1))
+x = grid.coords
+dt = 0.01
+step = (1 - dt * grid.laplacian_operator()).factorize(bcs=0)   # implicit Euler for u_t = u_xx
+
+u = np.sin(np.pi * x)
+for _ in range(100):
+    u = step(u)
+```
+
+The boundary values are fixed when the solver is created; `step.method`
+tells which method it uses.
+
 ## Eigenvalue problems: `eig`
 
 `L.eig(k, bcs)` computes `k` eigenpairs of $L u = \lambda u$ (or of
@@ -127,11 +206,23 @@ Selecting eigenvalues:
 | `which="LR"`    | largest real part                          |
 | `sigma=s`       | the `k` eigenvalues closest to `s`         |
 
-Problems with up to `dense_threshold` (default 2000) unknowns are solved
-with dense LAPACK routines; larger problems use sparse shift-invert Arnoldi
-iterations. Eigenvectors are normalized to unit Euclidean norm with a
-positive largest component; normalize them with `grid.integrate` if you
-need $\int |u|^2\,dV = 1$.
+Problems that do not depend on a periodic axis (the azimuthal angle of a
+disk, cylinder, sphere or ball) are split into one small eigenproblem per
+Fourier mode, as in `solve`. This is fast and yields all eigenvalues to
+full accuracy. Otherwise, problems with up to `dense_threshold` (default
+2000) unknowns are solved with dense LAPACK routines, and larger problems
+with sparse shift-invert Arnoldi iterations. `method="direct"` switches the
+Fourier decoupling off.
+
+Eigenvectors have a positive largest component and unit Euclidean norm (of
+the array of values). `normalize="l2"` normalizes them on the grid instead,
+$\int |u|^2\,dV = 1$, as needed for wave functions, and `normalize="max"`
+scales the largest value to 1:
+
+```python
+energies, states = H.eig(k=5, bcs=0, normalize="l2")
+grid.norm(states[0])   # 1.0
+```
 
 Example: vibration modes of a square drum $[0, \pi]^2$ with fixed rim,
 whose eigenvalues are $m^2 + n^2$:

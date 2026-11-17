@@ -36,4 +36,6 @@ in :meth:`Operator.solve <numgrids.Operator.solve>`,
 
 .. autoclass:: numgrids.Robin
 
+.. autoclass:: numgrids.TimeDependent
+
 .. autofunction:: numgrids.resolve_bcs

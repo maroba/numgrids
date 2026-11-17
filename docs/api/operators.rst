@@ -30,6 +30,15 @@ Operator algebra and solvers
 .. autoclass:: numgrids.Operator
    :members:
 
+Linear solvers
+--------------
+
+.. automodule:: numgrids.linalg
+   :no-members:
+
+.. autoclass:: numgrids.LinearSolver
+   :members:
+
 Nonlinear problems
 ------------------
 
