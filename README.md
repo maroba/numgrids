@@ -64,7 +64,7 @@ no mesh generation, no hand-assembled matrices and no special treatment of the c
 
 **Tools**
 - Adaptive mesh refinement, convergence studies, a multigrid solver for large finite-difference problems
-- Plotting, save/load, xarray/NetCDF; all operators export SciPy sparse matrices
+- Plotting and animations, save/load, xarray/NetCDF, VTK export for ParaView; all operators export SciPy sparse matrices
 
 ## Installation
 

@@ -115,6 +115,19 @@ All notable changes to **numgrids** are documented on this page.
 - `grid.inner(f, g)`, `grid.norm(f)` ($L^2$, $L^1$ or maximum norm),
   `grid.mean(f)` and `grid.quadrature_weights`.
 
+**Visualization**
+
+- **Animations**: `grid.animate(frames, t)` and `result.animate()` (for the
+  result of `evolve`) return a matplotlib animation of a time-dependent
+  field: a moving line in 1D, a color plot in 2D (in Cartesian space on
+  curvilinear grids). Save it as GIF or HTML, or show it in a notebook.
+- **VTK export**: `grid.to_vtk(path, **fields)` writes structured-grid files
+  (`.vts`) for ParaView and VisIt, and `result.to_vtk(path)` /
+  `grid.to_vtk_series(...)` a time series with a `.pvd` collection. No
+  additional dependency is needed. Curvilinear grids are written in
+  Cartesian space with periodic directions closed and the center and the
+  poles filled in; vector fields are converted to Cartesian components.
+
 ### Bug fixes
 
 - `divergence` and `curl` were wrong on full balls (a `SphericalGrid` with a

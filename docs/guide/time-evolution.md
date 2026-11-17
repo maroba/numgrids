@@ -226,6 +226,13 @@ long series of outputs cheap. Larger problems use
 {func}`scipy.sparse.linalg.expm_multiply`, whose cost grows with the
 stiffness of the operator.
 
+## Looking at the result
+
+`result.animate()` returns a matplotlib animation of the solution, and
+`result.to_vtk("run")` writes a time series for ParaView; see
+[Plotting](plotting.md#animations) and
+[Saving and loading](io.md#vtk-export-for-paraview).
+
 ## Options
 
 Additional keyword arguments (`rtol`, `atol`, `max_step`, `first_step`,

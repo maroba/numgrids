@@ -581,6 +581,21 @@ class Grid:
 
         plt.show()
 
+    def animate(self, frames: NDArray, t: NDArray | None = None, **options):
+        """Animate a time-dependent meshed function on the grid (requires matplotlib).
+
+        *frames* has the shape ``(nt, *grid.shape)``, *t* holds the times
+        of the frames (shown in the title).  The frames are drawn like
+        :meth:`plot` draws a single function.  See
+        :func:`numgrids.plots.animate_field` for all options.
+
+        Returns
+        -------
+        matplotlib.animation.FuncAnimation
+        """
+        from numgrids.plots import animate_field
+        return animate_field(self, frames, t, **options)
+
     # ── boundary ────────────────────────────────────────────────
 
     @property
@@ -744,6 +759,36 @@ class Grid:
         """
         from numgrids.io import to_xarray
         return to_xarray(self, **fields)
+
+    def to_vtk(self, path: str | Path, **fields) -> Path:
+        """Write meshed arrays on this grid to a VTK file (``.vts``) for ParaView.
+
+        Scalar fields are arrays of grid shape, vector fields tuples with
+        one array per axis.  See :func:`numgrids.vtk.write_vtk`.
+
+        Returns
+        -------
+        Path
+            The path of the file written.
+        """
+        from numgrids.vtk import write_vtk
+        return write_vtk(path, self, **fields)
+
+    def to_vtk_series(self, path: str | Path, frames=None, t=None, **fields) -> Path:
+        """Write a time series on this grid as VTK files with a ``.pvd`` collection file.
+
+        *frames* has the shape ``(nt, *grid.shape)`` and is stored under
+        the name given by ``name=`` (default ``"u"``), *t* holds the times.
+        Further fields can be passed by name.  See
+        :func:`numgrids.vtk.write_vtk_series`.
+
+        Returns
+        -------
+        Path
+            The path of the collection file.
+        """
+        from numgrids.vtk import write_vtk_series
+        return write_vtk_series(path, self, frames, t, **fields)
 
     @staticmethod
     def from_xarray(obj) -> tuple[Grid, dict[str, NDArray]]:

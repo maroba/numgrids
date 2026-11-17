@@ -47,6 +47,8 @@ class EvolutionResult:
     sol : object
         The raw result of :func:`scipy.integrate.solve_ivp` (``None`` for
         ``method="expm"``).
+    grid : Grid
+        The grid of the solution, used by :meth:`animate` and :meth:`to_vtk`.
     """
 
     t: NDArray
@@ -54,6 +56,7 @@ class EvolutionResult:
     success: bool
     message: str
     sol: Any = field(repr=False, default=None)
+    grid: Any = field(repr=False, default=None)
 
     @property
     def final(self):
@@ -61,6 +64,92 @@ class EvolutionResult:
         if isinstance(self.u, tuple):
             return tuple(ui[-1] for ui in self.u)
         return self.u[-1]
+
+    def _require_grid(self) -> Grid:
+        if self.grid is None:
+            raise ValueError(
+                "This result does not know its grid. Set `result.grid`, or use grid.animate(...) "
+                "and grid.to_vtk_series(...) directly."
+            )
+        return self.grid
+
+    def _field(self, field: int) -> NDArray:
+        """The frames of one field (the field with index *field* of a coupled system)."""
+        if not isinstance(self.u, tuple):
+            if field != 0:
+                raise IndexError(f"The solution is a single field, so `field` must be 0, got {field!r}.")
+            return self.u
+        is_index = isinstance(field, (int, np.integer)) and not isinstance(field, bool)
+        if not is_index or not -len(self.u) <= field < len(self.u):
+            raise IndexError(
+                f"`field` must be the index of one of the {len(self.u)} fields of the system, got {field!r}."
+            )
+        return self.u[field]
+
+    def animate(self, field: int = 0, **options):
+        """Animate the solution in time (requires matplotlib).
+
+        Parameters
+        ----------
+        field : int
+            For coupled systems: the index of the field to animate
+            (default 0, the first one).
+        **options
+            Options of :func:`numgrids.plots.animate_field`, e.g.
+            ``fps``, ``vmin``, ``vmax``, ``cmap``, ``title``, ``part="abs"``
+            for complex fields or ``save="movie.gif"``.
+
+        Returns
+        -------
+        matplotlib.animation.FuncAnimation
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from numgrids import Grid, chebyshev, evolve
+        >>> grid = Grid(x=chebyshev(24, 0, 1))
+        >>> res = evolve(grid, 0.1 * grid.laplacian_operator(), np.sin(np.pi * grid.coords), (0, 1),
+        ...              bcs=0, method="BDF", t_eval=np.linspace(0, 1, 21))
+        >>> anim = res.animate()                 # doctest: +SKIP
+        >>> anim.save("heat.gif")                # doctest: +SKIP
+        """
+        from numgrids.plots import animate_field
+        return animate_field(self._require_grid(), self._field(field), self.t, **options)
+
+    def to_vtk(self, path, name: str | Sequence[str] = "u", **options):
+        """Write the solution as a time series of VTK files for ParaView.
+
+        One ``.vts`` file per time point plus a ``.pvd`` collection file
+        with the time values, see :func:`numgrids.vtk.write_vtk_series`.
+
+        Parameters
+        ----------
+        path : str or Path
+            The collection file (suffix ``.pvd``).
+        name : str or sequence of str
+            Name of the field in the files (default ``"u"``).  For coupled
+            systems, one name per field; a single name is numbered
+            (``"u0"``, ``"u1"``, ...).
+        **options
+            ``binary`` and ``close``, see :func:`numgrids.vtk.write_vtk`.
+
+        Returns
+        -------
+        pathlib.Path
+            The path of the collection file.
+        """
+        from numgrids.vtk import _write_series
+        grid = self._require_grid()
+        if not isinstance(self.u, tuple):
+            if not isinstance(name, str):
+                raise ValueError(f"The solution is a single field and needs a single name, got {name!r}.")
+            fields = {name: self.u}
+        else:
+            names = [f"{name}{i}" for i in range(len(self.u))] if isinstance(name, str) else list(name)
+            if len(names) != len(self.u) or len(set(names)) != len(names):
+                raise ValueError(f"Expected {len(self.u)} different names (one per field), got {names}.")
+            fields = dict(zip(names, self.u))
+        return _write_series(path, grid, fields, self.t, **options)
 
 
 class _BoundaryConstraint:
@@ -402,7 +491,7 @@ def _result(grid, t, Y, constraints, nfields, system, success, message, sol) -> 
         us.append(Yf.reshape((nt,) + shape))
     us = tuple(us)
     return EvolutionResult(t=np.asarray(t), u=us if system else us[0], success=success,
-                           message=message, sol=sol)
+                           message=message, sol=sol, grid=grid)
 
 
 def _source_function(grid, source, nfields: int, system: bool, zero_rows: NDArray):

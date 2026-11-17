@@ -19,3 +19,7 @@ Plotting
 Requires the optional ``matplotlib`` dependency (``pip install numgrids[plot]``).
 
 .. autofunction:: numgrids.plots.plot_field
+
+.. autofunction:: numgrids.plots.animate_field
+
+.. autofunction:: numgrids.plots.save_animation
