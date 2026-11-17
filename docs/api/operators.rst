@@ -30,6 +30,15 @@ Operator algebra and solvers
 .. autoclass:: numgrids.Operator
    :members:
 
+Functions of operators
+----------------------
+
+.. automodule:: numgrids.funm
+   :no-members:
+
+.. autoclass:: numgrids.funm.FourierOperator
+   :members: matrix
+
 Linear solvers
 --------------
 

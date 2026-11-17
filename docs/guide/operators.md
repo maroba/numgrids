@@ -298,5 +298,200 @@ vals                   # [2, 6, 6, 12, 12, 12]
 Boundary conditions and the selection of eigenvalues (`which`, `sigma`)
 work as for the standard problem.
 
+## Functions of operators
+
+An operator $L$ with the eigenpairs $L \varphi_n = \lambda_n \varphi_n$
+defines the operator $f(L)$ for any scalar function $f$: it has the same
+eigenfunctions and the eigenvalues $f(\lambda_n)$, so it maps
+$u = \sum_n c_n \varphi_n$ to $\sum_n f(\lambda_n)\, c_n \varphi_n$. The
+eigenfunctions depend on the boundary conditions, and so does $f(L)$.
+
+| Method                 | Operator                                             |
+|------------------------|------------------------------------------------------|
+| `L.power(s, bcs)`      | $L^s$ for any real $s$, e.g. the fractional Laplacian |
+| `L.sqrt(bcs)`          | $L^{1/2}$                                            |
+| `L.exp(t, bcs)`        | $e^{tL}$, the propagator of $u_t = L u$              |
+| `L.inverse(bcs)`       | $L^{-1}$, the Green's operator                       |
+| `L.function(f, bcs)`   | $f(L)$ for a function `f` of the eigenvalues         |
+
+The results are operators again. Apply them to functions, combine them
+with other operators, or pass them to `solve`, `eig` and `evolve`.
+
+### Fractional Laplacian
+
+On a periodic grid, the Fourier modes are the eigenfunctions of the
+Laplacian. $(-\nabla^2)^s$ multiplies the mode with the wave vector
+$\mathbf{k}$ by $|\mathbf{k}|^{2s}$:
+
+```python
+grid = Grid(periodic(64), periodic(64))
+X, Y = grid.meshed_coords
+L = -grid.laplacian_operator()
+
+Ls = L.power(0.5)                      # (-Laplacian)^(1/2)
+u = np.sin(3 * X) * np.cos(4 * Y)
+Ls(u)                                  # 5 * u
+```
+
+On a bounded domain, pass the boundary conditions. This gives the
+*spectral* fractional Laplacian, built from the eigenfunctions of the
+Laplacian with these conditions:
+
+```python
+grid = Grid(x=chebyshev(40, 0, 1))
+x = grid.coords
+L = -grid.laplacian_operator()
+
+Ls = L.power(0.5, bcs=0)               # with Dirichlet conditions
+Ls(np.sin(np.pi * x))                  # pi * sin(pi x)
+
+Ls = L.power(0.5, bcs=Neumann(0))      # with Neumann conditions
+Ls(np.cos(np.pi * x))                  # pi * cos(pi x)
+```
+
+Note the sign: fractional powers need an operator without negative
+eigenvalues, so take the power of $-\nabla^2$, not of $\nabla^2$ (which
+raises an error).
+
+Negative exponents give powers of the inverse. The fractional Poisson
+problem $(-\nabla^2)^s u = f$ is solved by the operator $(-\nabla^2)^{-s}$,
+or by `solve`:
+
+```python
+f = np.sin(np.pi * x) + np.sin(3 * np.pi * x)
+u = L.power(-0.5, bcs=0)(f)            # sin(pi x) / pi + sin(3 pi x) / (3 pi)
+u = L.power(0.5, bcs=0).solve(f, bcs=0)
+```
+
+The same works on curvilinear grids, e.g. on a disk:
+
+```python
+grid = PolarGrid(radial(24, 1.0), periodic(32))
+R, Phi = grid.meshed_coords
+Ls = (-grid.laplacian_operator()).power(0.5, bcs=0)
+u = Ls.solve(1.0, bcs=0)               # (-Laplacian)^(1/2) u = 1 on the unit disk
+```
+
+### Boundary conditions
+
+The boundary conditions are homogeneous, as in `eig`: their values are
+ignored. The result acts on functions that satisfy the conditions and
+returns functions that satisfy them:
+
+- Only the values of the argument at the points *without* a condition
+  enter. Its boundary values are not used, since they follow from the
+  conditions.
+- At these points, the result is $f(L) u$. On the boundary it is zero for
+  Dirichlet conditions; for Neumann and Robin conditions it takes the
+  values for which the condition holds.
+
+So `L.function(lambda z: z, bcs)` reproduces `L` on functions that satisfy
+the conditions, except on the boundary points themselves (where $L u$ does
+not satisfy the conditions in general). The functional calculus holds:
+`L.power(a, bcs) @ L.power(b, bcs)` is `L.power(a + b, bcs)`, and
+`L.sqrt(bcs) @ L.sqrt(bcs)` acts as `L`. When you pass the result to
+`solve`, `eig` or `evolve`, pass the same conditions there.
+
+Where $L$ has a zero eigenvalue, negative powers use the pseudo-inverse:
+the zero modes are mapped to zero. The Laplacian on a periodic grid or
+with Neumann conditions on the whole boundary annihilates the constants,
+so its inverse solves the Poisson equation for the part of the right-hand
+side with zero mean and returns the solution with zero mean:
+
+```python
+grid = Grid(x=periodic(64))
+x = grid.coords
+G = (-grid.laplacian_operator()).inverse()
+G(np.cos(3 * x) + 1)                   # cos(3 x) / 9
+```
+
+### Fractional diffusion
+
+Anomalous diffusion $u_t = -(-\nabla^2)^s u$ replaces the Laplacian of the
+heat equation by a fractional one. Since the fractional Laplacian is an
+operator, `evolve` integrates the equation like any other linear one,
+without time stepping error if you choose the exponential integrator:
+
+```python
+grid = Grid(x=chebyshev(60, -1, 1))
+x = grid.coords
+Ls = (-grid.laplacian_operator()).power(0.5, bcs=0)
+
+u0 = np.exp(-50 * x**2)
+result = evolve(grid, -Ls, u0, (0, 0.2), bcs=0, method="expm",
+                t_eval=np.linspace(0, 0.2, 11))
+```
+
+For a single time, the propagator $e^{-t(-\nabla^2)^s}$ does the same:
+
+```python
+u = Ls.exp(-0.2, bcs=0)(u0)            # equals result.final
+```
+
+`exp` takes complex factors as well, e.g. `H.exp(-1j * t, bcs=0)` for the
+propagator $e^{-itH}$ of the Schrödinger equation.
+
+### Square root, inverse and other functions
+
+The square root and the inverse are the powers $1/2$ and $-1$:
+
+```python
+grid = Grid(x=chebyshev(40, 0, 1))
+x = grid.coords
+L = -grid.laplacian_operator()
+
+root = L.sqrt(bcs=0)
+(root @ root)(np.sin(np.pi * x))       # pi^2 sin(pi x), like L
+
+G = L.inverse(bcs=0)                   # Green's operator of -u'' = f, u(0) = u(1) = 0
+G(np.ones(grid.shape))                 # x (1 - x) / 2
+G.toarray()                            # the discrete Green's function
+```
+
+`L.function(f, bcs)` takes any function of the eigenvalues. `f` is called
+with an array of eigenvalues and returns the array of its values. This
+covers pseudo-differential operators such as the relativistic kinetic
+energy $\sqrt{p^2 + m^2} - m$ with $p^2 = -d^2/dx^2$:
+
+```python
+grid = Grid(x=chebyshev(80, -10, 10))
+x = grid.coords
+p2 = -grid.diff_operator(2)
+
+T = p2.function(lambda lam: np.sqrt(lam + 1) - 1, bcs=0)     # m = 1
+H = T + 0.5 * x**2                     # relativistic harmonic oscillator
+energies, states = H.eig(k=3, bcs=0)   # [0.4411, 1.2371, 1.9099]: below 1/2, 3/2, 5/2
+```
+
+### Cost and limits
+
+Functions of operators need dense matrices, so they are meant for
+problems of moderate size:
+
+- An operator with constant coefficients on a **periodic grid** is
+  diagonal in Fourier space. `f` is applied to its Fourier symbol, which
+  is exact and costs next to nothing.
+- If the operator and the boundary conditions do not depend on a periodic
+  axis (the **angles of disks, cylinders, spheres and balls**), the problem
+  splits into one small matrix per Fourier mode, as in `solve` and `eig`.
+- Otherwise the matrix has as many rows as the grid has points. The cost
+  grows with the third power of the size: about a second for 1000 points
+  and several seconds for 2000. Larger problems raise an error unless you
+  raise the limit `max_size` (default 4000).
+
+In the first two cases the result is applied with fast Fourier transforms
+and never needs its matrix, which is dense. Sums, products, multiples and
+functions of such operators keep this form. Anything else, e.g. adding a
+potential, `solve`, `eig` or `toarray`, builds the matrix, which limits the
+grid to about 9000 points.
+
+The functions are evaluated with an eigendecomposition. This is accurate
+for operators with well-conditioned eigenvectors, such as Laplacians,
+diffusion operators and Schrödinger operators on any grid. For operators
+far from normal, e.g. convection-dominated ones, `power`, `sqrt`, `exp`
+and `inverse` switch to Schur-based algorithms that stay accurate;
+`function` falls back to the less robust Schur-Parlett method and warns if
+the estimated error is large.
+
 For **nonlinear** boundary value problems, see
 [Nonlinear problems](nonlinear.md).

@@ -11,7 +11,10 @@ An :class:`Operator` wraps a sparse matrix acting on functions meshed on a
 * ``op1 * op2`` and ``op1 @ op2`` mean composition.
 
 Linear boundary value problems and eigenvalue problems can be solved
-directly with :meth:`Operator.solve` and :meth:`Operator.eig`.
+directly with :meth:`Operator.solve` and :meth:`Operator.eig`.  Functions
+of operators -- fractional powers, square roots, exponentials, inverses --
+come from :meth:`Operator.function`, :meth:`Operator.power`,
+:meth:`Operator.sqrt`, :meth:`Operator.exp` and :meth:`Operator.inverse`.
 
 Examples
 --------
@@ -31,6 +34,7 @@ from __future__ import annotations
 
 import numbers
 import warnings
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -635,6 +639,221 @@ class Operator:
             if matrix is None:
                 raise TypeError(f"Cannot use an object of type {type(M).__name__} as M.")
         return scipy.sparse.csr_matrix(matrix, dtype=np.result_type(matrix.dtype, float))
+
+    # ── functions of the operator ───────────────────────────────
+
+    def function(self, f: Callable[[NDArray], NDArray], bcs=None, *, max_size: int | None = None) -> Operator:
+        r"""The operator :math:`f(L)` for a scalar function *f*.
+
+        :math:`f(L)` has the eigenfunctions of :math:`L` and the
+        eigenvalues :math:`f(\lambda_n)`: with the eigenpairs
+        :math:`L \varphi_n = \lambda_n \varphi_n` subject to the boundary
+        conditions, it maps :math:`u = \sum_n c_n \varphi_n` to
+        :math:`\sum_n f(\lambda_n)\, c_n \varphi_n`.  See also
+        :meth:`power`, :meth:`sqrt`, :meth:`exp` and :meth:`inverse`.
+
+        Parameters
+        ----------
+        f : callable
+            The function.  It is called with a one-dimensional array of
+            eigenvalues (a real array if all eigenvalues are real, a
+            complex one otherwise) and returns the array of its values,
+            which may be complex.
+        bcs : optional
+            Boundary conditions, in any form accepted by :meth:`solve`.
+            They are treated as *homogeneous* (their values are ignored),
+            as in :meth:`eig`.  Not needed on periodic grids.
+        max_size : int, optional
+            Largest size of the dense matrices to work with (default 4000);
+            larger problems raise an error.
+
+        Returns
+        -------
+        Operator
+            :math:`f(L)` on the functions that satisfy the boundary
+            conditions.  Applied to such a function, it gives
+            :math:`f(L) u` at the points without a condition and sets the
+            boundary values such that the result satisfies the conditions:
+            to zero for Dirichlet conditions, and for Neumann and Robin
+            conditions to the values that follow from the condition.  The
+            values of the argument on the boundary points are not used
+            (the matrix has zero columns there), since for a function that
+            satisfies the conditions they follow from the other ones.
+
+            So ``L.function(lambda z: z, bcs)`` agrees with *L* on such
+            functions except on the boundary points, where :math:`L u`
+            does not satisfy the conditions in general, and
+            ``L.function(np.ones_like, bcs)`` is the projection that
+            overwrites the boundary values such that the conditions hold.
+            The results obey the functional calculus,
+            ``L.function(f, bcs) @ L.function(g, bcs)`` is
+            ``L.function(lambda z: f(z) * g(z), bcs)``.  To use the result
+            in :meth:`solve`, :meth:`eig` or :func:`~numgrids.evolve`,
+            pass the same boundary conditions there.
+
+        Notes
+        -----
+        The computation needs dense matrices.  If the operator and the
+        boundary conditions are shift invariant along periodic axes --
+        operators with constant coefficients on periodic grids, or the
+        angles of disks, cylinders, spheres and balls -- a Fourier
+        transform along these axes leaves one small matrix per Fourier
+        mode, and the result is a :class:`~numgrids.funm.FourierOperator`
+        that is applied with fast Fourier transforms.  Otherwise the
+        matrix has the size of the grid.
+
+        The function of a matrix is evaluated with its eigendecomposition
+        as long as the eigenvectors are well conditioned (1-norm condition
+        number up to :math:`10^5`), as for Laplacians, diffusion and
+        Schrödinger operators.  Operators further from normal, such as
+        convection-dominated ones, are handled by the Schur-Parlett method
+        :func:`scipy.linalg.funm`, which is less accurate for close
+        eigenvalues; a warning tells if the estimated error is large.  The
+        named functions (:meth:`power` etc.) use dedicated algorithms then.
+
+        Examples
+        --------
+        A low-pass filter on a periodic grid, keeping the wave numbers
+        :math:`|k| \le 4` (the eigenvalues of :math:`-d^2/dx^2` are
+        :math:`k^2`):
+
+        >>> import numpy as np
+        >>> from numgrids import Grid, periodic
+        >>> grid = Grid(x=periodic(64))
+        >>> x = grid.coords
+        >>> lowpass = (-grid.laplacian_operator()).function(lambda lam: lam <= 16)
+        >>> bool(np.allclose(lowpass(np.sin(2 * x) + np.sin(9 * x)), np.sin(2 * x)))
+        True
+        """
+        from numgrids import funm
+        return funm._function(self, f, bcs, max_size)
+
+    def power(self, s: float, bcs=None, *, max_size: int | None = None) -> Operator:
+        r"""The power :math:`L^s` for a real exponent *s*.
+
+        ``(-grid.laplacian_operator()).power(s, bcs=0)`` is the (spectral)
+        fractional Laplacian :math:`(-\Delta)^s` with Dirichlet conditions.
+        Negative exponents give powers of the inverse; where the operator
+        has zero eigenvalues, such as the Laplacian on a periodic grid or
+        with Neumann conditions on the whole boundary, the pseudo-inverse
+        takes its place: the zero modes are mapped to zero, so that e.g.
+        ``(-L).power(-1)`` solves :math:`-\Delta u = f` for the part of
+        :math:`f` with zero mean and returns the solution with zero mean.
+
+        Parameters
+        ----------
+        s : float
+            The exponent.  For a non-integer exponent the operator must not
+            have negative eigenvalues: take the power of :math:`-L` for a
+            negative operator such as the Laplacian.
+        bcs, max_size
+            As for :meth:`function`, which also describes the result and
+            the numerical methods.  If the eigenvectors are ill
+            conditioned, :func:`scipy.linalg.fractional_matrix_power` is
+            used.
+
+        Examples
+        --------
+        The fractional Poisson problem :math:`(-d^2/dx^2)^{1/2} u = f`
+        on :math:`[0, \pi]` with :math:`u = 0` at both ends:
+
+        >>> import numpy as np
+        >>> from numgrids import Grid, chebyshev
+        >>> grid = Grid(x=chebyshev(30, 0, np.pi))
+        >>> x = grid.coords
+        >>> L = -grid.laplacian_operator()
+        >>> half = L.power(0.5, bcs=0)
+        >>> bool(np.allclose(half(np.sin(3 * x)), 3 * np.sin(3 * x)))
+        True
+        >>> u = L.power(-0.5, bcs=0)(np.sin(3 * x))        # solves the problem ...
+        >>> bool(np.allclose(u, np.sin(3 * x) / 3))
+        True
+        >>> u = half.solve(np.sin(3 * x), bcs=0)           # ... and so does this
+        >>> bool(np.allclose(u, np.sin(3 * x) / 3))
+        True
+        """
+        from numgrids import funm
+        return funm._power(self, s, bcs, max_size)
+
+    def sqrt(self, bcs=None, *, max_size: int | None = None) -> Operator:
+        r"""The square root :math:`L^{1/2}`: ``L.sqrt(bcs) @ L.sqrt(bcs)`` acts as *L*.
+
+        Same as ``power(0.5, bcs)``; :func:`scipy.linalg.sqrtm` is used if
+        the eigenvectors are ill conditioned.
+
+        Examples
+        --------
+        On a periodic grid, :math:`(-d^2/dx^2)^{1/2}` multiplies the
+        Fourier mode :math:`e^{ikx}` by :math:`|k|`:
+
+        >>> import numpy as np
+        >>> from numgrids import Grid, periodic
+        >>> grid = Grid(x=periodic(32))
+        >>> x = grid.coords
+        >>> root = (-grid.laplacian_operator()).sqrt()
+        >>> bool(np.allclose(root(np.cos(5 * x)), 5 * np.cos(5 * x)))
+        True
+        """
+        from numgrids import funm
+        return funm._power(self, 0.5, bcs, max_size)
+
+    def exp(self, t: float | complex = 1.0, bcs=None, *, max_size: int | None = None) -> Operator:
+        r"""The exponential :math:`e^{tL}`.
+
+        :math:`u(t) = e^{tL} u_0` solves :math:`\partial_t u = L u` with
+        :math:`u(0) = u_0` and homogeneous boundary conditions, so the
+        result is the propagator over the time *t*.  A complex *t* gives
+        e.g. the propagator :math:`e^{-itH}` of the Schrödinger equation
+        as ``H.exp(-1j * t, bcs)``.
+
+        Parameters
+        ----------
+        t : float or complex
+            The factor in the exponent (default 1).
+        bcs, max_size
+            As for :meth:`function`, which also describes the result and
+            the numerical methods.  If the eigenvectors are ill
+            conditioned, :func:`scipy.linalg.expm` is used.
+
+        Examples
+        --------
+        Heat conduction in a rod with fixed ends:
+
+        >>> import numpy as np
+        >>> from numgrids import Grid, chebyshev
+        >>> grid = Grid(x=chebyshev(30, 0, 1))
+        >>> x = grid.coords
+        >>> propagator = grid.laplacian_operator().exp(0.1, bcs=0)
+        >>> u = propagator(np.sin(np.pi * x))
+        >>> bool(np.allclose(u, np.exp(-0.1 * np.pi ** 2) * np.sin(np.pi * x)))
+        True
+        """
+        from numgrids import funm
+        return funm._exp(self, t, bcs, max_size)
+
+    def inverse(self, bcs=None, *, max_size: int | None = None) -> Operator:
+        r"""The inverse :math:`L^{-1}` with homogeneous boundary conditions (Green's operator).
+
+        ``L.inverse(bcs)(f)`` is the solution of :math:`L u = f` that
+        satisfies the homogeneous conditions, like ``L.solve(f, bcs)`` with
+        zero boundary values.  Unlike a factorization
+        (:meth:`factorize`), the inverse is an operator: it can be
+        combined with others, and its matrix holds the discrete Green's
+        function.  Same as ``power(-1, bcs)``, including the treatment of
+        zero eigenvalues.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from numgrids import Grid, chebyshev
+        >>> grid = Grid(x=chebyshev(30, 0, 1))
+        >>> x = grid.coords
+        >>> G = grid.laplacian_operator().inverse(bcs=0)
+        >>> bool(np.allclose(G(np.ones(grid.shape)), x * (x - 1) / 2))     # u'' = 1
+        True
+        """
+        from numgrids import funm
+        return funm._power(self, -1, bcs, max_size)
 
     @staticmethod
     def _sort_eigenvalues(vals: NDArray, which: str, sigma) -> NDArray:

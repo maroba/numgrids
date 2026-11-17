@@ -99,6 +99,14 @@ All notable changes to **numgrids** are documented on this page.
   gradient and divergence as operators (including the scale factors on
   curvilinear grids), and `grid.diffusion_operator(k)` builds
   $\nabla\cdot(k\,\nabla u)$ for variable coefficients.
+- **Functions of operators**: `L.function(f, bcs)` builds $f(L)$ from the
+  spectrum of the operator with the given boundary conditions, with the
+  shortcuts `L.power(s, bcs)`, `L.sqrt(bcs)`, `L.exp(t, bcs)` and
+  `L.inverse(bcs)`. `(-grid.laplacian_operator()).power(0.5, bcs=0)` is the
+  fractional Laplacian with Dirichlet conditions. On periodic grids the
+  function is applied to the Fourier symbol, on disks, spheres and balls to
+  one small matrix per Fourier mode. The result is an ordinary operator
+  for `solve`, `eig` and `evolve` (e.g. fractional diffusion).
 - `Operator.T`, `Operator.H`, `Operator.adjoint()` (adjoint in the $L^2$ inner
   product of the grid) and `Operator.toarray()`.
 - The coefficients of `Robin(a, b, value)` may vary along the face (arrays or
