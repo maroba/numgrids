@@ -28,7 +28,7 @@ import numpy as np
 import scipy.sparse
 from numpy.typing import NDArray
 
-from numgrids.axes import Axis
+from numgrids.axes import Axis, RadialAxis
 from numgrids.grids import Grid
 
 if TYPE_CHECKING:
@@ -138,6 +138,10 @@ class CurvilinearGrid(Grid):
     #: Default axis names, applied to unnamed axes.  Set by subclasses.
     _default_axis_names: tuple[str, ...] = ()
 
+    #: Exponent m of the radial volume element r^m for grids whose radial
+    #: axis passes through the origin (1: disk/cylinder, 2: ball).
+    _radial_power: int = 1
+
     def __init__(
         self,
         *axes: Axis,
@@ -160,6 +164,19 @@ class CurvilinearGrid(Grid):
         self._h_arrays: tuple[NDArray, ...] | None = None
         self._jacobian: NDArray | None = None
         self._lap_coeffs: list | None = None
+        # Fail early if a radial axis through the origin cannot be supported:
+        for i, ax in enumerate(self.axes):
+            if isinstance(ax, RadialAxis):
+                self._antipodal_map(i)
+
+    def _antipodal_map(self, axis_index: int):
+        if self._antipodal_fn is None:
+            return super()._antipodal_map(axis_index)
+        return self._antipodal_fn(self, axis_index)
+
+    #: Function ``(grid, axis_index) -> (f -> f at antipodal points)``; set by
+    #: subclasses that support a RadialAxis through the origin.
+    _antipodal_fn = None
 
     def _new_like(self, axes) -> CurvilinearGrid:
         new = copy.copy(self)
@@ -348,9 +365,42 @@ class CurvilinearGrid(Grid):
             with np.errstate(divide="ignore", invalid="ignore"):
                 for i in range(self.ndims):
                     c = _finite_or_zero(J / h[i] ** 2)
-                    coeffs.append((c, self.diff(c, 1, i)))
+                    if isinstance(self.axes[i], RadialAxis):
+                        # The coefficient (e.g. c = r) is not an even field on the
+                        # diameter, so the folded derivative does not apply to it.
+                        dc = self._coefficient_derivative(i)
+                    else:
+                        dc = self.diff(c, 1, i)
+                    coeffs.append((c, dc))
             self._lap_coeffs = coeffs
         return self._lap_coeffs
+
+    def _coefficient_derivative(self, i: int) -> NDArray:
+        """Derivative of ``J / h_i^2`` along axis *i* from the scale-factor functions.
+
+        Uses complex-step differentiation of the user-supplied callables,
+        which is exact to round-off for analytic expressions.
+        """
+        coords = list(self.meshed_coords)
+        step = 1e-30 * max(1.0, abs(self.axes[i].high))
+        coords[i] = coords[i] + 1j * step
+        coords = tuple(coords)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            h = [np.broadcast_to(np.asarray(fn(coords), dtype=complex), self.shape)
+                 for fn in self._scale_factor_fns]
+            J = np.ones(self.shape, dtype=complex)
+            for hk in h:
+                J = J * hk
+            c = J / h[i] ** 2
+            dc = np.imag(c) / step
+        return _finite_or_zero(dc)
+
+    def _quadrature_weights(self, axis_index: int) -> NDArray:
+        axis = self.axes[axis_index]
+        if isinstance(axis, RadialAxis):
+            m = self._radial_power
+            return axis.radial_quadrature_weights(m) / axis.coords ** m
+        return axis.quadrature_weights
 
     def laplacian_operator(self, acc: int = 4) -> Operator:
         r"""The Laplacian as a sparse :class:`~numgrids.operators.Operator`.
@@ -465,6 +515,44 @@ def _ones(c):
     return np.ones_like(c[0])
 
 
+def _check_radial_index(grid, axis_index: int) -> None:
+    if axis_index != 0:
+        raise ValueError(
+            f"Only the first (radial) axis of a {type(grid).__name__} can be a RadialAxis."
+        )
+
+
+def _half_turn_shift(grid, phi_index: int) -> int:
+    """Number of points corresponding to a shift by pi on the azimuthal axis."""
+    axis = grid.axes[phi_index]
+    if not axis.periodic or len(axis) % 2 or not np.isclose(axis.period, 2 * np.pi):
+        raise ValueError(
+            "A RadialAxis through the origin requires a periodic azimuthal axis over 2*pi "
+            f"with an even number of points; got {axis!r}."
+        )
+    return len(axis) // 2
+
+
+def _polar_antipodal(grid, axis_index: int):
+    """Antipodal map (r, phi) -> (r, phi + pi) for polar and cylindrical grids."""
+    _check_radial_index(grid, axis_index)
+    shift = _half_turn_shift(grid, 1)
+    return lambda f: np.roll(f, shift, axis=1)
+
+
+def _spherical_antipodal(grid, axis_index: int):
+    """Antipodal map (r, theta, phi) -> (r, pi - theta, phi + pi) for spherical grids."""
+    _check_radial_index(grid, axis_index)
+    shift = _half_turn_shift(grid, 2)
+    theta = grid.axes[1].coords
+    if not np.allclose(theta + theta[::-1], np.pi, atol=1e-12):
+        raise ValueError(
+            "A RadialAxis through the origin of a SphericalGrid requires a polar axis "
+            "that is symmetric about pi/2 (e.g. chebyshev(n, eps, pi - eps))."
+        )
+    return lambda f: np.roll(np.flip(f, axis=1), shift, axis=2)
+
+
 class PolarGrid(CurvilinearGrid):
     r"""A 2D grid in polar coordinates :math:`(r, \varphi)`.
 
@@ -507,6 +595,7 @@ class PolarGrid(CurvilinearGrid):
         phi_axis: Axis
             The azimuthal axis (phi). Should typically be periodic.
         """
+        self._antipodal_fn = _polar_antipodal
         super().__init__(
             raxis, phi_axis,
             scale_factors=(
@@ -562,6 +651,7 @@ class CylindricalGrid(CurvilinearGrid):
         zaxis: Axis
             The axial (z) axis.
         """
+        self._antipodal_fn = _polar_antipodal
         super().__init__(
             raxis, phi_axis, zaxis,
             scale_factors=(
@@ -603,6 +693,7 @@ class SphericalGrid(CurvilinearGrid):
     """
 
     _default_axis_names = ("r", "theta", "phi")
+    _radial_power = 2
 
     def __init__(self, raxis: Axis, theta_axis: Axis, phi_axis: Axis) -> None:
         """Constructor
@@ -616,6 +707,7 @@ class SphericalGrid(CurvilinearGrid):
         phi_axis: Axis
             The azimuthal axis (phi). Must be periodic.
         """
+        self._antipodal_fn = _spherical_antipodal
         super().__init__(
             raxis, theta_axis, phi_axis,
             scale_factors=(

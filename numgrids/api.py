@@ -9,7 +9,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.sparse import spmatrix
 
-from numgrids.axes import Axis, ChebyshevAxis, EquidistantAxis, LogAxis
+from numgrids.axes import Axis, ChebyshevAxis, EquidistantAxis, LogAxis, RadialAxis
 from numgrids.curvilinear import (  # noqa: F401  (re-exported for backward compatibility)
     CurvilinearGrid,
     CylindricalGrid,
@@ -157,11 +157,15 @@ class AxisType(str, enum.Enum):
         Chebyshev-node spacing for spectral accuracy on non-periodic domains.
     LOGARITHMIC
         Logarithmically spaced grid points (requires ``low > 0``).
+    RADIAL
+        Radial coordinate through the origin of polar, cylindrical and
+        spherical grids (requires ``low = 0``).
     """
     EQUIDISTANT = "equidistant"
     EQUIDISTANT_PERIODIC = "equidistant_periodic"
     CHEBYSHEV = "chebyshev"
     LOGARITHMIC = "log"
+    RADIAL = "radial"
 
 
 _AXIS_TYPE_ALIASES = {
@@ -216,6 +220,8 @@ def create_axis(axis_type: AxisType | str, num_points: int, low: float, high: fl
         return ChebyshevAxis(num_points, low, high, **kwargs)
     elif axis_type == AxisType.LOGARITHMIC:
         return LogAxis(num_points, low, high, **kwargs)
+    elif axis_type == AxisType.RADIAL:
+        return RadialAxis(num_points, low, high, **kwargs)
     else:
         raise NotImplementedError(f"No such axis type: {axis_type}")
 
@@ -274,6 +280,27 @@ def logarithmic(num_points: int, low: float, high: float,
     array([  1.,  10., 100.])
     """
     return LogAxis(num_points, low, high, name=name)
+
+
+def radial(num_points: int, radius: float = 1.0, name: str | None = None) -> RadialAxis:
+    """Radial axis on ``[0, radius]`` that passes through the origin.
+
+    Use it as the radial axis of a :class:`PolarGrid`, :class:`CylindricalGrid`
+    or :class:`SphericalGrid` to cover a full disk, cylinder or ball. There is
+    no grid point on the origin itself and no boundary condition is needed
+    there; see :class:`~numgrids.axes.RadialAxis`.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from numgrids import PolarGrid, radial, periodic
+    >>> disk = PolarGrid(radial(16, 1.0), periodic(32))
+    >>> round(disk.integrate(np.ones(disk.shape)), 12) == round(np.pi, 12)
+    True
+    >>> list(disk.faces)      # only the rim is a boundary
+    ['0_high']
+    """
+    return RadialAxis(num_points, 0.0, radius, name=name)
 
 
 # ── convenience functions ─────────────────────────────────────────

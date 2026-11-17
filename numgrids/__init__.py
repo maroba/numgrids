@@ -24,8 +24,9 @@ from .api import (
     interpolate,
     logarithmic,
     periodic,
+    radial,
 )
-from .axes import ChebyshevAxis, EquidistantAxis, LogAxis
+from .axes import ChebyshevAxis, EquidistantAxis, LogAxis, RadialAxis
 from .boundary import (
     BoundaryFace,
     Dirichlet,
@@ -101,6 +102,7 @@ __all__ = [
     "Operator",
     "PolarGrid",
     "ProlateSpheroidalGrid",
+    "RadialAxis",
     "Robin",
     "RobinBC",
     "SphericalGrid",
@@ -119,6 +121,7 @@ __all__ = [
     "load_grid",
     "logarithmic",
     "periodic",
+    "radial",
     "resolve_bcs",
     "save_grid",
     "to_xarray",

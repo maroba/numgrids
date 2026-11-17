@@ -101,6 +101,21 @@ The lower bound must be strictly positive (`low > 0`). A `ValueError` is
 raised otherwise.
 ```
 
+### Radial (through the origin)
+
+```python
+ax = radial(24, 1.0)            # or create_axis("radial", 24, 0, 1.0)
+```
+
+The radial coordinate of a *full* disk, cylinder or ball. The points are the
+positive half of Chebyshev nodes on the diameter $[-R, R]$, so no point lies
+on the origin. Derivatives use the whole diameter: the value at $-r$ is the
+value at the antipodal point $(r, \varphi + \pi)$. This gives spectral
+accuracy without a coordinate singularity, and only the outer end $r = R$ is
+a boundary. A radial axis can only be used as the first axis of a
+`PolarGrid`, `CylindricalGrid` or `SphericalGrid`; see
+[Curvilinear grids](curvilinear.md#full-disks-cylinders-and-balls).
+
 ## Choosing the right axis type
 
 | Scenario | Recommended type | Why |
@@ -109,7 +124,8 @@ raised otherwise.
 | Smooth, non-periodic function | `CHEBYSHEV` | Spectral accuracy without Runge phenomenon |
 | Uniform resolution, moderate accuracy needs | `EQUIDISTANT` | Simple, controllable via `acc` parameter |
 | Fine resolution near one boundary (e.g. $r \to 0$) | `LOGARITHMIC` | Concentrates points near `low` |
-| Radial coordinate away from origin | `CHEBYSHEV` or `LOGARITHMIC` | Depends on whether the lower bound is positive |
+| Radial coordinate of a full disk, cylinder or ball | `RADIAL` | Includes the center without a singularity |
+| Radial coordinate away from origin (annulus, shell) | `CHEBYSHEV` or `LOGARITHMIC` | Depends on whether the lower bound is positive |
 
 ```{tip}
 When in doubt, start with `CHEBYSHEV`. It gives spectral accuracy and works

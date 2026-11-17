@@ -17,6 +17,8 @@ or instantiate one of the concrete classes directly.
 
 .. autofunction:: numgrids.logarithmic
 
+.. autofunction:: numgrids.radial
+
 .. autofunction:: numgrids.create_axis
 
 .. autoclass:: numgrids.AxisType
@@ -30,3 +32,6 @@ or instantiate one of the concrete classes directly.
 
 .. autoclass:: numgrids.axes.LogAxis
    :members:
+
+.. autoclass:: numgrids.axes.RadialAxis
+   :members: radial_quadrature_weights, diameter_coords

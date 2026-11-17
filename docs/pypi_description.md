@@ -13,6 +13,7 @@ of bookkeeping grid indices and scale factors.
 - High-precision **spectral methods** (FFT + Chebyshev) selected automatically where possible
 - Differentiation, integration (Clenshaw–Curtis, trapezoidal), and interpolation (spline or spectral)
 - **Curvilinear coordinates**: spherical, cylindrical, polar, elliptic cylindrical, prolate and oblate spheroidal — or your own via scale factors
+- **Full disks, cylinders and balls**: a radial axis through the origin handles the center without a coordinate singularity
 - **Vector calculus**: gradient, divergence, curl, and Laplacian; volume and surface integrals
 - **Operator algebra** with built-in `solve()` for boundary value problems and `eig()` for eigenvalue problems
 - **Boundary conditions**: Dirichlet, Neumann, and Robin, specified per face in one line

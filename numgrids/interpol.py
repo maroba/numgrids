@@ -8,7 +8,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.interpolate import RegularGridInterpolator, interp1d
 
-from numgrids.axes import Axis, ChebyshevAxis, LogAxis
+from numgrids.axes import Axis, ChebyshevAxis, LogAxis, RadialAxis
 from numgrids.grids import Grid
 
 METHODS = ("linear", "quadratic", "cubic", "quintic", "spectral")
@@ -65,15 +65,19 @@ class Interpolator:
         self.grid = grid
         self.method = method
         self.f = grid._check_field(f)
+        # Radial axes through the origin are extended to the full diameter
+        # [-R, R] (a Chebyshev axis) with the values at the antipodal points,
+        # so that interpolation works across the center of the domain.
+        self._axes, self._data = _extend_radial_axes(grid, self.f)
 
         if method == "spectral":
             self._inter = None
             return
 
         pad = 3
-        coords = [axis.coords for axis in grid.axes]
-        data = self.f
-        for i, axis in enumerate(grid.axes):
+        coords = [axis.coords for axis in self._axes]
+        data = self._data
+        for i, axis in enumerate(self._axes):
             if axis.periodic:
                 n = len(axis)
                 p = min(pad, n)
@@ -120,7 +124,7 @@ class Interpolator:
 
     def _wrap(self, points: NDArray) -> NDArray:
         points = np.array(points, dtype=float, copy=True)
-        for i, axis in enumerate(self.grid.axes):
+        for i, axis in enumerate(self._axes):
             if axis.periodic:
                 points[:, i] = axis.low + np.mod(points[:, i] - axis.low, axis.period)
         return points
@@ -134,14 +138,14 @@ class Interpolator:
         return np.asarray(self._inter(points[:, 0]))
 
     def _evaluate_spectral(self, points: NDArray, chunk_elements: int = 4_000_000) -> NDArray:
-        f = self.f
+        f = self._data
         M = points.shape[0]
         rest = int(np.prod(f.shape[1:])) if f.ndim > 1 else 1
         chunk = max(1, chunk_elements // max(rest, 1))
         out = np.empty(M, dtype=np.result_type(f, float))
         for start in range(0, M, chunk):
             pts = points[start:start + chunk]
-            A = [interpolation_matrix(ax, pts[:, i]) for i, ax in enumerate(self.grid.axes)]
+            A = [interpolation_matrix(ax, pts[:, i]) for i, ax in enumerate(self._axes)]
             T = np.tensordot(A[0], f, axes=([1], [0]))  # (m, n1, ..., nd-1)
             for Ai in A[1:]:
                 T = np.einsum("mj,mj...->m...", Ai, T)
@@ -155,8 +159,8 @@ class Interpolator:
             )
         if self.method == "spectral":
             # Separable: apply 1D interpolation matrices axis by axis.
-            result = self.f
-            for i, (ax, tax) in enumerate(zip(self.grid.axes, target.axes)):
+            result = self._data
+            for i, (ax, tax) in enumerate(zip(self._axes, target.axes)):
                 x = tax.coords
                 if ax.periodic:
                     x = ax.low + np.mod(x - ax.low, ax.period)
@@ -165,6 +169,22 @@ class Interpolator:
             return result
         points = np.column_stack([c.reshape(-1) for c in target.meshed_coords])
         return self._evaluate(points).reshape(target.shape)
+
+
+def _extend_radial_axes(grid: Grid, f: NDArray) -> tuple[list[Axis], NDArray]:
+    """Replace radial axes through the origin by Chebyshev axes on the diameter.
+
+    The values on the negative half of the diameter are taken from the
+    antipodal points supplied by the grid.
+    """
+    axes = list(grid.axes)
+    data = f
+    for i, axis in enumerate(grid.axes):
+        if isinstance(axis, RadialAxis):
+            antipodal = grid._antipodal_map(i)
+            data = np.concatenate([np.flip(antipodal(data), axis=i), data], axis=i)
+            axes[i] = ChebyshevAxis(2 * len(axis), -axis.high, axis.high, name=axis.name)
+    return axes, data
 
 
 def _parse_locations(locations, ndims: int) -> tuple[NDArray, bool]:

@@ -57,7 +57,7 @@ class Integral:
         """
         self.grid = grid
         self.volume_element = volume_element
-        self.weights = [axis.quadrature_weights for axis in grid.axes]
+        self.weights = [grid._quadrature_weights(i) for i in range(grid.ndims)]
         J = getattr(grid, "volume_element", None) if volume_element else None
         self._jacobian = None if J is None or np.isscalar(J) else np.asarray(J)
 
