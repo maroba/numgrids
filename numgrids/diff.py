@@ -6,7 +6,10 @@ derivatives along that axis:
 * :class:`FiniteDifferenceDiff` -- equidistant, non-periodic axes,
 * :class:`FFTDiff` -- equidistant, periodic axes (spectral accuracy),
 * :class:`ChebyshevDiff` -- Chebyshev axes (spectral accuracy),
-* :class:`LogDiff` -- logarithmic axes.
+* :class:`LogDiff` -- logarithmic axes,
+* :class:`RadialDiff`, :class:`ColatitudeDiff` -- axes through the origin
+  and the poles of curvilinear grids (spectral accuracy),
+* :class:`MappedChebyshevDiff` -- axes on unbounded domains (spectral accuracy).
 
 Users normally do not instantiate these classes directly but use
 :class:`numgrids.Diff`, :func:`numgrids.diff` or :meth:`numgrids.Grid.diff`.
@@ -25,7 +28,7 @@ from numpy.fft import fft, fftfreq, ifft
 from numpy.typing import NDArray
 from scipy.sparse import spmatrix
 
-from numgrids.axes import ColatitudeAxis, EquidistantAxis, LogAxis, RadialAxis
+from numgrids.axes import ColatitudeAxis, EquidistantAxis, LogAxis, RadialAxis, UnboundedAxis
 from numgrids.utils import embed_1d_operator
 
 if TYPE_CHECKING:
@@ -493,3 +496,91 @@ class ColatitudeDiff(GridDiff):
         self.operator = operator
 
     as_matrix = RadialDiff.as_matrix
+
+
+# ---------------------------------------------------------------------------
+# Unbounded axes (mapped Chebyshev)
+# ---------------------------------------------------------------------------
+
+def barycentric_diff_matrix(differences: NDArray, weights: NDArray) -> NDArray:
+    r"""First-order polynomial differentiation matrix on arbitrary nodes.
+
+    For nodes :math:`\xi_j` with barycentric weights :math:`w_j`,
+
+    .. math::
+        D_{ij} = \frac{w_j / w_i}{\xi_i - \xi_j} \quad (i \ne j), \qquad
+        D_{ii} = -\sum_{j \ne i} D_{ij}.
+
+    The diagonal is computed with the "negative sum trick", so that
+    constants are differentiated to zero exactly (up to round-off).
+
+    Parameters
+    ----------
+    differences : NDArray
+        The node differences :math:`\xi_i - \xi_j`, shape ``(n, n)``. They
+        are passed in (instead of the nodes) because the caller can often
+        compute them without cancellation.
+    weights : NDArray
+        The barycentric weights, shape ``(n,)`` (a common factor is irrelevant).
+
+    Reference: Berrut & Trefethen, *Barycentric Lagrange Interpolation*,
+    SIAM Review 46 (2004).
+    """
+    n = len(weights)
+    D = (weights[None, :] / weights[:, None]) / (differences + np.eye(n))
+    D[np.diag_indices(n)] = 0.0
+    D[np.diag_indices(n)] = -D.sum(axis=1)
+    return D
+
+
+class MappedChebyshevDiff(GridDiff):
+    r"""Spectral partial derivative on an unbounded axis.
+
+    Used for :class:`~numgrids.axes.SemiInfiniteAxis` and
+    :class:`~numgrids.axes.InfiniteAxis`, whose points are the images
+    :math:`x(\xi_j)` of Chebyshev-type nodes on :math:`[-1, 1]`. The first
+    derivative is
+
+    .. math::
+        \frac{d}{dx} = \frac{d\xi}{dx}\,\frac{d}{d\xi},
+
+    with the polynomial differentiation matrix on the nodes
+    (:func:`barycentric_diff_matrix`). Higher derivatives are expanded with
+    the chain rule,
+
+    .. math::
+        \frac{d^n}{dx^n} = \sum_{k=1}^{n} c_{n,k}(\xi)\,\frac{d^k}{d\xi^k},
+
+    rather than computed as powers of the first-derivative matrix: a
+    derivative of a polynomial in :math:`\xi` need not be one (on the whole
+    line it has a factor :math:`(1 - \xi^2)^{3/2}`), and differentiating it
+    again as if it were would spoil the spectral accuracy for functions
+    that decay algebraically. The coefficients vanish at infinity, so no
+    condition has to be imposed there.
+
+    Reference: Boyd, *Chebyshev and Fourier Spectral Methods*, 2nd ed.,
+    Dover, 2001, ch. 17.
+    """
+
+    def __init__(self, grid: Grid, order: int, axis_index: int) -> None:
+        super().__init__(grid, order, axis_index)
+        if not isinstance(self.axis, UnboundedAxis):
+            raise TypeError(f"Axis must be a SemiInfiniteAxis or InfiniteAxis. Got: {type(self.axis)}")
+        axis = self.axis
+        D_xi = barycentric_diff_matrix(axis._internal_differences(axis.coords), axis.barycentric_weights)
+        D_xi_k = np.eye(len(axis))
+        self._matrix_1d = np.zeros((len(axis), len(axis)))
+        for c in axis._chain_rule_coefficients(order):
+            D_xi_k = D_xi @ D_xi_k
+            self._matrix_1d += c[:, None] * D_xi_k
+        self._diff_matrix: spmatrix | None = None
+
+        D = self._matrix_1d
+
+        def operator(f: NDArray) -> NDArray:
+            df = np.tensordot(D, f, axes=([1], [axis_index]))
+            return np.moveaxis(df, 0, axis_index)
+
+        self.operator = operator
+
+    as_matrix = ChebyshevDiff.as_matrix

@@ -34,6 +34,10 @@ periodic(64)                # FFT spectral, [0, 2*pi) by default
 logarithmic(40, 1e-3, 1.0)  # log-spaced points
 ```
 
+Special axes cover the origin and the poles of curvilinear grids (`radial`,
+`colatitude`) and unbounded domains (`semi_infinite` for a half line,
+`infinite` for the whole real line).
+
 See the [Axes guide](guide/axes.md) for details on when to pick which.
 
 ## 2. Build a grid

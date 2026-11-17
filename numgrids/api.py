@@ -9,7 +9,16 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.sparse import spmatrix
 
-from numgrids.axes import Axis, ChebyshevAxis, ColatitudeAxis, EquidistantAxis, LogAxis, RadialAxis
+from numgrids.axes import (
+    Axis,
+    ChebyshevAxis,
+    ColatitudeAxis,
+    EquidistantAxis,
+    InfiniteAxis,
+    LogAxis,
+    RadialAxis,
+    SemiInfiniteAxis,
+)
 from numgrids.curvilinear import (  # noqa: F401  (re-exported for backward compatibility)
     CurvilinearGrid,
     CylindricalGrid,
@@ -30,8 +39,9 @@ class Diff:
     """Partial derivative operator on a numerical grid.
 
     Automatically selects the best differentiation strategy (finite
-    differences, FFT spectral, Chebyshev spectral, or log-scale) based
-    on the axis type at *axis_index*.
+    differences, FFT spectral, Chebyshev spectral, mapped Chebyshev
+    spectral on unbounded axes, or log-scale) based on the axis type at
+    *axis_index*.
 
     ``Diff`` objects can be combined algebraically with each other, with
     scalars and with arrays (interpreted as multiplication operators); the
@@ -164,6 +174,12 @@ class AxisType(str, enum.Enum):
     COLATITUDE
         Polar angle of spherical grids through both poles (requires
         ``low = 0, high = pi``).
+    SEMI_INFINITE
+        The half line ``[low, inf)`` (requires ``high = inf``; keyword
+        argument ``scale``).
+    INFINITE
+        The whole real line (requires ``low = -inf, high = inf``; keyword
+        arguments ``scale`` and ``center``).
     """
     EQUIDISTANT = "equidistant"
     EQUIDISTANT_PERIODIC = "equidistant_periodic"
@@ -171,6 +187,8 @@ class AxisType(str, enum.Enum):
     LOGARITHMIC = "log"
     RADIAL = "radial"
     COLATITUDE = "colatitude"
+    SEMI_INFINITE = "semi_infinite"
+    INFINITE = "infinite"
 
 
 _AXIS_TYPE_ALIASES = {
@@ -199,7 +217,10 @@ def create_axis(axis_type: AxisType | str, num_points: int, low: float, high: fl
     high: float
         The highest coordinate value on the axis.
     **kwargs
-        Further keyword arguments for the axis, e.g. ``name``.
+        Further keyword arguments for the axis, e.g. ``name``, or ``scale``
+        (and ``center``) for the axes on unbounded domains, whose infinite
+        ends are given as ``numpy.inf``:
+        ``create_axis("semi_infinite", 40, 0.0, np.inf, scale=2.0)``.
 
     Returns
     -------
@@ -229,6 +250,10 @@ def create_axis(axis_type: AxisType | str, num_points: int, low: float, high: fl
         return RadialAxis(num_points, low, high, **kwargs)
     elif axis_type == AxisType.COLATITUDE:
         return ColatitudeAxis(num_points, low, high, **kwargs)
+    elif axis_type == AxisType.SEMI_INFINITE:
+        return SemiInfiniteAxis(num_points, low, high, **kwargs)
+    elif axis_type == AxisType.INFINITE:
+        return InfiniteAxis(num_points, low, high, **kwargs)
     else:
         raise NotImplementedError(f"No such axis type: {axis_type}")
 
@@ -329,6 +354,100 @@ def colatitude(num_points: int, name: str | None = None) -> ColatitudeAxis:
     ['0_high']
     """
     return ColatitudeAxis(num_points, 0.0, np.pi, name=name)
+
+
+def semi_infinite(num_points: int, scale: float = 1.0, low: float = 0.0,
+                  name: str | None = None) -> SemiInfiniteAxis:
+    r"""Axis on the half line ``[low, inf)`` (spectral accuracy).
+
+    The points are mapped Chebyshev points, :math:`x = \mathrm{low} +
+    L (1 + \xi) / (1 - \xi)` with the scale length :math:`L` = *scale*:
+    the first point is ``low``, half of the points lie in ``[low, low + scale]``
+    and there is no point at infinity. Functions on the axis should be smooth
+    and decay (or tend to a constant) at infinity. Only ``low`` is a boundary;
+    solutions that grow at infinity are excluded automatically. See
+    :class:`~numgrids.axes.SemiInfiniteAxis`.
+
+    Parameters
+    ----------
+    num_points : int
+        Number of grid points.
+    scale : float
+        Scale length of the map: several times the decay length of the
+        functions to be represented (5 to 20 times for an exponential decay).
+    low : float
+        The finite end of the half line.
+    name : str, optional
+        The axis name.
+
+    Examples
+    --------
+    Radial levels of the hydrogen atom, :math:`-u''/2 - u/r = E u` with
+    :math:`u(0) = 0`:
+
+    >>> import numpy as np
+    >>> from numgrids import Grid
+    >>> from numgrids import semi_infinite
+    >>> grid = Grid(r=semi_infinite(60, scale=10.0))
+    >>> r = grid.coords
+    >>> list(grid.faces)      # only r = 0 is a boundary
+    ['0_low']
+    >>> V = np.zeros(grid.shape)
+    >>> V[1:] = -1 / r[1:]
+    >>> H = -0.5 * grid.diff_operator(2) + V
+    >>> E, u = H.eig(k=3, bcs=0, which="SR")
+    >>> np.round(E, 10)
+    array([-0.5       , -0.125     , -0.05555556])
+    >>> round(grid.integrate(r ** 2 * np.exp(-r)), 10)
+    2.0
+    """
+    return SemiInfiniteAxis(num_points, low, np.inf, scale=scale, name=name)
+
+
+def infinite(num_points: int, scale: float = 1.0, center: float = 0.0,
+             name: str | None = None) -> InfiniteAxis:
+    r"""Axis on the whole real line (spectral accuracy).
+
+    The points are mapped Chebyshev points, :math:`x = \mathrm{center} +
+    L \xi / \sqrt{1 - \xi^2}` with the scale length :math:`L` = *scale*:
+    half of the points lie in ``[center - scale, center + scale]`` and there
+    are no points at infinity. Functions on the axis should be smooth and
+    decay at infinity. The axis has no boundary; solutions that grow at
+    infinity are excluded automatically. See
+    :class:`~numgrids.axes.InfiniteAxis`.
+
+    Parameters
+    ----------
+    num_points : int
+        Number of grid points.
+    scale : float
+        Scale length of the map: about the half-width of the region in which
+        the functions to be represented differ appreciably from their limits
+        (3 to 5 standard deviations of a Gaussian).
+    center : float
+        The point around which the grid points cluster.
+    name : str, optional
+        The axis name.
+
+    Examples
+    --------
+    Levels of the quantum harmonic oscillator, :math:`-u''/2 + x^2 u/2 = E u`:
+
+    >>> import numpy as np
+    >>> from numgrids import Grid
+    >>> from numgrids import infinite
+    >>> grid = Grid(x=infinite(60, scale=4.0))
+    >>> x = grid.coords
+    >>> list(grid.faces)      # no boundary at all
+    []
+    >>> H = -0.5 * grid.diff_operator(2) + 0.5 * x ** 2
+    >>> E, u = H.eig(k=4, which="SR")
+    >>> np.round(E, 10)
+    array([0.5, 1.5, 2.5, 3.5])
+    >>> bool(abs(grid.integrate(np.exp(-x ** 2)) - np.sqrt(np.pi)) < 1e-12)
+    True
+    """
+    return InfiniteAxis(num_points, -np.inf, np.inf, scale=scale, center=center, name=name)
 
 
 # ── convenience functions ─────────────────────────────────────────

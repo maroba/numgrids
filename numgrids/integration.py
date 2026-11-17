@@ -23,6 +23,8 @@ class Integral:
 
     * Chebyshev axes: Clenshaw--Curtis quadrature (spectral accuracy),
     * periodic equidistant axes: trapezoidal rule (spectral accuracy),
+    * unbounded axes (half line, whole line): the Chebyshev-type rule of the
+      mapped points (spectral accuracy for integrands that decay fast enough),
     * other axes: weights obtained by inverting the axis' differentiation
       matrix (same order of accuracy as differentiation).
 

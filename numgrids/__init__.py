@@ -21,13 +21,23 @@ from .api import (
     create_axis,
     diff,
     equidistant,
+    infinite,
     integrate,
     interpolate,
     logarithmic,
     periodic,
     radial,
+    semi_infinite,
 )
-from .axes import ChebyshevAxis, ColatitudeAxis, EquidistantAxis, LogAxis, RadialAxis
+from .axes import (
+    ChebyshevAxis,
+    ColatitudeAxis,
+    EquidistantAxis,
+    InfiniteAxis,
+    LogAxis,
+    RadialAxis,
+    SemiInfiniteAxis,
+)
 from .boundary import (
     BoundaryFace,
     Dirichlet,
@@ -99,6 +109,7 @@ __all__ = [
     "ErrorEstimator",
     "EvolutionResult",
     "Grid",
+    "InfiniteAxis",
     "Integral",
     "Interpolator",
     "LinearSolver",
@@ -114,6 +125,7 @@ __all__ = [
     "RadialAxis",
     "Robin",
     "RobinBC",
+    "SemiInfiniteAxis",
     "SphericalGrid",
     "SphericalSurfaceGrid",
     "TimeDependent",
@@ -129,6 +141,7 @@ __all__ = [
     "estimate_error",
     "evolve",
     "from_xarray",
+    "infinite",
     "integrate",
     "interpolate",
     "load_grid",
@@ -137,6 +150,7 @@ __all__ = [
     "radial",
     "resolve_bcs",
     "save_grid",
+    "semi_infinite",
     "solve_nonlinear",
     "to_xarray",
 ]

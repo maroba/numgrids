@@ -8,7 +8,15 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.interpolate import RegularGridInterpolator, interp1d
 
-from numgrids.axes import Axis, ChebyshevAxis, ColatitudeAxis, EquidistantAxis, LogAxis, RadialAxis
+from numgrids.axes import (
+    Axis,
+    ChebyshevAxis,
+    ColatitudeAxis,
+    EquidistantAxis,
+    LogAxis,
+    RadialAxis,
+    UnboundedAxis,
+)
 from numgrids.grids import Grid
 
 METHODS = ("linear", "quadratic", "cubic", "quintic", "spectral")
@@ -24,11 +32,15 @@ class Interpolator:
       (``"quadratic"`` is available for 1D grids only),
     * ``"spectral"`` -- interpolation that matches the axis type and keeps
       spectral accuracy: barycentric polynomial interpolation on Chebyshev
-      axes, trigonometric interpolation on periodic axes, and high-order
-      local polynomial interpolation on all other axes.
+      axes, trigonometric interpolation on periodic axes, barycentric
+      interpolation in the computational variable on unbounded axes, and
+      high-order local polynomial interpolation on all other axes.
 
     Periodic axes are handled correctly by all methods, including points
-    between the last grid point and the end of the period.
+    between the last grid point and the end of the period.  On unbounded
+    axes (:func:`~numgrids.semi_infinite`, :func:`~numgrids.infinite`) all
+    methods work in the computational variable and cover the whole domain,
+    also beyond the outermost grid point.
 
     Examples
     --------
@@ -84,6 +96,11 @@ class Interpolator:
                 P = axis.period
                 coords[i] = np.concatenate([axis.coords[-p:] - P, axis.coords, axis.coords[:p] + P])
                 data = np.take(data, np.arange(-p, n + p), axis=i, mode="wrap")
+            elif isinstance(axis, UnboundedAxis):
+                # Splines in the computational variable xi: there the data is smooth
+                # and the nodes are not spread over many orders of magnitude. The value
+                # of the spectral interpolant at infinity closes the interval [-1, 1].
+                coords[i], data = _compactify(axis, data, i)
 
         if grid.ndims > 1:
             self._inter = RegularGridInterpolator(tuple(coords), data, method=method)
@@ -127,6 +144,8 @@ class Interpolator:
         for i, axis in enumerate(self._axes):
             if axis.periodic:
                 points[:, i] = axis.low + np.mod(points[:, i] - axis.low, axis.period)
+            elif self.method != "spectral" and isinstance(axis, UnboundedAxis):
+                points[:, i] = axis.to_internal(points[:, i])
         return points
 
     def _evaluate(self, points: NDArray) -> NDArray:
@@ -199,6 +218,19 @@ def _extend_radial_axes(grid: Grid, f: NDArray) -> tuple[list[Axis], NDArray]:
     return axes, data
 
 
+def _compactify(axis: UnboundedAxis, data: NDArray, i: int) -> tuple[NDArray, NDArray]:
+    """Nodes and data of an unbounded axis in the variable xi, with the ends at infinity added."""
+    def value_at(x: float) -> NDArray:
+        A = interpolation_matrix(axis, np.array([x]))
+        return np.moveaxis(np.tensordot(A, data, axes=([1], [i])), 0, i)
+
+    xi, parts = [axis.coords_internal, [1.0]], [data, value_at(np.inf)]
+    if np.isinf(axis.low):
+        xi.insert(0, [-1.0])
+        parts.insert(0, value_at(-np.inf))
+    return np.concatenate(xi), np.concatenate(parts, axis=i)
+
+
 def _parse_locations(locations, ndims: int) -> tuple[NDArray, bool]:
     """Normalize *locations* to an array of shape ``(M, ndims)``."""
     if isinstance(locations, numbers.Number):
@@ -240,7 +272,9 @@ def interpolation_matrix(axis: Axis, x: NDArray, stencil: int = 6) -> NDArray:
         The axis.
     x : NDArray
         1D array of target coordinates.  For periodic axes the values must
-        already be wrapped into ``[low, high)``.
+        already be wrapped into ``[low, high)``.  On unbounded axes any
+        point of the domain is allowed, including infinity (the limit of
+        the interpolant).
     stencil : int
         Number of points used for local polynomial interpolation on
         non-spectral axes (default 6, i.e. degree 5).
@@ -253,6 +287,9 @@ def interpolation_matrix(axis: Axis, x: NDArray, stencil: int = 6) -> NDArray:
     x = np.asarray(x, dtype=float)
     if axis.periodic:
         return _trig_matrix(axis, x)
+    if isinstance(axis, UnboundedAxis):
+        # Polynomial interpolation in xi (a rational function of x)
+        return _barycentric(axis._internal_differences(x), axis.barycentric_weights)
     _check_range(axis, x)
     if isinstance(axis, ChebyshevAxis):
         return _barycentric_matrix(axis.coords, x)
@@ -275,7 +312,11 @@ def _barycentric_matrix(nodes: NDArray, x: NDArray) -> NDArray:
     w = (-1.0) ** np.arange(n)
     w[0] *= 0.5
     w[-1] *= 0.5
-    d = x[:, None] - nodes[None, :]
+    return _barycentric(x[:, None] - nodes[None, :], w)
+
+
+def _barycentric(d: NDArray, w: NDArray) -> NDArray:
+    """Barycentric interpolation matrix from the differences ``d[m, j] = x_m - node_j``."""
     exact = d == 0
     with np.errstate(divide="ignore", invalid="ignore"):
         W = w[None, :] / d

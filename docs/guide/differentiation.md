@@ -71,6 +71,7 @@ method accordingly:
 | `EquidistantAxis` (periodic) | FFT spectral | Spectral accuracy for smooth periodic functions |
 | `ChebyshevAxis` | Chebyshev spectral matrix | Spectral accuracy; `acc` is ignored |
 | `LogAxis` | Finite differences on log-scale | Exact identity $x^n d^n/dx^n = \theta(\theta-1)\cdots(\theta-n+1)$ with $\theta = d/d(\ln x)$ |
+| `SemiInfiniteAxis`, `InfiniteAxis` | Mapped Chebyshev spectral matrix | Spectral accuracy for functions that decay at infinity; `acc` is ignored. See [Unbounded domains](axes.md#unbounded-domains) |
 
 ```{note}
 The `acc` parameter only affects finite-difference-based strategies

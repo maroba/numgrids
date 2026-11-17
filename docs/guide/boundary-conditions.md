@@ -28,7 +28,10 @@ print(grid.faces.keys())
 
 The key format is `"{axis_index}_{side}"`, where `side` is either `"low"`
 (first point along that axis) or `"high"` (last point). Periodic axes have
-no boundary faces and are automatically excluded. For named axes, the key
+no boundary faces and are automatically excluded; so are ends that are not a
+boundary, such as the ends at infinity of
+[unbounded axes](axes.md#unbounded-domains), where no condition is imposed.
+For named axes, the key
 `"{name}_{side}"` works as well:
 
 ```python

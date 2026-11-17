@@ -67,6 +67,7 @@ per axis type (see `Axis.quadrature_weights`):
 |---------------------|------------------------------|--------------------------|
 | Chebyshev           | Clenshaw--Curtis             | spectral                 |
 | periodic            | trapezoidal                  | spectral (periodic *f*)  |
+| semi-infinite, infinite | Chebyshev-type rule of the mapped points | spectral (decaying *f*) |
 | equidistant, log    | inverse differentiation      | same order as `Diff`     |
 
 The weights are computed once per axis and cached, so integration is a

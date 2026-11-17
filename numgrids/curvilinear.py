@@ -28,7 +28,7 @@ import numpy as np
 import scipy.sparse
 from numpy.typing import NDArray
 
-from numgrids.axes import Axis, ColatitudeAxis, RadialAxis
+from numgrids.axes import Axis, ColatitudeAxis, RadialAxis, UnboundedAxis
 from numgrids.grids import Grid
 
 if TYPE_CHECKING:
@@ -496,9 +496,11 @@ class CurvilinearGrid(Grid):
             with np.errstate(divide="ignore", invalid="ignore"):
                 for i in range(self.ndims):
                     c = _finite_or_zero(J / h[i] ** 2)
-                    if isinstance(self.axes[i], _FOLDED_AXES):
+                    if isinstance(self.axes[i], _FOLDED_AXES + (UnboundedAxis,)):
                         # The coefficient (e.g. c = r or sin(theta)) is not an even field
                         # across the origin/poles, so the folded derivative does not apply.
+                        # Nor can an unbounded axis differentiate a coefficient that grows
+                        # towards infinity (e.g. c = r^2).
                         dc = self._coefficient_derivative(i)
                     else:
                         dc = self.diff(c, 1, i)
@@ -513,7 +515,8 @@ class CurvilinearGrid(Grid):
         which is exact to round-off for analytic expressions.
         """
         coords = list(self.meshed_coords)
-        step = 1e-30 * max(1.0, abs(self.axes[i].high))
+        high = self.axes[i].high
+        step = 1e-30 * (max(1.0, abs(high)) if np.isfinite(high) else 1.0)
         coords[i] = coords[i] + 1j * step
         coords = tuple(coords)
         with np.errstate(divide="ignore", invalid="ignore"):

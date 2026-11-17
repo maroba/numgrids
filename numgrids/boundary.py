@@ -48,6 +48,9 @@ class BoundaryFace:
 
     For an *N*-dimensional grid, each non-periodic axis contributes two
     faces: ``"low"`` (index 0 along that axis) and ``"high"`` (last index).
+    Ends that are not a boundary have no face: the origin of a radial axis,
+    the poles of a colatitude axis and the ends at infinity of the axes on
+    unbounded domains.
 
     Parameters
     ----------
@@ -74,9 +77,11 @@ class BoundaryFace:
                 f"Axis {axis_index} is periodic and has no boundary faces"
             )
         if side not in axis.boundary_sides:
+            # e.g. the origin of a radial axis or an end at infinity
+            sides = " or ".join(repr(s) for s in axis.boundary_sides) or "none"
             raise ValueError(
-                f"Axis {axis_index} has no {side!r} boundary face (a radial axis through the "
-                "origin only has the outer face 'high')."
+                f"Axis {axis_index} ({type(axis).__name__}) has no {side!r} boundary face "
+                f"(its faces: {sides})."
             )
         self.grid = grid
         self.axis_index = axis_index

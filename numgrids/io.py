@@ -39,7 +39,15 @@ def _ensure_registries() -> None:
     """Lazily populate the class look-up tables."""
     if _AXIS_CLASSES:
         return
-    from numgrids.axes import ChebyshevAxis, ColatitudeAxis, EquidistantAxis, LogAxis, RadialAxis
+    from numgrids.axes import (
+        ChebyshevAxis,
+        ColatitudeAxis,
+        EquidistantAxis,
+        InfiniteAxis,
+        LogAxis,
+        RadialAxis,
+        SemiInfiniteAxis,
+    )
     from numgrids.curvilinear import (
         CylindricalGrid,
         EllipticCylindricalGrid,
@@ -57,6 +65,8 @@ def _ensure_registries() -> None:
         "LogAxis": LogAxis,
         "RadialAxis": RadialAxis,
         "ColatitudeAxis": ColatitudeAxis,
+        "SemiInfiniteAxis": SemiInfiniteAxis,
+        "InfiniteAxis": InfiniteAxis,
     })
     _GRID_CLASSES.update({
         "Grid": _Grid,
@@ -186,10 +196,12 @@ def _axis_to_meta(axis) -> dict:
     return {
         "type": axis_type,
         "num_points": len(axis),
-        "low": float(axis.low),
-        "high": float(axis.high),
+        # Infinite ends are stored as null: JSON has no infinity.
+        "low": float(axis.low) if np.isfinite(axis.low) else None,
+        "high": float(axis.high) if np.isfinite(axis.high) else None,
         "periodic": axis.periodic,
         "name": axis.name,
+        **axis._extra_params(),
     }
 
 
@@ -200,7 +212,12 @@ def _meta_to_axis(ax: dict):
         kwargs["periodic"] = True
     if ax.get("name") is not None:
         kwargs["name"] = ax["name"]
-    return axis_cls(int(ax["num_points"]), ax["low"], ax["high"], **kwargs)
+    for key in axis_cls._extra_param_names:
+        if key in ax:
+            kwargs[key] = ax[key]
+    low = -np.inf if ax["low"] is None else ax["low"]
+    high = np.inf if ax["high"] is None else ax["high"]
+    return axis_cls(int(ax["num_points"]), low, high, **kwargs)
 
 
 def _meta_to_grid(meta: dict) -> Grid:
@@ -281,7 +298,8 @@ def from_xarray(obj) -> tuple[Grid, dict[str, NDArray]]:
     Works with objects created by :func:`to_xarray` (exact round trip).
     For other datasets, the axis types are inferred from the coordinate
     values (equidistant, Chebyshev or logarithmic; periodic axes cannot be
-    detected and are treated as non-periodic).
+    detected and are treated as non-periodic, and other axis types such as
+    the axes on unbounded domains are not recognized).
 
     Parameters
     ----------

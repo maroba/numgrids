@@ -285,6 +285,26 @@ number of points, and on a `SphericalGrid` with a radial axis the polar axis
 must be symmetric about $\pi/2$ (`colatitude(n)` always is). A `ValueError`
 explains what is missing otherwise.
 
+## Exterior domains
+
+For the region *outside* a disk, cylinder or ball, use a half line as the
+radial axis: `semi_infinite(n, scale, low=R)`. The only boundary is the inner
+surface $r = R$, and nothing is imposed at infinity:
+
+```python
+shell = SphericalGrid(semi_infinite(20, scale=2.0, low=1.0), colatitude(8), periodic(8))
+R, Theta, Phi = shell.meshed_coords
+list(shell.faces)                                  # ['0_low']
+
+# Screened Poisson equation lap u - u = 0 with u = 1 on the unit sphere
+u = (shell.laplacian_operator() - 1).solve(0, bcs=1.0)
+np.abs(u - np.exp(-(R - 1)) / R).max()             # 2e-08
+```
+
+This requires that the equation has only one solution that is regular at
+infinity; see [Unbounded domains](axes.md#unbounded-domains) for this and for
+the choice of `scale`.
+
 ## Singularity handling
 
 Curvilinear coordinates often have singularities where scale factors vanish --

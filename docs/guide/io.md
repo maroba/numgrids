@@ -90,8 +90,10 @@ print(np.allclose(data2["field"], field))  # True
   (including the focal parameter `a`)
 
 All axis types (`EquidistantAxis`, `ChebyshevAxis`, `LogAxis`, including
-periodic equidistant axes) are fully supported. Axis metadata such as
-`periodic` and `name` is preserved across the roundtrip.
+periodic equidistant axes, the radial and colatitude axes of curvilinear
+grids and the axes on unbounded domains) are fully supported. Axis metadata
+such as `periodic`, `name` and the `scale` of unbounded axes is preserved
+across the roundtrip.
 
 ```{note}
 `CurvilinearGrid` with custom scale factors cannot be saved directly
@@ -139,4 +141,5 @@ u = data["u"]
 
 `from_xarray` also accepts single `DataArray` objects and datasets that were
 not created by numgrids; in that case the axis types are inferred from the
-coordinate values (equidistant, Chebyshev or logarithmic).
+coordinate values (equidistant, Chebyshev or logarithmic; other axis types
+are only restored from datasets written by `to_xarray`).
