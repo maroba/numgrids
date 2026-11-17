@@ -25,8 +25,16 @@ print(ax.coords)   # array([0.  , 0.02040816, ..., 1.  ])
 ```
 
 numgrids ships four axis types: `EQUIDISTANT`, `EQUIDISTANT_PERIODIC`,
-`CHEBYSHEV`, and `LOGARITHMIC`. See the [Axes guide](guide/axes.md) for details
-on when to pick which.
+`CHEBYSHEV`, and `LOGARITHMIC`. Each has a short-hand factory:
+
+```python
+chebyshev(30, 0.0, 1.0)     # spectral accuracy on non-periodic domains
+equidistant(50, 0.0, 1.0)   # finite differences
+periodic(64)                # FFT spectral, [0, 2*pi) by default
+logarithmic(40, 1e-3, 1.0)  # log-spaced points
+```
+
+See the [Axes guide](guide/axes.md) for details on when to pick which.
 
 ## 2. Build a grid
 
@@ -39,6 +47,13 @@ grid = Grid(ax_x, ax_y)
 
 print(grid.shape)  # (40, 40)
 print(grid.ndims)  # 2
+```
+
+Passing the axes as keyword arguments names them; names can then be used
+instead of axis indices everywhere:
+
+```python
+grid = Grid(x=chebyshev(40, -1.0, 1.0), y=chebyshev(40, -1.0, 1.0))
 ```
 
 The `meshed_coords` property returns NumPy arrays ready for vectorized
@@ -80,12 +95,15 @@ thing with caching:
 
 ```python
 df_dx = diff(grid, f, order=1, axis_index=0)
+df_dx = grid.diff(f, axis="x")        # the same, as a grid method
 ```
+
+Grids also provide `gradient`, `divergence`, `curl` and `laplacian`.
 
 ## 5. Integrate over the domain
 
 ```python
-result = integrate(grid, f)
+result = integrate(grid, f)      # or: grid.integrate(f)
 print(result)  # close to 0.0 (sin * cos over symmetric domain)
 ```
 
@@ -139,8 +157,40 @@ lap_f = grid.laplacian(f)
 grad_f = grid.gradient(f)   # (grad_r, grad_theta, grad_phi)
 ```
 
-Cylindrical and polar grids work the same way -- see the
-[Curvilinear guide](guide/curvilinear.md).
+Cylindrical, polar, elliptic and spheroidal grids work the same way -- see
+the [Curvilinear guide](guide/curvilinear.md). On curvilinear grids,
+`grid.integrate(f)` includes the volume element.
+
+## 8. Solve a boundary value problem
+
+Operators can be combined like formulas and solved directly. The Poisson
+equation $\nabla^2 u = -2\pi^2\sin(\pi x)\sin(\pi y)$ with $u = 0$ on the
+boundary:
+
+```python
+grid = Grid(x=chebyshev(30, 0, 1), y=chebyshev(30, 0, 1))
+L = grid.laplacian_operator()
+u = L.solve(lambda x, y: -2 * np.pi**2 * np.sin(np.pi * x) * np.sin(np.pi * y), bcs=0)
+```
+
+Mixed conditions are given per face: `bcs={"x_low": 0, "y_high": Neumann(1.0)}`.
+Eigenvalue problems are just as short -- the quantum harmonic oscillator:
+
+```python
+grid = Grid(x=chebyshev(80, -10, 10))
+x = grid.coords
+H = -0.5 * grid.diff_operator(2) + 0.5 * x**2
+energies, states = H.eig(k=4, bcs=0)    # [0.5, 1.5, 2.5, 3.5]
+```
+
+## 9. Evolve in time
+
+```python
+grid = Grid(x=chebyshev(40, 0, 1))
+result = evolve(grid, 0.1 * grid.laplacian_operator(), np.sin(np.pi * grid.coords),
+                t_span=(0, 1), bcs=0, method="BDF")
+grid.plot(result.final)   # requires matplotlib
+```
 
 ## Where to go next
 
@@ -153,6 +203,10 @@ Cylindrical and polar grids work the same way -- see the
 | Interpolating onto arbitrary points or grids | [Interpolation](guide/interpolation.md) |
 | Spherical, cylindrical, polar, and custom coordinates | [Curvilinear grids](guide/curvilinear.md) |
 | Dirichlet, Neumann, and Robin boundary conditions | [Boundary conditions](guide/boundary-conditions.md) |
-| Saving and loading grids | [I/O](guide/io.md) |
+| Operator algebra, `solve()` and `eig()` | [Operators and solvers](guide/operators.md) |
+| Heat, wave and Schrödinger equations | [Time evolution](guide/time-evolution.md) |
+| Plotting fields on grids | [Plotting](guide/plotting.md) |
+| Saving and loading grids, xarray | [I/O](guide/io.md) |
+| Measuring convergence | [Convergence studies](guide/convergence.md) |
 | Multigrid hierarchies | [MultiGrid](guide/multigrid.md) |
 | Adaptive mesh refinement | [AMR](guide/amr.md) |

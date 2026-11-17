@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import numpy.testing as npt
 
-from numgrids import Grid, create_axis, AxisType
+from numgrids import AxisType, Grid, create_axis
 from numgrids.integration import Integral
 
 

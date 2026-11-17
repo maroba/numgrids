@@ -25,6 +25,19 @@ cd numgrids
 pip install -e .
 ```
 
+## Optional features
+
+Plotting and xarray support are optional extras:
+
+```bash
+pip install "numgrids[plot]"     # matplotlib, for grid.plot(...)
+pip install "numgrids[xarray]"   # xarray, for to_xarray / from_xarray
+pip install "numgrids[all]"      # both
+```
+
+For development, `pip install -e ".[dev]"` installs the test, lint and
+documentation tools as well.
+
 ## Dependencies
 
 numgrids requires **Python 3.10 or later** and depends on the following
@@ -33,12 +46,13 @@ packages (installed automatically by pip):
 | Package       | Minimum version | Purpose                                  |
 |---------------|-----------------|------------------------------------------|
 | numpy         | >= 1.22         | Array operations and meshgrid generation |
-| scipy         | >= 1.10.1       | Sparse matrices, interpolation, linear algebra |
-| matplotlib    | >= 3.5          | Axis and grid visualization              |
+| scipy         | >= 1.10.1       | Sparse matrices, interpolation, linear algebra, ODE solvers |
 | findiff       | >= 0.10         | Finite-difference stencil generation     |
+| matplotlib    | >= 3.5          | Plotting (optional, `numgrids[plot]`)    |
+| xarray        | >= 2023.1       | Labelled data and NetCDF (optional, `numgrids[xarray]`) |
 
 ```{note}
-All four dependencies are pure-Python wheels on most platforms, so
+All dependencies are available as binary wheels on most platforms, so
 installation typically requires no compiler.
 ```
 
@@ -54,7 +68,7 @@ python -c "import numgrids; print(numgrids.__version__)"
 You should see output like:
 
 ```text
-0.4.0
+0.5.0
 ```
 
 ```{tip}

@@ -1,7 +1,7 @@
 <h1 align="center">numgrids</h1>
 <p align="center"> Working with numerical grids made easy. </p>
 
-<p align="center"><a href="https://badge.fury.io/py/numgrids"> <img src="https://badge.fury.io/py/numgrids.svg?branch=main&kill_cache=1" alt="PyPI version"></a> <a href=""> <img src="https://github.com/maroba/numgrids/actions/workflows/checks.yml/badge.svg" alt="build"></a><a href="https://codecov.io/gh/maroba/numgrids"> <img src="https://codecov.io/gh/maroba/numgrids/branch/main/graph/badge.svg?token=JNH9SP7BRG" alt=""></a> <a href="https://maroba.github.io/numgrids/"><img src="https://img.shields.io/badge/docs-GitHub%20Pages-blue" alt="Documentation"></a></p>
+<p align="center"><a href="https://badge.fury.io/py/numgrids"> <img src="https://badge.fury.io/py/numgrids.svg?branch=main&kill_cache=1" alt="PyPI version"></a> <a href="https://github.com/maroba/numgrids/actions/workflows/checks.yml"> <img src="https://github.com/maroba/numgrids/actions/workflows/checks.yml/badge.svg" alt="build"></a><a href="https://codecov.io/gh/maroba/numgrids"> <img src="https://codecov.io/gh/maroba/numgrids/branch/main/graph/badge.svg?token=JNH9SP7BRG" alt=""></a> <a href="https://maroba.github.io/numgrids/"><img src="https://img.shields.io/badge/docs-GitHub%20Pages-blue" alt="Documentation"></a></p>
 
   <div align="center"><img src="docs/assets/torus.png" width="25%">  <img src="docs/assets/disk320.png" width="25%"> <img src="docs/assets/cubic.png" width="25%"></div>
 
@@ -13,18 +13,17 @@ of bookkeeping grid indices and scale factors.
 
 **Main Features**
 
-- Quickly define numerical grids for any rectangular or curvilinear coordinate system
-- Multiple axis types: **equidistant**, **Chebyshev**, **logarithmic**, and **periodic**
-- Built-in **spherical**, **cylindrical**, and **polar** coordinate grids
-- **Custom curvilinear coordinates** — supply scale factors and get gradient, divergence, curl, and Laplacian automatically
-- **Vector calculus operators**: gradient, divergence, curl, and Laplacian on curvilinear grids
+- Numerical grids in any dimension from **equidistant**, **Chebyshev**, **logarithmic**, and **periodic** axes
 - High-precision **spectral methods** (FFT + Chebyshev) selected automatically where possible
-- Differentiation, integration, and interpolation
-- **Boundary conditions**: Dirichlet, Neumann, and Robin — at the array level or inside sparse linear systems
-- **Adaptive mesh refinement** with built-in Richardson-extrapolation error estimation
-- **Save / load** grids and data to `.npz` files
-- Multigrid hierarchies with inter-level transfer operators
-- Fully compatible with *NumPy* and *SciPy*
+- Differentiation, integration (Clenshaw–Curtis, trapezoidal), and interpolation (spline or spectral)
+- **Curvilinear coordinates**: spherical, cylindrical, polar, elliptic cylindrical, prolate and oblate spheroidal — or your own via scale factors
+- **Vector calculus**: gradient, divergence, curl, and Laplacian on Cartesian and curvilinear grids; volume and surface integrals
+- **Operator algebra** — write `-0.5 * D2 + V` — with built-in `solve()` for boundary value problems and `eig()` for eigenvalue problems
+- **Boundary conditions**: Dirichlet, Neumann, and Robin, specified as compactly as `bcs={"x_low": 0, "x_high": Neumann(1)}`
+- **Time evolution** (method of lines) for heat, wave, and Schrödinger-type equations
+- **Adaptive mesh refinement**, convergence studies, multigrid hierarchies
+- **Plotting**, **save / load** to `.npz`, and **xarray / NetCDF** interoperability
+- Fully compatible with *NumPy* and *SciPy* (all operators export sparse matrices)
 
 ## Installation
 
@@ -32,195 +31,94 @@ of bookkeeping grid indices and scale factors.
 pip install --upgrade numgrids
 ```
 
+Optional extras: `numgrids[plot]` (matplotlib), `numgrids[xarray]` (xarray), or `numgrids[all]`.
+
 ## Documentation
 
-Full documentation including API reference and example notebooks is available at
+Full documentation including user guide, API reference and example notebooks is available at
 **[maroba.github.io/numgrids](https://maroba.github.io/numgrids/)**.
 
 ## Quick Start
 
-As a quick example, here is how you define a grid on the unit disk using polar coordinates.
-Along the azimuthal (angular) direction, choose an equidistant spacing with periodic boundary conditions:
-
-```python
-from numgrids import *
-from numpy import pi
-
-axis_phi = create_axis(AxisType.EQUIDISTANT, 50, 0, 2*pi, periodic=True)
-```
-
-<img src="docs/assets/equi_periodic.png" height="326">
-
-Along the radial axis, let's choose a non-equidistant spacing:
-
-```python
-axis_radial = create_axis(AxisType.CHEBYSHEV, 20, 0, 1)
-```
-
-<img src="docs/assets/cheby.png" height="91">
-
-Now combine the axes to a **grid**:
-
-```python
-grid = Grid(axis_radial, axis_phi)
-```
-<img src="docs/assets/disk320.png">
-
-**Sample** a meshed function on this grid:
-
-```python
-from numpy import exp, sin
-
-R, Phi = grid.meshed_coords
-f = R**2 * sin(Phi)**2
-```
-Define **partial derivatives** $\partial/\partial r$ and $\partial/\partial \varphi$ and apply them:
-
-```python
-# second argument means derivative order, third argument means axis index:
-d_dr = Diff(grid, 1, 0) 
-d_dphi = Diff(grid, 1, 1)
-
-df_dr = d_dr(f)
-df_dphi = d_dphi(f)
-```
-
-Obtain the **matrix representation** of the differential operators:
-
-```python
-d_dr.as_matrix()
-
-Out: <1000x1000 sparse matrix of type '<class 'numpy.float64'>'
-	with 20000 stored elements in COOrdinate format>
-```
-
-
-Define **integration operator**
-
-$$
-\int \dots dr d\varphi
-$$
-
-```python
-I = Integral(grid)
-```
-
-Calculate the area integral
-
-$$
-\int f(r, \varphi) r dr d\varphi
-$$
-
-(taking into account the appropriate integration measure  $r$  for polar coordinates):
-
-```python
-I(f * R)
-```
-
-Setting **boundary** values to zero
-
-```python
-f[grid.boundary] = 0  # grid.boundary is boolean mask selecting boundary grid points
-```
-
-or to something more complicated:
-
-```python
-f[grid.boundary] = exp(-R[grid.boundary])
-```
-
-Create an **interpolation function**
-
-```python
-inter = Interpolator(grid, f)
-```
-
-Interpolate for a single point
-
-```python
-point = (0.1, 0.5)
-inter(point)
-```
-
-or for many points at once, like for a parametrized curve:
-
-```python
-t = np.linspace(0, 1, 100)
-points = zip(2*t, t**2)
-inter(points)
-```
-
-
-## Curvilinear Grids & Vector Calculus
-
-*numgrids* provides dedicated grid classes for the most common curvilinear coordinate systems, each with built-in
-vector calculus operators that correctly account for scale factors and coordinate singularities.
-
-### Spherical coordinates
+### Grids, derivatives, integrals
 
 ```python
 from numgrids import *
 import numpy as np
 
-grid = SphericalGrid(
-    create_axis(AxisType.CHEBYSHEV, 25, 0.1, 5),       # r
-    create_axis(AxisType.CHEBYSHEV, 20, 0.1, np.pi-0.1),  # theta
-    create_axis(AxisType.EQUIDISTANT_PERIODIC, 30, 0, 2*np.pi),  # phi
-)
+# A 2D grid: Chebyshev points in x, periodic in y. Keyword arguments name the axes.
+grid = Grid(x=chebyshev(30, 0, 1), y=periodic(40, 0, 2 * np.pi))
 
+f = grid.evaluate(lambda x, y: x**2 * np.sin(y))   # sample a function
+
+df_dx = grid.diff(f, axis="x")          # partial derivatives (spectrally accurate)
+d2f_dy2 = grid.diff(f, order=2, axis="y")
+lap = grid.laplacian(f)
+total = grid.integrate(f**2)            # integral over the whole domain
+value = grid.interpolate(f, (0.3, 1.2), method="spectral")
+```
+
+Axis types: `chebyshev(n, low, high)`, `equidistant(...)`, `periodic(...)`, `logarithmic(...)`.
+The differentiation method (FFT, Chebyshev, finite differences) is chosen automatically
+according to the axis type.
+
+### Solving PDEs
+
+Combine operators like formulas, then solve:
+
+```python
+# Poisson equation  ∇²u = -2π² sin(πx) sin(πy)  with u = 0 on the boundary
+grid = Grid(x=chebyshev(30, 0, 1), y=chebyshev(30, 0, 1))
+L = grid.laplacian_operator()
+u = L.solve(lambda x, y: -2 * np.pi**2 * np.sin(np.pi * x) * np.sin(np.pi * y), bcs=0)
+
+# Mixed boundary conditions per face
+u = L.solve(1.0, bcs={"x_low": 0, "x_high": Neumann(0), "y_low": 0, "y_high": Robin(1, 1, 0)})
+```
+
+Eigenvalue problems — here the quantum harmonic oscillator — come without spurious modes:
+
+```python
+grid = Grid(x=chebyshev(80, -10, 10))
+x = grid.coords
+H = -0.5 * grid.diff_operator(2) + 0.5 * x**2
+
+energies, states = H.eig(k=4, bcs=0)     # [0.5, 1.5, 2.5, 3.5]
+```
+
+Time-dependent problems are integrated with the method of lines:
+
+```python
+grid = Grid(x=chebyshev(40, 0, 1))
+result = evolve(grid, 0.1 * grid.laplacian_operator(),     # heat equation u_t = 0.1 u_xx
+                np.sin(np.pi * grid.coords), t_span=(0, 1), bcs=0, method="BDF")
+grid.plot(result.final)
+```
+
+### Curvilinear grids & vector calculus
+
+```python
+grid = SphericalGrid(
+    chebyshev(25, 0.1, 5),          # r
+    chebyshev(20, 0.1, np.pi - 0.1),  # theta
+    periodic(30),                   # phi
+)
 R, Theta, Phi = grid.meshed_coords
 f = R**2
 
-lap_f = grid.laplacian(f)            # scalar Laplacian (= 6)
-gr, gt, gp = grid.gradient(f)        # (2r, 0, 0)
-div_v = grid.divergence(gr, gt, gp)  # div(grad f) = laplacian f
-cr, ct, cp = grid.curl(gr, gt, gp)   # curl(grad f) = 0
+grid.laplacian(f)                   # = 6
+gr, gt, gp = grid.gradient(f)       # (2r, 0, 0)
+grid.divergence(gr, gt, gp)         # div(grad f) = laplacian f
+grid.curl(gr, gt, gp)               # curl(grad f) = 0
+grid.integrate(np.ones(grid.shape)) # volume of the shell (volume element included)
+grid.faces["r_high"].integrate(f)   # surface integral over the outer sphere
 ```
 
-### Cylindrical coordinates
+`PolarGrid`, `CylindricalGrid`, `EllipticCylindricalGrid`, `ProlateSpheroidalGrid` and
+`OblateSpheroidalGrid` work the same way. Any other orthogonal coordinate system can be
+defined by its scale factors:
 
 ```python
-grid = CylindricalGrid(
-    create_axis(AxisType.CHEBYSHEV, 20, 0.1, 3),
-    create_axis(AxisType.EQUIDISTANT_PERIODIC, 30, 0, 2*np.pi),
-    create_axis(AxisType.CHEBYSHEV, 20, -1, 1),
-)
-
-R, Phi, Z = grid.meshed_coords
-f = R**2 + Z**2
-
-grid.laplacian(f)                    # = 6
-grid.gradient(f)                     # (2r, 0, 2z)
-```
-
-### Polar coordinates (2D)
-
-```python
-grid = PolarGrid(
-    create_axis(AxisType.CHEBYSHEV, 30, 0.1, 1),
-    create_axis(AxisType.EQUIDISTANT_PERIODIC, 40, 0, 2*np.pi),
-)
-
-R, Phi = grid.meshed_coords
-f = R * np.cos(Phi)      # this is just x
-
-grid.laplacian(f)         # = 0  (harmonic)
-grid.gradient(f)          # (cos φ, −sin φ)
-grid.curl(R*0, R)         # scalar z-component = 2
-```
-
-All operators handle the coordinate singularities at *r = 0* and *θ = 0, π* gracefully —
-non-finite values are automatically replaced by zero.
-
-### Custom curvilinear coordinates
-
-All three coordinate grids above inherit from `CurvilinearGrid`, which you
-can use directly to define **any** orthogonal curvilinear coordinate system.
-Just supply the metric scale factors *h_i* as callables:
-
-```python
-from numgrids import CurvilinearGrid
-
 grid = CurvilinearGrid(
     axis_q1, axis_q2, axis_q3,
     scale_factors=(
@@ -229,27 +127,18 @@ grid = CurvilinearGrid(
         lambda c: c[0] * np.sin(c[1]),          # h_3(q) = q_1 sin(q_2)
     ),
 )
-
-grid.laplacian(f)
-grid.gradient(f)
-grid.divergence(v1, v2, v3)
-grid.curl(v1, v2, v3)
 ```
 
-Each callable receives the tuple of meshed coordinate arrays and returns an
-array of shape `grid.shape`. The class automatically derives all vector
-calculus operators from the standard orthogonal curvilinear identities — no
-subclassing required.
+## Example Notebooks
 
-## Usage / Example Notebooks
-
-To get an idea how *numgrids* can be used, have a look at the following example notebooks:
-
-- [How to define grids](examples/how-to-define-grids.ipynb)
-- [Partial derivatives in any dimension](examples/partial-derivatives.ipynb)
-- [Polar coordinates on unit disk](examples/polar-cooordinates-on-unit-disk.ipynb)
-- [Spherical Grid and the Spherical Laplacian](examples/spherical-grid.ipynb)
-- [Solving the Schrödinger equation for the quantum harmonic oscillator](examples/quantum-harmonic-oscillator.ipynb)
+- [Operators and solvers: Poisson, eigenmodes, time evolution](examples/operators-and-solvers.ipynb)
+- [Heat equation in a rod](examples/heat-equation-rod.ipynb)
+- [Poisson equation in 2D](examples/poisson-equation-2d.ipynb)
+- [Quantum harmonic oscillator](examples/quantum-harmonic-oscillator.ipynb)
+- [Vibrations of a drum](examples/wave-equation-drum.ipynb)
+- [Spherical harmonics](examples/spherical-harmonics.ipynb)
+- [Convergence study](examples/convergence-study.ipynb)
+- [Adaptive mesh refinement](examples/adaptive-refinement-demo.ipynb)
 
 ## How to Cite
 
@@ -272,26 +161,25 @@ BibTeX entry:
 
 ## Development
 
-### Setting up the project
+Clone the repository and install it in development mode with all extras:
 
-Clone the repository
-
-```
+```shell
 git clone https://github.com/maroba/numgrids.git
+cd numgrids
+pip install -e ".[dev]"
 ```
 
-In the project root directory, submit
+Run the tests (including the doctests in the docstrings) and the linter:
 
+```shell
+python -m pytest
+ruff check numgrids tests
 ```
-pip install -e .
-```
 
-to install the package in development mode.
+Build the documentation:
 
-Run the tests:
-
-```
-python -m pytest tests
+```shell
+sphinx-build -b html docs docs/_build/html
 ```
 
 ### Contributing

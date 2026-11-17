@@ -34,14 +34,14 @@ estimate_error
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
-import numpy as np
 from numpy.typing import NDArray
 
 from numgrids.grids import Grid
 from numgrids.interpol import Interpolator
+from numgrids.utils import vector_norm
 
 
 class ErrorEstimator:
@@ -95,12 +95,7 @@ class ErrorEstimator:
 
     def _compute_norm(self, diff: NDArray) -> float:
         """Compute a scalar error measure from a difference array."""
-        if self.norm == "max":
-            return float(np.max(np.abs(diff)))
-        elif self.norm == "l2":
-            return float(np.sqrt(np.mean(diff ** 2)))
-        else:  # mean
-            return float(np.mean(np.abs(diff)))
+        return vector_norm(diff, self.norm)
 
     @property
     def f_current(self) -> NDArray:

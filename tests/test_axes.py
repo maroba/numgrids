@@ -1,8 +1,8 @@
 import unittest
+from unittest.mock import Mock, patch
 
 import numpy as np
 import numpy.testing as npt
-from unittest.mock import patch, Mock
 
 from numgrids.axes import ChebyshevAxis, EquidistantAxis, LogAxis
 
@@ -82,32 +82,32 @@ class TestAxis(unittest.TestCase):
             mock_subplots.assert_called()
 
     def test_create_diff_operator_equidistant(self):
-        from numgrids.grids import Grid
         from numgrids.diff import FiniteDifferenceDiff
+        from numgrids.grids import Grid
         axis = EquidistantAxis(20, 0, 1)
         grid = Grid(axis)
         op = axis.create_diff_operator(grid, 1, 0)
         self.assertIsInstance(op, FiniteDifferenceDiff)
 
     def test_create_diff_operator_equidistant_periodic(self):
-        from numgrids.grids import Grid
         from numgrids.diff import FFTDiff
+        from numgrids.grids import Grid
         axis = EquidistantAxis(20, 0, 2 * np.pi, periodic=True)
         grid = Grid(axis)
         op = axis.create_diff_operator(grid, 1, 0)
         self.assertIsInstance(op, FFTDiff)
 
     def test_create_diff_operator_chebyshev(self):
-        from numgrids.grids import Grid
         from numgrids.diff import ChebyshevDiff
+        from numgrids.grids import Grid
         axis = ChebyshevAxis(20, 0, 1)
         grid = Grid(axis)
         op = axis.create_diff_operator(grid, 1, 0)
         self.assertIsInstance(op, ChebyshevDiff)
 
     def test_create_diff_operator_log(self):
-        from numgrids.grids import Grid
         from numgrids.diff import LogDiff
+        from numgrids.grids import Grid
         axis = LogAxis(20, 0.1, 10)
         grid = Grid(axis)
         op = axis.create_diff_operator(grid, 1, 0)

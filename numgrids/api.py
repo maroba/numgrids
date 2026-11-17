@@ -1,3 +1,5 @@
+"""High-level API: axis factories, the ``Diff`` operator and convenience functions."""
+
 from __future__ import annotations
 
 import enum
@@ -7,9 +9,20 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.sparse import spmatrix
 
+from numgrids.axes import Axis, ChebyshevAxis, EquidistantAxis, LogAxis
+from numgrids.curvilinear import (  # noqa: F401  (re-exported for backward compatibility)
+    CurvilinearGrid,
+    CylindricalGrid,
+    EllipticCylindricalGrid,
+    OblateSpheroidalGrid,
+    PolarGrid,
+    ProlateSpheroidalGrid,
+    SphericalGrid,
+)
 from numgrids.grids import Grid
-from numgrids.curvilinear import CurvilinearGrid
-from numgrids.axes import Axis, EquidistantAxis, ChebyshevAxis, LogAxis
+
+if TYPE_CHECKING:
+    from numgrids.operators import Operator
 
 
 class Diff:
@@ -19,16 +32,23 @@ class Diff:
     differences, FFT spectral, Chebyshev spectral, or log-scale) based
     on the axis type at *axis_index*.
 
+    ``Diff`` objects can be combined algebraically with each other, with
+    scalars and with arrays (interpreted as multiplication operators); the
+    result is an :class:`~numgrids.operators.Operator`.
+
     Examples
     --------
     >>> from numgrids import *
     >>> ax = create_axis(AxisType.CHEBYSHEV, 30, 0, 1)
     >>> grid = Grid(ax)
     >>> d = Diff(grid, 1)      # first derivative
-    >>> d(grid.coords ** 2)    # apply to x**2
+    >>> df = d(grid.coords ** 2)    # apply to x**2
+    >>> L = Diff(grid, 2) - 4 * Diff(grid, 1) + 3   # an Operator
     """
 
-    def __init__(self, grid: Grid, order: int, axis_index: int = 0, acc: int = 4) -> None:
+    __array_ufunc__ = None  # let numpy defer to our reflected operators
+
+    def __init__(self, grid: Grid, order: int, axis_index: int | str = 0, acc: int = 4) -> None:
         """Constructor for partial derivative operator.
 
         Parameters
@@ -37,18 +57,23 @@ class Diff:
             The numerical grid on which to apply the partial derivative.
         order: positive int
             The order of the derivative.
-        axis_index: int
-            The axis index (which axis in the grid).
+        axis_index: int or str
+            The axis index (which axis in the grid), or the axis name.
         acc: int
             The accuracy order for finite-difference based methods. Higher values
             use wider stencils for better accuracy. Ignored by spectral methods
             (Chebyshev). Default is 4.
         """
+        if isinstance(order, bool) or int(order) != order:
+            raise TypeError(f"Derivative order must be an integer, got {order!r}.")
         if order <= 0:
             raise ValueError("Derivative order must be positive integer.")
 
         if not isinstance(grid, Grid):
             raise TypeError("Parameter 'grid' must be of type Grid.")
+
+        if isinstance(axis_index, str):
+            axis_index = grid.axis_index(axis_index)
 
         if axis_index < 0:
             raise ValueError("axis must be nonnegative integer.")
@@ -56,8 +81,12 @@ class Diff:
         if axis_index > grid.ndims - 1:
             raise ValueError("No such axis index in this grid!")
 
+        self.grid = grid
+        self.order = int(order)
+        self.axis_index = axis_index
+        self.acc = acc
         axis = grid.get_axis(axis_index)
-        self.operator = axis.create_diff_operator(grid, order, axis_index, acc=acc)
+        self.operator = axis.create_diff_operator(grid, int(order), axis_index, acc=acc)
 
     def __call__(self, f: NDArray) -> NDArray:
         """Apply the derivative to the array f."""
@@ -70,6 +99,49 @@ class Diff:
         The data type is a scipy sparse matrix.
         """
         return self.operator.as_matrix()
+
+    def to_operator(self) -> Operator:
+        """Convert to a general :class:`~numgrids.operators.Operator`."""
+        from numgrids.operators import Operator
+        return Operator(self.grid, self.as_matrix())
+
+    def __repr__(self) -> str:
+        grid = f"{type(self.grid).__name__}{self.grid.shape}"
+        return f"Diff(order={self.order}, axis_index={self.axis_index}, grid={grid})"
+
+    # Operator algebra: delegate to Operator
+    def __add__(self, other):
+        return self.to_operator() + other
+
+    def __radd__(self, other):
+        return other + self.to_operator()
+
+    def __sub__(self, other):
+        return self.to_operator() - other
+
+    def __rsub__(self, other):
+        return other - self.to_operator()
+
+    def __mul__(self, other):
+        return self.to_operator() * other
+
+    def __rmul__(self, other):
+        return other * self.to_operator()
+
+    def __matmul__(self, other):
+        return self.to_operator() @ other
+
+    def __rmatmul__(self, other):
+        return other @ self.to_operator()
+
+    def __truediv__(self, other):
+        return self.to_operator() / other
+
+    def __neg__(self):
+        return -self.to_operator()
+
+    def __pow__(self, n: int):
+        return self.to_operator() ** n
 
 
 class AxisType(str, enum.Enum):
@@ -92,25 +164,50 @@ class AxisType(str, enum.Enum):
     LOGARITHMIC = "log"
 
 
-def create_axis(axis_type: AxisType, num_points: int, low: float, high: float,
+_AXIS_TYPE_ALIASES = {
+    "periodic": AxisType.EQUIDISTANT_PERIODIC,
+    "cheb": AxisType.CHEBYSHEV,
+    "logarithmic": AxisType.LOGARITHMIC,
+    "equi": AxisType.EQUIDISTANT,
+}
+
+
+def create_axis(axis_type: AxisType | str, num_points: int, low: float, high: float,
                 **kwargs) -> Axis:
     """Create an Axis object of a given type.
 
     Parameters
     ----------
-    axis_type: AxisType
-        The type of axis (equidistant, periodic, logarithmic, Chebyshev, etc.)
+    axis_type: AxisType or str
+        The type of axis (equidistant, periodic, logarithmic, Chebyshev, etc.).
+        Strings such as ``"chebyshev"``, ``"equidistant"``,
+        ``"equidistant_periodic"`` (or ``"periodic"``) and ``"log"`` are
+        accepted, too.
     num_points: positive int
         Number of grid points along this axis.
     low: float
         The lowest coordinate value on the axis.
     high: float
         The highest coordinate value on the axis.
+    **kwargs
+        Further keyword arguments for the axis, e.g. ``name``.
 
     Returns
     -------
     Axis object of specified type.
     """
+    if isinstance(axis_type, str) and not isinstance(axis_type, AxisType):
+        key = axis_type.lower()
+        if key in _AXIS_TYPE_ALIASES:
+            axis_type = _AXIS_TYPE_ALIASES[key]
+        else:
+            try:
+                axis_type = AxisType(key)
+            except ValueError:
+                valid = [t.value for t in AxisType] + list(_AXIS_TYPE_ALIASES)
+                raise NotImplementedError(
+                    f"No such axis type: {axis_type!r}. Valid types: {valid}"
+                ) from None
     if axis_type == AxisType.EQUIDISTANT:
         return EquidistantAxis(num_points, low, high, **kwargs)
     elif axis_type == AxisType.EQUIDISTANT_PERIODIC:
@@ -123,135 +220,65 @@ def create_axis(axis_type: AxisType, num_points: int, low: float, high: float,
         raise NotImplementedError(f"No such axis type: {axis_type}")
 
 
-class SphericalGrid(CurvilinearGrid):
-    r"""A spherical grid in spherical coordinates (r, theta, phi).
+# ── short-hand axis factories ─────────────────────────────────────
 
-    Provides built-in vector calculus operators:
-
-    - :meth:`laplacian` — scalar Laplacian
-    - :meth:`gradient` — gradient of a scalar field
-    - :meth:`divergence` — divergence of a vector field
-    - :meth:`curl` — curl of a vector field
-
-    Coordinate singularities at *r = 0* and *theta = 0, pi* are handled
-    gracefully: non-finite values are replaced by zero.
-    """
-
-    def __init__(self, raxis: Axis, theta_axis: Axis, phi_axis: Axis) -> None:
-        """Constructor
-
-        Parameters
-        ----------
-        raxis: Axis
-            The radial axis.
-        theta_axis: Axis
-            The polar axis (theta).
-        phi_axis: Axis
-            The azimuthal axis (phi). Must be periodic.
-        """
-        super().__init__(
-            raxis, theta_axis, phi_axis,
-            scale_factors=(
-                lambda c: np.ones_like(c[0]),       # h_r = 1
-                lambda c: c[0],                      # h_theta = r
-                lambda c: c[0] * np.sin(c[1]),       # h_phi = r sin(theta)
-            ),
-        )
-
-
-class CylindricalGrid(CurvilinearGrid):
-    r"""A grid in cylindrical coordinates (r, phi, z).
-
-    Provides built-in vector calculus operators:
-
-    - :meth:`laplacian` — scalar Laplacian
-    - :meth:`gradient` — gradient of a scalar field
-    - :meth:`divergence` — divergence of a vector field
-    - :meth:`curl` — curl of a vector field
-
-    Coordinate singularities at *r = 0* are handled gracefully.
+def chebyshev(num_points: int, low: float = -1.0, high: float = 1.0,
+              name: str | None = None) -> ChebyshevAxis:
+    """Chebyshev axis on ``[low, high]`` (spectral accuracy, non-periodic).
 
     Examples
     --------
-    >>> from numgrids import *
-    >>> import numpy as np
-    >>> grid = CylindricalGrid(
-    ...     create_axis(AxisType.CHEBYSHEV, 20, 0.1, 2),
-    ...     create_axis(AxisType.EQUIDISTANT_PERIODIC, 30, 0, 2 * np.pi),
-    ...     create_axis(AxisType.CHEBYSHEV, 20, -1, 1),
-    ... )
-    >>> R, Phi, Z = grid.meshed_coords
-    >>> f = R ** 2 + Z ** 2
-    >>> lap_f = grid.laplacian(f)  # should be ~6
+    >>> from numgrids import chebyshev
+    >>> chebyshev(5, 0, 1).coords.round(3)
+    array([0.   , 0.146, 0.5  , 0.854, 1.   ])
     """
-
-    def __init__(self, raxis: Axis, phi_axis: Axis, zaxis: Axis) -> None:
-        """Constructor
-
-        Parameters
-        ----------
-        raxis: Axis
-            The radial axis.
-        phi_axis: Axis
-            The azimuthal axis (phi). Should typically be periodic.
-        zaxis: Axis
-            The axial (z) axis.
-        """
-        super().__init__(
-            raxis, phi_axis, zaxis,
-            scale_factors=(
-                lambda c: np.ones_like(c[0]),   # h_r = 1
-                lambda c: c[0],                  # h_phi = r
-                lambda c: np.ones_like(c[0]),   # h_z = 1
-            ),
-        )
+    return ChebyshevAxis(num_points, low, high, name=name)
 
 
-class PolarGrid(CurvilinearGrid):
-    r"""A 2D grid in polar coordinates (r, phi).
-
-    Provides built-in vector calculus operators:
-
-    - :meth:`laplacian` — scalar Laplacian
-    - :meth:`gradient` — gradient of a scalar field
-    - :meth:`divergence` — divergence of a 2D vector field
-    - :meth:`curl` — curl (returns the scalar *z*-component)
-
-    Coordinate singularities at *r = 0* are handled gracefully.
+def equidistant(num_points: int, low: float = 0.0, high: float = 1.0,
+                name: str | None = None) -> EquidistantAxis:
+    """Equidistant, non-periodic axis on ``[low, high]`` (finite differences).
 
     Examples
     --------
-    >>> from numgrids import *
-    >>> import numpy as np
-    >>> grid = PolarGrid(
-    ...     create_axis(AxisType.CHEBYSHEV, 30, 0.1, 1),
-    ...     create_axis(AxisType.EQUIDISTANT_PERIODIC, 40, 0, 2 * np.pi),
-    ... )
-    >>> R, Phi = grid.meshed_coords
-    >>> f = R ** 2 * np.cos(Phi)
-    >>> lap_f = grid.laplacian(f)
+    >>> from numgrids import equidistant
+    >>> equidistant(5, 0, 1).coords
+    array([0.  , 0.25, 0.5 , 0.75, 1.  ])
     """
-
-    def __init__(self, raxis: Axis, phi_axis: Axis) -> None:
-        """Constructor
-
-        Parameters
-        ----------
-        raxis: Axis
-            The radial axis.
-        phi_axis: Axis
-            The azimuthal axis (phi). Should typically be periodic.
-        """
-        super().__init__(
-            raxis, phi_axis,
-            scale_factors=(
-                lambda c: np.ones_like(c[0]),   # h_r = 1
-                lambda c: c[0],                  # h_phi = r
-            ),
-        )
+    return EquidistantAxis(num_points, low, high, name=name)
 
 
-def diff(grid: Grid, f: NDArray, order: int = 1, axis_index: int = 0, acc: int = 4) -> NDArray:
+def periodic(num_points: int, low: float = 0.0, high: float = 2 * np.pi,
+             name: str | None = None) -> EquidistantAxis:
+    """Equidistant, periodic axis on ``[low, high)`` (FFT spectral accuracy).
+
+    The endpoint ``high`` is identified with ``low`` and not included.
+
+    Examples
+    --------
+    >>> from numgrids import periodic
+    >>> periodic(4, 0, 1).coords
+    array([0.  , 0.25, 0.5 , 0.75])
+    """
+    return EquidistantAxis(num_points, low, high, periodic=True, name=name)
+
+
+def logarithmic(num_points: int, low: float, high: float,
+                name: str | None = None) -> LogAxis:
+    """Logarithmically spaced axis on ``[low, high]`` (requires ``low > 0``).
+
+    Examples
+    --------
+    >>> from numgrids import logarithmic
+    >>> logarithmic(3, 1, 100).coords
+    array([  1.,  10., 100.])
+    """
+    return LogAxis(num_points, low, high, name=name)
+
+
+# ── convenience functions ─────────────────────────────────────────
+
+def diff(grid: Grid, f: NDArray, order: int = 1, axis_index: int | str = 0, acc: int = 4) -> NDArray:
     """Differentiate a meshed function (with operator caching).
 
     Creates a :class:`Diff` operator on first call and caches it on the
@@ -265,8 +292,8 @@ def diff(grid: Grid, f: NDArray, order: int = 1, axis_index: int = 0, acc: int =
         Meshed function values with shape ``grid.shape``.
     order : int, optional
         Derivative order (default ``1``).
-    axis_index : int, optional
-        Axis along which to differentiate (default ``0``).
+    axis_index : int or str, optional
+        Axis (index or name) along which to differentiate (default ``0``).
     acc : int, optional
         Accuracy order for finite-difference methods (default ``4``).
 
@@ -275,6 +302,7 @@ def diff(grid: Grid, f: NDArray, order: int = 1, axis_index: int = 0, acc: int =
     NDArray
         The derivative array, same shape as *f*.
     """
+    axis_index = grid.axis_index(axis_index)
     cache_key = (order, axis_index, acc)
     if cache_key in grid.cache.get("diffs"):
         d = grid.cache["diffs"][cache_key]
@@ -284,7 +312,7 @@ def diff(grid: Grid, f: NDArray, order: int = 1, axis_index: int = 0, acc: int =
     return d(f)
 
 
-def interpolate(grid: Grid, f: NDArray, locations) -> NDArray:
+def interpolate(grid: Grid, f: NDArray, locations, method: str = "cubic") -> NDArray:
     """Interpolate a meshed function at arbitrary locations.
 
     Parameters
@@ -293,8 +321,11 @@ def interpolate(grid: Grid, f: NDArray, locations) -> NDArray:
         The grid on which *f* is defined.
     f : NDArray
         Meshed function values.
-    locations : tuple, list[tuple], zip, or Grid
+    locations : float, tuple, list[tuple], array, zip, or Grid
         Point(s) at which to interpolate.
+    method : str
+        ``"linear"``, ``"cubic"`` (default), ``"quintic"`` or
+        ``"spectral"``.  See :class:`~numgrids.interpol.Interpolator`.
 
     Returns
     -------
@@ -302,15 +333,16 @@ def interpolate(grid: Grid, f: NDArray, locations) -> NDArray:
         Interpolated value(s).
     """
     from numgrids.interpol import Interpolator
-    inter = Interpolator(grid, f)
+    inter = Interpolator(grid, f, method=method)
     return inter(locations)
 
 
 def integrate(grid: Grid, f: NDArray) -> float:
     """Integrate a meshed function over the entire grid domain.
 
-    The :class:`~numgrids.integration.Integral` operator is cached on the
-    grid after the first call.
+    On curvilinear grids the volume element is included, i.e. the result
+    is :math:`\\int f\\, dV`.  The :class:`~numgrids.integration.Integral`
+    operator is cached on the grid after the first call.
 
     Parameters
     ----------
@@ -325,9 +357,9 @@ def integrate(grid: Grid, f: NDArray) -> float:
         The definite integral over the grid domain.
     """
     from numgrids.integration import Integral
-    if grid.cache.get("integral"):
-        I = grid.cache["integral"]
+    if grid.cache.get("integral") is not None:
+        I = grid.cache["integral"]  # noqa: E741
     else:
-        I = Integral(grid)
+        I = Integral(grid)  # noqa: E741
         grid.cache["integral"] = I
     return I(f)

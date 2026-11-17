@@ -3,8 +3,8 @@ import unittest
 import numpy as np
 import numpy.testing as npt
 
+from numgrids.axes import ChebyshevAxis, EquidistantAxis, LogAxis
 from numgrids.grids import Grid, MultiGrid
-from numgrids.axes import EquidistantAxis, ChebyshevAxis, LogAxis
 
 
 class TestGrid(unittest.TestCase):

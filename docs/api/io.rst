@@ -9,3 +9,12 @@ repeated between sessions.
 .. autofunction:: numgrids.save_grid
 
 .. autofunction:: numgrids.load_grid
+
+xarray interoperability
+-----------------------
+
+Requires the optional ``xarray`` dependency (``pip install numgrids[xarray]``).
+
+.. autofunction:: numgrids.to_xarray
+
+.. autofunction:: numgrids.from_xarray

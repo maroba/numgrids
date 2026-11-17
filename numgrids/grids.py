@@ -1,7 +1,53 @@
+"""Tensor-product grids built from one or more axes."""
+
 from __future__ import annotations
+
+import copy
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from numpy.typing import NDArray
+
+from numgrids.axes import Axis
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from numgrids.boundary import BoundaryFace
+    from numgrids.operators import Operator
+
+
+class _FaceDict(dict):
+    """Dictionary of boundary faces that also accepts axis-name aliases.
+
+    Faces are stored under their canonical keys ``"{axis_index}_{side}"``
+    (e.g. ``"0_low"``).  If an axis has a name, ``"{name}_{side}"``
+    (e.g. ``"x_low"``) can be used as well.  Iteration only yields the
+    canonical keys, so every face is visited exactly once.
+    """
+
+    def __init__(self, faces: dict, aliases: dict[str, str]) -> None:
+        super().__init__(faces)
+        self._aliases = aliases
+
+    def _canonical(self, key):
+        return self._aliases.get(key, key)
+
+    def __getitem__(self, key) -> BoundaryFace:
+        try:
+            return super().__getitem__(self._canonical(key))
+        except KeyError:
+            available = list(self) + list(self._aliases)
+            raise KeyError(
+                f"No boundary face {key!r}. Available faces: {available}"
+            ) from None
+
+    def __contains__(self, key) -> bool:
+        return super().__contains__(self._canonical(key))
+
+    def get(self, key, default=None):
+        return super().get(self._canonical(key), default)
 
 
 class Grid:
@@ -9,10 +55,28 @@ class Grid:
 
     A ``Grid`` is the tensor product of its constituent :class:`~numgrids.axes.Axis`
     objects.  It provides meshed coordinate arrays, boundary masks, and
-    convenience methods for refinement and coarsening.
+    convenience methods for differentiation, integration, interpolation,
+    vector calculus, refinement and plotting.
+
+    Axes can be passed positionally or as keyword arguments; in the latter
+    case the keyword becomes the axis name, which can then be used instead
+    of the axis index everywhere (``grid.diff(f, axis="x")``,
+    ``grid.faces["x_low"]``, ...).
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from numgrids import Grid, chebyshev, periodic
+    >>> grid = Grid(x=chebyshev(20, 0, 1), y=periodic(32, 0, 2 * np.pi))
+    >>> grid.shape
+    (20, 32)
+    >>> X, Y = grid.meshed_coords
+    >>> f = X ** 2 * np.sin(Y)
+    >>> df_dx = grid.diff(f, axis="x")
+    >>> lap = grid.laplacian(f)
     """
 
-    def __init__(self, *axes) -> None:
+    def __init__(self, *axes: Axis, **named_axes: Axis) -> None:
         """
         Constructor
 
@@ -21,11 +85,33 @@ class Grid:
         axes: one or more Axis objects
             One or more axes defining the grid. The order of the axes matters!
             The first axis passed will have index 0.
+        named_axes: Axis objects as keyword arguments
+            Further axes, appended after the positional ones in the given
+            order.  The keyword is used as the axis name.
         """
+        for name, ax in named_axes.items():
+            if not isinstance(ax, Axis):
+                raise TypeError(
+                    f"Expected an Axis object for axis {name!r}, got {type(ax).__name__}."
+                )
+        axes = tuple(axes) + tuple(ax.renamed(name) for name, ax in named_axes.items())
+        if not axes:
+            raise ValueError("A grid needs at least one axis.")
+        for ax in axes:
+            if not isinstance(ax, Axis):
+                raise TypeError(
+                    f"Expected Axis objects, got {type(ax).__name__}. "
+                    "Create axes with e.g. numgrids.chebyshev(...) or numgrids.create_axis(...)."
+                )
+        names = [ax.name for ax in axes if ax.name is not None]
+        duplicates = {n for n in names if names.count(n) > 1}
+        if duplicates:
+            raise ValueError(f"Duplicate axis names: {sorted(duplicates)}")
+
         self._axes = axes
         self.ndims = len(axes)
-        self._meshed_coords = np.meshgrid(
-            *tuple(a.coords for a in axes), indexing="ij")
+        self._meshed_coords = tuple(np.meshgrid(
+            *tuple(a.coords for a in axes), indexing="ij"))
 
         bdry = np.ones(self.shape, dtype=bool)
         mask = [axis.boundary for axis in self.axes]
@@ -35,29 +121,70 @@ class Grid:
         # The functions in the api module can store entities here for re-use:
         self.cache = {
             "diffs": {},
-            "integrals": None,
+            "integral": None,
             "interpolators": {},
             "faces": None,
+            "operators": {},
         }
+
+    # ── construction helpers ─────────────────────────────────────
+
+    def _new_like(self, axes) -> Grid:
+        """Create a grid of the same type (and parameters) with new axes."""
+        new = copy.copy(self)
+        Grid.__init__(new, *axes)
+        return new
+
+    # ── basic properties ─────────────────────────────────────────
 
     @property
     def size(self) -> int:
-        return np.prod(self.shape)
+        """Total number of grid points."""
+        return int(np.prod(self.shape))
 
-    def get_axis(self, idx: int = 0):
-        """
-        Returns the axis with given index.
+    def axis_index(self, key: int | str) -> int:
+        """Return the (non-negative) index of an axis given by index or name.
 
         Parameters
         ----------
-        idx: int
-            The index of the requested axis.
+        key : int or str
+            Axis index (negative values count from the end) or axis name.
+
+        Returns
+        -------
+        int
+        """
+        if isinstance(key, (int, np.integer)) and not isinstance(key, bool):
+            idx = int(key)
+            if idx < 0:
+                idx += self.ndims
+            if not 0 <= idx < self.ndims:
+                raise IndexError(
+                    f"Axis index {key} out of range for {self.ndims}-dimensional grid."
+                )
+            return idx
+        if isinstance(key, str):
+            for i, ax in enumerate(self.axes):
+                if ax.name == key:
+                    return i
+            names = [ax.name for ax in self.axes if ax.name is not None]
+            raise KeyError(f"No axis named {key!r}. Named axes: {names}")
+        raise TypeError(f"Axis key must be int or str, got {type(key).__name__}.")
+
+    def get_axis(self, idx: int | str = 0) -> Axis:
+        """
+        Returns the axis with given index or name.
+
+        Parameters
+        ----------
+        idx: int or str
+            The index or name of the requested axis.
 
         Returns
         -------
         The requested Axis object.
         """
-        return self.axes[idx]
+        return self.axes[self.axis_index(idx)]
 
     def __getitem__(self, inds) -> NDArray:
         if self.ndims == 1:
@@ -87,16 +214,203 @@ class Grid:
         return self._meshed_coords
 
     @property
+    def cartesian_coords(self) -> tuple[NDArray, ...]:
+        """Meshed Cartesian coordinates of the grid points.
+
+        For a plain (Cartesian) grid this is identical to
+        :attr:`meshed_coords`.  Curvilinear grids map their coordinates
+        to Cartesian space.
+        """
+        return self.meshed_coords
+
+    @property
+    def volume_element(self) -> float | NDArray:
+        """The volume element (Jacobian) of the coordinate system.
+
+        ``1.0`` for Cartesian grids; an array of shape ``grid.shape`` for
+        curvilinear grids.
+        """
+        return 1.0
+
+    @property
     def shape(self) -> tuple[int, ...]:
         """Returns a tuple with the number of grid points along each axis."""
         return tuple(len(axis) for axis in self.axes)
 
     def __repr__(self) -> str:
-        return f"Grid(shape={self.shape}, ndims={self.ndims})"
+        axes = ",\n".join(f"    {ax!r}" for ax in self.axes)
+        return f"{type(self).__name__}(shape={self.shape}, ndims={self.ndims}, axes=[\n{axes}\n])"
 
-    def plot(self) -> None:
-        """Visualize the grid using matplotlib."""
-        import matplotlib.pyplot as plt
+    def _eq_key(self) -> tuple:
+        return (type(self), self.axes)
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, Grid):
+            return NotImplemented
+        return self._eq_key() == other._eq_key()
+
+    def __hash__(self) -> int:
+        return hash(tuple(map(hash, self.axes)))
+
+    def _check_field(self, f, name: str = "f") -> NDArray:
+        """Validate that *f* is an array matching the grid shape."""
+        f = np.asarray(f)
+        if f.shape != self.shape:
+            raise ValueError(
+                f"Array '{name}' has shape {f.shape}, which does not match "
+                f"the grid shape {self.shape}."
+            )
+        return f
+
+    # ── evaluating functions ────────────────────────────────────
+
+    def evaluate(self, func: Callable[..., Any]) -> NDArray:
+        """Evaluate a function on all grid points.
+
+        Parameters
+        ----------
+        func : callable
+            Called as ``func(*meshed_coords)``, i.e. with one coordinate
+            array per axis.  May also return a scalar, which is broadcast.
+
+        Returns
+        -------
+        NDArray
+            Array of shape ``grid.shape``.
+
+        Examples
+        --------
+        >>> from numgrids import Grid, equidistant
+        >>> grid = Grid(equidistant(5, 0, 1), equidistant(3, 0, 1))
+        >>> grid.evaluate(lambda x, y: x + y).shape
+        (5, 3)
+        """
+        result = np.asarray(func(*self.meshed_coords))
+        return np.broadcast_to(result, self.shape).copy()
+
+    # ── calculus ────────────────────────────────────────────────
+
+    def diff(self, f: NDArray, order: int = 1, axis: int | str = 0, acc: int = 4) -> NDArray:
+        """Partial derivative of a meshed function along one axis.
+
+        The differentiation operator is cached on the grid.
+
+        Parameters
+        ----------
+        f : NDArray
+            Meshed function values of shape ``grid.shape``.
+        order : int
+            Derivative order (default 1).
+        axis : int or str
+            Axis index or name (default 0).
+        acc : int
+            Accuracy order for finite-difference based methods (default 4).
+
+        Returns
+        -------
+        NDArray
+        """
+        from numgrids.api import diff
+        return diff(self, f, order=order, axis_index=axis, acc=acc)
+
+    def diff_operator(self, order: int = 1, axis: int | str = 0, acc: int = 4) -> Operator:
+        """Partial derivative as an :class:`~numgrids.operators.Operator`.
+
+        Operators can be combined algebraically (``+``, ``-``, ``*``, ``@``,
+        ``**``) and support :meth:`~numgrids.operators.Operator.solve` and
+        :meth:`~numgrids.operators.Operator.eig`.
+        """
+        from numgrids.api import Diff
+        return Diff(self, order, axis, acc=acc).to_operator()
+
+    def laplacian(self, f: NDArray) -> NDArray:
+        r"""Laplacian :math:`\nabla^2 f` of a scalar field."""
+        f = self._check_field(f)
+        return sum(self.diff(f, 2, i) for i in range(self.ndims))
+
+    def laplacian_operator(self, acc: int = 4) -> Operator:
+        r"""Laplacian :math:`\nabla^2` as an :class:`~numgrids.operators.Operator`."""
+        key = ("laplacian", acc)
+        if key not in self.cache["operators"]:
+            from numgrids.api import Diff
+            from numgrids.operators import Operator
+            M = sum(Diff(self, 2, i, acc=acc).as_matrix() for i in range(self.ndims))
+            self.cache["operators"][key] = Operator(self, M)
+        return self.cache["operators"][key]
+
+    def gradient(self, f: NDArray) -> tuple[NDArray, ...]:
+        r"""Gradient :math:`\nabla f` of a scalar field (one array per axis)."""
+        f = self._check_field(f)
+        return tuple(self.diff(f, 1, i) for i in range(self.ndims))
+
+    def divergence(self, *v: NDArray) -> NDArray:
+        r"""Divergence :math:`\nabla\cdot\mathbf{v}` of a vector field."""
+        if len(v) != self.ndims:
+            raise ValueError(f"Expected {self.ndims} vector components, got {len(v)}.")
+        return sum(self.diff(self._check_field(vi, f"v[{i}]"), 1, i) for i, vi in enumerate(v))
+
+    def curl(self, *v: NDArray) -> tuple[NDArray, ...] | NDArray:
+        r"""Curl :math:`\nabla\times\mathbf{v}` of a vector field.
+
+        Returns a tuple of three arrays on 3D grids and the scalar
+        out-of-plane component on 2D grids.
+        """
+        if self.ndims not in (2, 3):
+            raise ValueError("Curl is only defined for 2D and 3D grids.")
+        if len(v) != self.ndims:
+            raise ValueError(f"Expected {self.ndims} vector components, got {len(v)}.")
+        v = [self._check_field(vi, f"v[{i}]") for i, vi in enumerate(v)]
+        d = self.diff
+        if self.ndims == 2:
+            return d(v[1], 1, 0) - d(v[0], 1, 1)
+        return (
+            d(v[2], 1, 1) - d(v[1], 1, 2),
+            d(v[0], 1, 2) - d(v[2], 1, 0),
+            d(v[1], 1, 0) - d(v[0], 1, 1),
+        )
+
+    def integrate(self, f: NDArray) -> float:
+        """Integrate a meshed function over the whole grid domain.
+
+        On curvilinear grids the volume element is included.
+        """
+        from numgrids.api import integrate
+        return integrate(self, f)
+
+    def interpolate(self, f: NDArray, locations, method: str = "cubic"):
+        """Interpolate a meshed function at arbitrary locations.
+
+        See :class:`~numgrids.interpol.Interpolator` for the accepted
+        *locations* and *method* values.
+        """
+        from numgrids.api import interpolate
+        return interpolate(self, f, locations, method=method)
+
+    # ── plotting ────────────────────────────────────────────────
+
+    def plot(self, f: NDArray | None = None, ax=None, **kwargs):
+        """Visualize the grid points, or a meshed function on the grid.
+
+        Without *f*, the grid points are shown (pairwise projections).
+
+        With *f*, the function is plotted: as a line plot for 1D grids, as
+        a color plot for 2D grids (in Cartesian space for curvilinear
+        grids), and as a 2D slice for higher-dimensional grids.  See
+        :func:`numgrids.plots.plot_field` for all options.
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            Only when *f* is given.
+        """
+        if f is not None:
+            from numgrids.plots import plot_field
+            return plot_field(self, f, ax=ax, **kwargs)
+        self._plot_points()
+
+    def _plot_points(self) -> None:
+        from numgrids.plots import require_matplotlib
+        plt = require_matplotlib()
 
         nplots = self.ndims * (self.ndims - 1) // 2
         fig = plt.figure(figsize=(12, nplots * 8))
@@ -121,21 +435,27 @@ class Grid:
 
         plt.show()
 
+    # ── boundary ────────────────────────────────────────────────
+
     @property
     def faces(self) -> dict:
         """Return a dictionary of all boundary faces.
 
         Keys follow the pattern ``'{axis_index}_{side}'``, e.g.
-        ``'0_low'``, ``'0_high'``.  Periodic axes are skipped.
+        ``'0_low'``, ``'0_high'``.  For named axes, ``'{name}_{side}'``
+        (e.g. ``'x_low'``) is accepted as well.  Periodic axes are skipped.
         """
         if self.cache["faces"] is None:
             from numgrids.boundary import BoundaryFace
             result = {}
+            aliases = {}
             for i, axis in enumerate(self.axes):
                 if not axis.periodic:
-                    result[f"{i}_low"] = BoundaryFace(self, i, "low")
-                    result[f"{i}_high"] = BoundaryFace(self, i, "high")
-            self.cache["faces"] = result
+                    for side in ("low", "high"):
+                        result[f"{i}_{side}"] = BoundaryFace(self, i, side)
+                        if axis.name is not None:
+                            aliases[f"{axis.name}_{side}"] = f"{i}_{side}"
+            self.cache["faces"] = _FaceDict(result, aliases)
         return self.cache["faces"]
 
     @property
@@ -146,25 +466,36 @@ class Grid:
         """
         return self._boundary
 
+    @property
+    def interior(self) -> NDArray:
+        """Boolean mask of the grid points *not* on the boundary."""
+        return ~self._boundary
+
+    # ── refinement ──────────────────────────────────────────────
+
     def refine(self) -> Grid:
         """
         Returns a new grid with twice the number of grid points in each direction.
+
+        The grid type (e.g. :class:`~numgrids.SphericalGrid`) is preserved.
         """
-        return Grid(*(axis.resized(len(axis) * 2) for axis in self.axes))
+        return self._new_like([axis.resized(len(axis) * 2) for axis in self.axes])
 
     def coarsen(self) -> Grid:
         """
         Returns a new grid with half the number of grid points in each direction.
-        """
-        return Grid(*(axis.resized(len(axis) // 2) for axis in self.axes))
 
-    def refine_axis(self, axis_index: int, factor: float = 2.0) -> Grid:
+        The grid type (e.g. :class:`~numgrids.SphericalGrid`) is preserved.
+        """
+        return self._new_like([axis.resized(len(axis) // 2) for axis in self.axes])
+
+    def refine_axis(self, axis_index: int | str, factor: float = 2.0) -> Grid:
         """Return a new grid with one axis resized by the given factor.
 
         Parameters
         ----------
-        axis_index : int
-            Index of the axis to refine (or coarsen if *factor* < 1).
+        axis_index : int or str
+            Index (or name) of the axis to refine (or coarsen if *factor* < 1).
         factor : float
             Multiplicative factor for the number of points on the
             specified axis.  Values greater than 1 refine; values
@@ -174,7 +505,7 @@ class Grid:
         Returns
         -------
         Grid
-            A new grid with the specified axis resized.
+            A new grid (of the same type) with the specified axis resized.
 
         Raises
         ------
@@ -183,16 +514,19 @@ class Grid:
         """
         if factor <= 0:
             raise ValueError(f"factor must be positive, got {factor}")
-        if axis_index < 0 or axis_index >= self.ndims:
+        if isinstance(axis_index, (int, np.integer)) and not (0 <= axis_index < self.ndims):
             raise ValueError(
                 f"axis_index {axis_index} out of range for "
                 f"{self.ndims}-dimensional grid"
             )
+        axis_index = self.axis_index(axis_index)
         new_axes = list(self.axes)
         old_n = len(new_axes[axis_index])
         new_n = max(2, round(old_n * factor))
         new_axes[axis_index] = new_axes[axis_index].resized(new_n)
-        return Grid(*new_axes)
+        return self._new_like(new_axes)
+
+    # ── index helpers ───────────────────────────────────────────
 
     @property
     def meshed_indices(self) -> list[NDArray]:
@@ -237,6 +571,42 @@ class Grid:
         return np.vstack([arr.reshape(-1) for arr in arrs]).T.reshape(
             *self.shape, -1
         )
+
+    # ── I/O and interoperability ────────────────────────────────
+
+    def save(self, path: str | Path, **data: NDArray) -> None:
+        """Save the grid (and optional meshed arrays) to a ``.npz`` file.
+
+        See :func:`numgrids.save_grid`.
+        """
+        from numgrids.io import save_grid
+        save_grid(path, self, **data)
+
+    @staticmethod
+    def load(path: str | Path) -> tuple[Grid, dict[str, NDArray]]:
+        """Load a grid and its data arrays from a ``.npz`` file.
+
+        See :func:`numgrids.load_grid`.
+        """
+        from numgrids.io import load_grid
+        return load_grid(path)
+
+    def to_xarray(self, **fields: NDArray):
+        """Convert meshed arrays on this grid to an :class:`xarray.Dataset`.
+
+        See :func:`numgrids.to_xarray`.
+        """
+        from numgrids.io import to_xarray
+        return to_xarray(self, **fields)
+
+    @staticmethod
+    def from_xarray(obj) -> tuple[Grid, dict[str, NDArray]]:
+        """Reconstruct a grid (and data) from an xarray object.
+
+        See :func:`numgrids.from_xarray`.
+        """
+        from numgrids.io import from_xarray
+        return from_xarray(obj)
 
 
 class MultiGrid:

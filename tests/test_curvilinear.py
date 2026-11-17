@@ -4,11 +4,15 @@ import numpy as np
 import numpy.testing as npt
 
 from numgrids import (
-    CurvilinearGrid, create_axis, AxisType,
-    SphericalGrid, CylindricalGrid, PolarGrid,
+    AxisType,
+    CurvilinearGrid,
+    CylindricalGrid,
     Grid,
+    PolarGrid,
+    SphericalGrid,
+    create_axis,
 )
-from numgrids.axes import EquidistantAxis, ChebyshevAxis
+from numgrids.axes import ChebyshevAxis, EquidistantAxis
 
 
 class TestCurvilinearGridConstruction(unittest.TestCase):

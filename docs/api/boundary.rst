@@ -21,3 +21,19 @@ of conditions in a single call.
    :members:
 
 .. autofunction:: numgrids.apply_bcs
+
+Compact specifications
+----------------------
+
+Unbound specifications are attached to faces when used as dictionary values
+in :meth:`Operator.solve <numgrids.Operator.solve>`,
+:meth:`Operator.eig <numgrids.Operator.eig>`, :func:`~numgrids.evolve` or
+:func:`~numgrids.resolve_bcs`.
+
+.. autoclass:: numgrids.Dirichlet
+
+.. autoclass:: numgrids.Neumann
+
+.. autoclass:: numgrids.Robin
+
+.. autofunction:: numgrids.resolve_bcs

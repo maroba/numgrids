@@ -3,8 +3,8 @@
 Many physical problems are naturally expressed in non-Cartesian coordinates --
 spherical coordinates for planetary atmospheres, cylindrical coordinates for
 pipes, polar coordinates for 2D disk-shaped domains. numgrids provides
-`CurvilinearGrid` and three built-in coordinate systems that give you
-gradient, divergence, Laplacian, and curl out of the box.
+`CurvilinearGrid` and six built-in coordinate systems that give you
+gradient, divergence, Laplacian, curl and volume integrals out of the box.
 
 ```python
 from numgrids import *
@@ -108,6 +108,51 @@ f = R**2 * np.cos(Phi)
 lap_f = grid.laplacian(f)
 ```
 
+### EllipticCylindricalGrid $(\mu, \nu, z)$
+
+$x = a\cosh\mu\cos\nu$, $y = a\sinh\mu\sin\nu$, $z = z$. Scale factors:
+$h_\mu = h_\nu = a\sqrt{\sinh^2\mu + \sin^2\nu}$, $h_z = 1$. Useful for
+elliptic domains, e.g. flows around elliptic cylinders.
+
+```python
+elliptic = EllipticCylindricalGrid(
+    chebyshev(20, 0.0, 1.0),   # mu
+    periodic(40),              # nu
+    chebyshev(10, -1, 1),      # z
+    a=2.0,                     # focal distance
+)
+```
+
+### ProlateSpheroidalGrid and OblateSpheroidalGrid $(\mu, \nu, \phi)$
+
+Spheroidal coordinates for elongated (prolate, $\nu\in[0,\pi]$) or
+flattened (oblate, $\nu\in[-\pi/2,\pi/2]$) bodies, with focal distance
+`a`:
+
+```python
+prolate = ProlateSpheroidalGrid(chebyshev(20, 0, 1), chebyshev(20, 0, np.pi), periodic(16), a=1.0)
+oblate = OblateSpheroidalGrid(chebyshev(20, 0, 1), chebyshev(20, -np.pi/2, np.pi/2), periodic(16), a=1.0)
+```
+
+### Axis names
+
+The built-in grids name their axes after the coordinates (unless you named
+them yourself): `"r"`, `"theta"`, `"phi"`, `"z"`, `"mu"`, `"nu"`. So you
+can write `grid.diff(f, axis="r")` or `grid.faces["r_high"]`.
+
+## Geometry
+
+Every curvilinear grid exposes its geometry:
+
+```python
+grid.scale_factors      # tuple of arrays h_i
+grid.volume_element     # J = h_1 h_2 ... h_n
+grid.cartesian_coords   # meshed Cartesian coordinates (X, Y[, Z])
+```
+
+`cartesian_coords` is used by `grid.plot(f)` to draw 2D curvilinear grids in
+Cartesian space.
+
 ## Vector calculus operators
 
 All curvilinear grids provide four operators:
@@ -153,6 +198,21 @@ a single scalar array -- the out-of-plane component:
 curl_z = grid.curl(v_r, v_phi)   # scalar array
 ```
 
+### Sparse operators and integration
+
+For solving PDEs, the Laplacian is also available as a sparse
+[Operator](operators.md):
+
+```python
+annulus = PolarGrid(chebyshev(30, 0.5, 1.0), periodic(40))
+L = annulus.laplacian_operator()
+u = L.solve(1.0, bcs=0)                        # Poisson problem, u = 0 on both rims
+vals, modes = (-L).eig(k=6, bcs=0)             # Laplace eigenmodes
+```
+
+`grid.integrate(f)` includes the volume element, i.e. it computes
+$\int f\, dV$; see [Integration](integration.md).
+
 ## Singularity handling
 
 Curvilinear coordinates often have singularities where scale factors vanish --
@@ -192,6 +252,8 @@ grid = CurvilinearGrid(
         lambda c: np.sqrt(c[0]**2 + c[1]**2),   # h_tau
         lambda c: np.ones_like(c[0]),             # h_z
     ),
+    # optional: mapping to Cartesian coordinates (for plotting)
+    cartesian=lambda c: (c[0] * c[1], (c[1]**2 - c[0]**2) / 2, c[2]),
 )
 
 Sigma, Tau, Z = grid.meshed_coords
@@ -208,7 +270,9 @@ The number of scale-factor callables must match the number of axes. A
 ```{note}
 `CurvilinearGrid` is a subclass of `Grid`, so all standard grid
 operations (refinement, boundary faces, indexing, I/O) work exactly the
-same way. The built-in coordinate grids (`SphericalGrid`,
-`CylindricalGrid`, `PolarGrid`) are thin subclasses of
-`CurvilinearGrid` that set the scale factors for you.
+same way. The built-in coordinate grids are thin subclasses of
+`CurvilinearGrid` that set the scale factors for you. Refinement preserves
+the grid type. Custom `CurvilinearGrid` instances cannot be saved with
+`save_grid` (the scale-factor functions are not serializable); the
+built-in grids can.
 ```

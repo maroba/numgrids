@@ -1,15 +1,23 @@
 import unittest
-from unittest.mock import patch, Mock
-
 import warnings
+from unittest.mock import Mock, patch
 
 import numpy as np
 import numpy.testing as npt
 
-
-from numgrids import create_axis, AxisType, SphericalGrid, CylindricalGrid, PolarGrid, Diff, interpolate, diff, integrate
-from numgrids.axes import EquidistantAxis, ChebyshevAxis, LogAxis
-from numgrids.diff import FiniteDifferenceDiff, FFTDiff, ChebyshevDiff, LogDiff
+from numgrids import (
+    AxisType,
+    CylindricalGrid,
+    Diff,
+    PolarGrid,
+    SphericalGrid,
+    create_axis,
+    diff,
+    integrate,
+    interpolate,
+)
+from numgrids.axes import ChebyshevAxis, EquidistantAxis, LogAxis
+from numgrids.diff import ChebyshevDiff, FFTDiff, FiniteDifferenceDiff, LogDiff
 from numgrids.grids import Grid
 
 

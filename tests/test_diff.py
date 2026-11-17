@@ -1,11 +1,11 @@
 import unittest
+
 # import matplotlib.pyplot as plt
 import numpy as np
 import numpy.testing as npt
-from matplotlib import pyplot as plt
 
-from numgrids.axes import EquidistantAxis, ChebyshevAxis, LogAxis
-from numgrids.diff import FiniteDifferenceDiff, FFTDiff, ChebyshevDiff, LogDiff
+from numgrids.axes import ChebyshevAxis, EquidistantAxis, LogAxis
+from numgrids.diff import ChebyshevDiff, FFTDiff, FiniteDifferenceDiff, LogDiff
 from numgrids.grids import Grid
 
 np.set_printoptions(linewidth=120)

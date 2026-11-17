@@ -20,3 +20,12 @@ function for one-off computations.
    :members:
 
 .. autofunction:: numgrids.interpolate
+
+Operator algebra and solvers
+----------------------------
+
+.. automodule:: numgrids.operators
+   :no-members:
+
+.. autoclass:: numgrids.Operator
+   :members:

@@ -52,10 +52,20 @@ class Axis:
         periodic: bool
             Apply periodic boundary condition or not.
         """
+        if isinstance(num_points, bool) or int(num_points) != num_points:
+            raise TypeError(f"num_points must be an integer, not {num_points!r}")
+        num_points = int(num_points)
         if num_points <= 0:
             raise ValueError(f"num_points must be positive, not {num_points}")
+        if num_points < 2:
+            raise ValueError(f"An axis needs at least 2 points, got {num_points}")
+        if not (np.isfinite(low) and np.isfinite(high)):
+            raise ValueError(f"Axis bounds must be finite, got low={low}, high={high}")
         if high <= low:
             raise ValueError(f"high ({high}) must be greater than low ({low})")
+        unknown = set(kwargs) - {"name"}
+        if unknown:
+            raise TypeError(f"Unexpected keyword argument(s): {', '.join(sorted(unknown))}")
         self._num_points = num_points
         self.low = low
         self.high = high
@@ -63,6 +73,7 @@ class Axis:
         self._coords_internal = self._setup_internal_coords(low, high)
         self._coords = self._setup_external_coords(low, high)
         self.name: str | None = kwargs.get("name")
+        self._quadrature_weights: NDArray | None = None
 
     def resized(self, num_points: int) -> Axis:
         """Return a new axis of the same type and domain with a different number of points.
@@ -77,12 +88,86 @@ class Axis:
         Axis
             A new axis instance with the same type, domain, and metadata.
         """
+        return self._clone(num_points=num_points)
+
+    def renamed(self, name: str | None) -> Axis:
+        """Return a copy of this axis with a different name.
+
+        Parameters
+        ----------
+        name : str or None
+            The new axis name.
+
+        Returns
+        -------
+        Axis
+        """
+        return self._clone(name=name)
+
+    _UNSET = object()
+
+    def _clone(self, num_points: int | None = None, name=_UNSET) -> Axis:
         kwargs: dict = {}
         if self.periodic:
             kwargs["periodic"] = True
-        if self.name is not None:
-            kwargs["name"] = self.name
-        return type(self)(num_points, self.low, self.high, **kwargs)
+        name = self.name if name is Axis._UNSET else name
+        if name is not None:
+            kwargs["name"] = name
+        n = len(self) if num_points is None else num_points
+        return type(self)(n, self.low, self.high, **kwargs)
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, Axis):
+            return NotImplemented
+        return (
+            type(self) is type(other)
+            and len(self) == len(other)
+            and self.low == other.low
+            and self.high == other.high
+            and self.periodic == other.periodic
+            and self.name == other.name
+        )
+
+    def __hash__(self) -> int:
+        return hash((type(self).__name__, len(self), self.low, self.high, self.periodic, self.name))
+
+    @property
+    def period(self) -> float:
+        """Length of the period ``high - low`` (periodic axes only)."""
+        if not self.periodic:
+            raise AttributeError("Only periodic axes have a period.")
+        return self.high - self.low
+
+    @property
+    def quadrature_weights(self) -> NDArray:
+        r"""Quadrature weights :math:`w_k` such that :math:`\int f\,dx \approx \sum_k w_k f(x_k)`.
+
+        The weights are computed once and cached.  Subclasses provide
+        method-specific weights (Clenshaw--Curtis for Chebyshev axes,
+        trapezoidal for periodic axes); the generic fallback inverts the
+        axis' own differentiation matrix, so that integration has the
+        same order of accuracy as differentiation.
+        """
+        if self._quadrature_weights is None:
+            self._quadrature_weights = self._compute_quadrature_weights()
+            self._quadrature_weights.flags.writeable = False
+        return self._quadrature_weights
+
+    def _compute_quadrature_weights(self) -> NDArray:
+        import scipy.sparse
+        import scipy.sparse.linalg
+
+        from numgrids.grids import Grid
+
+        # The antiderivative F with F(x_0) = 0 satisfies D F = f.  Solving
+        # on the points 1..N and reading off F(x_N) is a linear functional
+        # of f, whose coefficients are the quadrature weights.
+        D = self.create_diff_operator(Grid(self), 1, 0).as_matrix()
+        D = scipy.sparse.csc_matrix(D)[1:, 1:]
+        e_last = np.zeros(D.shape[0])
+        e_last[-1] = 1.0
+        w = scipy.sparse.linalg.spsolve(D.T.tocsc(), e_last)
+        return np.concatenate([[0.0], np.atleast_1d(w)])
 
     def _setup_internal_coords(self, low: float, high: float) -> NDArray:
         """Create the internal (canonical) coordinate array.
@@ -182,9 +267,10 @@ class Axis:
         return f"{type(self).__name__}({len(self)} points from {self.coords[0]} to {self.coords[-1]})"
 
     def __repr__(self) -> str:
+        name = f", name={self.name!r}" if self.name is not None else ""
         return (
             f"{type(self).__name__}(num_points={len(self)}, "
-            f"low={self.coords[0]}, high={self.coords[-1]}, periodic={self.periodic})"
+            f"low={self.low}, high={self.high}, periodic={self.periodic}{name})"
         )
 
     def plot(self) -> None:
@@ -245,7 +331,7 @@ class EquidistantAxis(Axis):
         Dispatches to :class:`~numgrids.diff.FFTDiff` for periodic axes and
         :class:`~numgrids.diff.FiniteDifferenceDiff` otherwise.
         """
-        from numgrids.diff import FiniteDifferenceDiff, FFTDiff
+        from numgrids.diff import FFTDiff, FiniteDifferenceDiff
         if self.periodic:
             return FFTDiff(grid, order, axis_index, acc=acc)
         return FiniteDifferenceDiff(grid, order, axis_index, acc=acc)
@@ -255,13 +341,19 @@ class EquidistantAxis(Axis):
         """The grid spacing."""
         return self._coords[1] - self._coords[0]
 
+    def _compute_quadrature_weights(self) -> NDArray:
+        if self.periodic:
+            # The trapezoidal rule is spectrally accurate for periodic functions.
+            return np.full(len(self), self.spacing)
+        return super()._compute_quadrature_weights()
+
     def plot(self) -> None:
         """Visualize the axis points using matplotlib."""
         if not self.periodic:
             super().plot()
             return
-        from matplotlib import pyplot as plt
         import matplotlib.patches as mp
+        from matplotlib import pyplot as plt
         fig, ax = plt.subplots(1, 1)
         ax.set_aspect("equal")
         ax.set_axis_off()
@@ -316,12 +408,35 @@ class ChebyshevAxis(Axis):
         super().__init__(num_points, low, high, periodic=False, **kwargs)
 
     def _setup_internal_coords(self, *args) -> NDArray:
-        n = len(self)
-        return np.cos(np.arange(n) * np.pi / (n - 1))
+        # sin form of cos(k pi / N): exactly symmetric and exact at the endpoints
+        N = len(self) - 1
+        return np.sin(np.pi * (N - 2 * np.arange(N + 1)) / (2 * N))
+
+    def _compute_quadrature_weights(self) -> NDArray:
+        """Clenshaw--Curtis weights, mapped to ``[low, high]``."""
+        N = len(self) - 1
+        theta = np.pi * np.arange(N + 1) / N
+        w = np.zeros(N + 1)
+        v = np.ones(N - 1)
+        inner = theta[1:-1]
+        if N % 2 == 0:
+            w[0] = w[N] = 1.0 / (N ** 2 - 1)
+            for k in range(1, N // 2):
+                v -= 2 * np.cos(2 * k * inner) / (4 * k ** 2 - 1)
+            v -= np.cos(N * inner) / (N ** 2 - 1)
+        else:
+            w[0] = w[N] = 1.0 / N ** 2
+            for k in range(1, (N - 1) // 2 + 1):
+                v -= 2 * np.cos(2 * k * inner) / (4 * k ** 2 - 1)
+        w[1:-1] = 2 * v / N
+        # The weights are symmetric, so the node ordering does not matter.
+        return w * (self.high - self.low) / 2
 
     def _setup_external_coords(self, low: float, high: float) -> NDArray:
         coords = (self._coords_internal[::-1] + 1) / 2
-        return coords * (high - low) + low
+        coords = coords * (high - low) + low
+        coords[0], coords[-1] = low, high
+        return coords
 
     def create_diff_operator(self, grid: Grid, order: int, axis_index: int, acc: int = 4) -> GridDiff:
         """Create Chebyshev spectral differentiation operator.
