@@ -221,6 +221,18 @@ u = L.solve(1.0, bcs=0)                        # Poisson problem, u = 0 on both 
 vals, modes = (-L).eig(k=6, bcs=0)             # Laplace eigenmodes
 ```
 
+Gradient and divergence are available as operators, too, and combine to
+operators in divergence form such as $\nabla\cdot(k\,\nabla u)$ (see
+[Operators](operators.md#gradient-divergence-and-operators-in-divergence-form)):
+
+```python
+G_r, G_phi = annulus.gradient_operator()       # physical components of the gradient
+D_r, D_phi = annulus.divergence_operator()     # div v = D_r(v_r) + D_phi(v_phi)
+
+R, _ = annulus.meshed_coords
+L_k = annulus.diffusion_operator(1 + R**2)     # u -> div((1 + r^2) grad u)
+```
+
 `grid.integrate(f)` includes the volume element, i.e. it computes
 $\int f\, dV$; see [Integration](integration.md).
 

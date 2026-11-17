@@ -87,6 +87,36 @@ result = grid.integrate(f)
 The first call constructs the `Integral` and stores it in `grid.cache`.
 Subsequent calls for the same grid reuse the cached object.
 
+## Inner products and norms
+
+Grids provide the $L^2$ inner product, norms and averages of meshed
+functions, all based on the same quadrature (and including the volume
+element on curvilinear grids):
+
+```python
+grid = Grid(x=periodic(64))
+x = grid.coords
+f, g = np.sin(x), np.sin(x) + np.cos(2 * x)
+
+grid.inner(f, g)          # <f, g> = integral of conj(f) * g  ->  pi
+grid.norm(f)              # L2 norm, sqrt(<f, f>)             ->  sqrt(pi)
+grid.norm(f, 1)           # L1 norm, integral of |f|          ->  4.00 (approximately: |f| has kinks)
+grid.norm(f, "max")       # largest absolute value            ->  1
+grid.mean(f**2)           # average over the domain           ->  0.5
+```
+
+They are the natural way to measure errors independently of the grid, to
+normalize wave functions and to compute expectation values:
+
+```python
+psi = np.exp(-(x - np.pi)**2)
+psi = psi / grid.norm(psi)                     # normalized: <psi, psi> = 1
+mean_x = grid.inner(psi, x * psi)              # expectation value of x
+```
+
+`grid.quadrature_weights` is the array of the weights of all grid points:
+`np.sum(grid.quadrature_weights * f)` equals `grid.integrate(f)`.
+
 ## Integration in curvilinear coordinates
 
 On curvilinear grids (`CurvilinearGrid`, `SphericalGrid`,

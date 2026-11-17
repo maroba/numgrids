@@ -105,6 +105,7 @@ indices and scale factors.
    examples/poisson-equation-2d
    examples/spherical-harmonics
    examples/quantum-harmonic-oscillator
+   examples/quantum-dynamics
    examples/wave-equation-drum
    examples/adaptive-refinement-demo
    examples/convergence-study

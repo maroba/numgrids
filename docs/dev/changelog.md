@@ -6,6 +6,21 @@ All notable changes to **numgrids** are documented on this page.
 
 ### New features
 
+**Grids**
+
+- **Unbounded domains**: `semi_infinite(n, scale)` creates an axis on the
+  half line $[a, \infty)$ and `infinite(n, scale)` one on the whole real
+  line (mapped Chebyshev discretizations with spectral accuracy). There is
+  no grid point at infinity and no condition to impose there: decaying
+  solutions are selected by the problem itself. Derivatives, integrals,
+  interpolation, boundary conditions at the finite end, save/load and
+  xarray work as for the other axes, also in products with them and as the
+  radial axis of exterior domains. Examples: the levels of the harmonic
+  oscillator on the whole line to 14 digits with 64 points, and those of
+  the hydrogen atom to 12 digits with 48 points.
+
+**Solving equations**
+
 - **Nonlinear boundary value problems**: `solve_nonlinear(grid, residual, u0, bcs=...)`
   solves $F(u) = 0$ with a damped Newton method. The residual is an ordinary
   function of grid-shaped arrays. The Jacobian is computed by finite
@@ -14,15 +29,73 @@ All notable changes to **numgrids** are documented on this page.
   conditions, curvilinear grids and coupled systems (with block Jacobians). It
   raises `NonlinearSolverError` (with the last iterate and the residual
   history) if Newton's method does not converge.
+- **Continuation**: `continuation(grid, residual, u0, param, ...)` follows a
+  branch of solutions of $F(u, \lambda) = 0$ in the parameter by
+  pseudo-arclength continuation. It passes folds (turning points), where
+  solving at a fixed parameter fails, adapts its step size, and returns a
+  `ContinuationResult` with the branch, its folds and `measure()` for
+  bifurcation diagrams.
+- **Fast linear solvers**: `Operator.solve` now chooses between three direct
+  methods (`method="auto"`, `"fourier"`, `"dense"`, `"sparse"`):
+  - *Fourier decoupling*: problems that do not depend on a periodic axis
+    (the azimuthal angle of a disk, cylinder, sphere or ball; periodic boxes)
+    split into one small system per Fourier mode. A Poisson problem on a full
+    ball with 8192 unknowns takes 0.2 s instead of 30 s.
+  - *Dense LU* for spectral grids, where sparse LU fills in almost
+    completely (several times faster).
+  - *Sparse LU* for finite differences, as before.
+- **Reusable factorizations**: `Operator.factorize(bcs)` returns a
+  `LinearSolver` that solves for many right-hand sides with one
+  factorization, e.g. for implicit time stepping.
+- **Faster eigenvalue problems**: `Operator.eig` uses the same Fourier
+  decoupling: one small dense eigenproblem per Fourier mode instead of one
+  large problem, with all eigenvalues to full accuracy (full ball with 8192
+  unknowns: 1 s instead of 22 s). `normalize="l2"` returns eigenfunctions
+  with $\int |u|^2 dV = 1$.
+- **Generalized eigenvalue problems** $L u = \lambda M u$: `Operator.eig(..., M=rho)`
+  with a mass density or weight function given as an array, a callable, an
+  `Operator` or a matrix. It works with all boundary conditions and on the dense
+  and sparse paths.
+
+**Time evolution**
+
 - **Neumann and Robin conditions in `evolve`**: the boundary values are
   computed from the interior values at every instant, so the conditions hold
   exactly (e.g. an insulated body conserves its heat). Coupled systems accept
   one boundary specification per field, e.g. `bcs=(Neumann(0), Neumann(0))`
   for reaction-diffusion systems with no-flux boundaries.
-- **Generalized eigenvalue problems** $L u = \lambda M u$: `Operator.eig(..., M=rho)`
-  with a mass density or weight function given as an array, a callable, an
-  `Operator` or a matrix. It works with all boundary conditions and on the dense
-  and sparse paths.
+- **Time-dependent boundary values**: wrap a function of time in
+  `TimeDependent`, e.g. `bcs={"x_low": TimeDependent(np.sin)}` or
+  `Neumann(TimeDependent(flux))`.
+- **Source terms**: `evolve(..., source=s)` with an array or a function of
+  time. Operator right-hand sides stay linear, so implicit methods keep the
+  exact Jacobian.
+- **Linear systems as operator blocks**: `evolve(grid, [[None, 1], [L, None]], (u0, v0), ...)`
+  for the wave equation and other coupled linear systems.
+- **Exponential integrator**: `method="expm"` evaluates the solution of linear
+  problems with matrix exponentials, directly at the output times. There is
+  no time stepping error, complex fields and stiff operators work together,
+  and the norm is conserved in Schrödinger-type problems.
+
+**Operators and calculus**
+
+- `grid.gradient_operator()` and `grid.divergence_operator()` return the
+  gradient and divergence as operators (including the scale factors on
+  curvilinear grids), and `grid.diffusion_operator(k)` builds
+  $\nabla\cdot(k\,\nabla u)$ for variable coefficients.
+- `Operator.T`, `Operator.H`, `Operator.adjoint()` (adjoint in the $L^2$ inner
+  product of the grid) and `Operator.toarray()`.
+- `grid.inner(f, g)`, `grid.norm(f)` ($L^2$, $L^1$ or maximum norm),
+  `grid.mean(f)` and `grid.quadrature_weights`.
+
+### Bug fixes
+
+- `divergence` and `curl` were wrong on full balls (a `SphericalGrid` with a
+  radial axis through the origin): the components of a vector field change
+  sign when the radial coordinate line is continued through the origin,
+  which the derivative across the origin ignored. Derivatives of vector
+  components now use the correct parity, on all grids with a radial or
+  colatitude axis.
 
 ### Documentation
 
@@ -32,6 +105,13 @@ All notable changes to **numgrids** are documented on this page.
   conductivity).
 - The heat equation notebook covers insulated and cooled ends, and the drum
   notebook covers a membrane with variable density.
+- New example notebook *Quantum dynamics*: a spreading wave packet,
+  tunneling through a barrier (compared with stationary scattering) and a
+  coherent state, computed with the exponential integrator.
+- New user guide sections on unbounded domains, continuation, solver
+  methods and factorizations, operators in divergence form, inner products
+  and norms, time-dependent boundary values, source terms and the
+  exponential integrator.
 
 ## 0.6.1
 
