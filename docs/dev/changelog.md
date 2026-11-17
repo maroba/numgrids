@@ -100,6 +100,16 @@ All notable changes to **numgrids** are documented on this page.
 - Implicit methods (`"BDF"`, `"Radau"`) with an operator right-hand side are
   several times faster on spectral grids (they now get a dense Jacobian,
   which avoids the fill-in of sparse factorizations).
+- **Stiff nonlinear problems**: `evolve(grid, N, u0, t_span, linear=L, method="ETDRK4", dt=...)`
+  integrates semilinear equations $u_t = L u + N(t, u)$ such as the
+  Korteweg--de Vries, nonlinear Schrödinger, Allen--Cahn, Swift--Hohenberg
+  and reaction--diffusion equations. The stiff linear part is treated
+  exactly by exponential time differencing (`"ETDRK4"`, `"ETDRK2"`,
+  `"ETD1"`) or implicitly (`"IMEX2"`, which needs only linear solves), the
+  nonlinear part explicitly, so the step size is not limited by the
+  stiffness. On periodic grids the whole step runs in Fourier space, which
+  makes two-dimensional pattern formation on 128 × 128 grids cheap; grids
+  with boundaries support Dirichlet, Neumann and Robin conditions.
 - **Exponential integrator**: `method="expm"` evaluates the solution of linear
   problems with matrix exponentials, directly at the output times. There is
   no time stepping error, complex fields and stiff operators work together,
@@ -179,6 +189,11 @@ All notable changes to **numgrids** are documented on this page.
   - *Heat conduction*: variable conductivity, a seasonal temperature wave in
     the ground, a disk with a moving heat source, and implicit time
     stepping with a reused factorization.
+  - *Solitons*: Korteweg--de Vries solitons and their collision, bright
+    solitons and a breather of the nonlinear Schrödinger equation, compared
+    with exact solutions.
+  - *Pattern formation*: labyrinths and dividing spots in the Gray--Scott
+    model, stripes and hexagons in the Swift--Hohenberg equation.
   - *Is my function resolved?*: coefficient spectra, the resolution check
     in one and two dimensions, choosing the number of points, aliasing.
 - The nonlinear problems notebook traces the bifurcation diagram of the

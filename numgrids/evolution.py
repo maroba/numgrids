@@ -3,6 +3,8 @@
 :func:`evolve` wraps :func:`scipy.integrate.solve_ivp` so that the
 right-hand side can be written in terms of meshed arrays, optionally with
 several coupled fields and Dirichlet, Neumann or Robin boundary conditions.
+It also offers an exponential integrator for linear problems and
+fixed-step integrators for stiff semilinear problems (``numgrids.etd``).
 """
 
 from __future__ import annotations
@@ -17,6 +19,8 @@ import scipy.sparse
 import scipy.sparse.linalg
 from numpy.typing import NDArray
 from scipy.integrate import solve_ivp
+
+from numgrids.etd import METHODS as _SEMILINEAR
 
 if TYPE_CHECKING:
     from numgrids.grids import Grid
@@ -46,7 +50,8 @@ class EvolutionResult:
         Status message of the solver.
     sol : object
         The raw result of :func:`scipy.integrate.solve_ivp` (``None`` for
-        ``method="expm"``).
+        ``method="expm"`` and the fixed-step methods for stiff nonlinear
+        problems).
     grid : Grid
         The grid of the solution, used by :meth:`animate` and :meth:`to_vtk`.
     """
@@ -242,6 +247,8 @@ def evolve(
     bcs=None,
     method: str = "RK45",
     source=None,
+    linear=None,
+    dt: float | None = None,
     **kwargs,
 ) -> EvolutionResult:
     r"""Integrate :math:`\partial_t u = F(t, u)` in time on a grid.
@@ -263,14 +270,19 @@ def evolve(
         of grid shape (multiplication), a scalar or ``None`` (zero).  The
         wave equation :math:`u_t = v,\ v_t = \nabla^2 u` is
         ``[[None, 1], [L, None]]``.
+
+        With *linear*, *rhs* is only the nonlinear part :math:`N(t, u)` of
+        the right-hand side (a callable as above, or ``None`` for none).
     u0 : NDArray or tuple of NDArray
         Initial state (one array, or a tuple of arrays for coupled fields).
-        Complex arrays are supported by explicit methods.
+        Complex arrays are supported by explicit methods, by ``"expm"``
+        and by the methods for semilinear problems.
     t_span : (float, float)
         Start and end time.
     t_eval : array_like, optional
         Times at which to store the solution.  Defaults to the solver's
-        internal time steps.
+        internal time steps; for ``"expm"`` and the fixed-step methods to
+        the start and end time.
     bcs : optional
         Boundary conditions, in any form accepted by
         :func:`~numgrids.boundary.resolve_bcs`: Dirichlet, Neumann or Robin
@@ -300,6 +312,11 @@ def evolve(
         at the output times, without time stepping error, for stiff
         problems and complex fields alike.  It preserves the norm in
         Schrödinger-type problems.
+
+        ``"ETDRK4"``, ``"ETDRK2"``, ``"ETD1"`` and ``"IMEX2"`` integrate
+        stiff semilinear problems :math:`\partial_t u = L u + N(t, u)`
+        with a fixed time step *dt*; they need the linear part as
+        *linear*.  See the notes below.
     source : array, callable or tuple, optional
         A source term added to the right-hand side,
         :math:`\partial_t u = F(t, u) + s`: an array of grid shape, or a
@@ -307,13 +324,81 @@ def evolve(
         with one entry per field, ``None`` for no source).  With an
         Operator right-hand side this keeps the problem linear, so that
         implicit methods still use the exact Jacobian.
+    linear : Operator, callable or nested list, optional
+        The stiff linear part *L* of a semilinear problem
+        :math:`\partial_t u = L u + N(t, u)`, for the methods ``"ETDRK4"``,
+        ``"ETDRK2"``, ``"ETD1"`` and ``"IMEX2"``: an Operator, or for
+        coupled systems a nested list of blocks as described for *rhs*.
+        Typically it holds the highest derivatives (diffusion, dispersion),
+        while *rhs* holds the nonlinear terms.
+
+        On a grid that is periodic along all axes, the linear part (or a
+        block of it) can also be given by its Fourier symbol: a function
+        of the meshed wave numbers (:math:`2\pi m / L` along an axis with
+        the period *L*), e.g. ``lambda kx, ky: -(kx**2 + ky**2)**2`` for
+        :math:`-\nabla^4`.  No matrix is built then, which matters for
+        operators with mixed derivatives in two or three dimensions: their
+        matrices are dense.
+    dt : float, optional
+        The time step of the methods for semilinear problems (required
+        there).  Every interval between two output times is divided into
+        equal steps that are not longer than *dt*, so the output times are
+        hit exactly.
     **kwargs
         Passed on to :func:`scipy.integrate.solve_ivp` (e.g. ``rtol``,
-        ``atol``, ``max_step``).
+        ``atol``, ``max_step``).  ``"expm"`` and the fixed-step methods
+        take no further options.
 
     Returns
     -------
     EvolutionResult
+
+    Notes
+    -----
+    The methods for semilinear problems :math:`\partial_t u = L u + N(t, u)`
+    do not restrict the time step by the stiffness of *L*, and they never
+    solve a nonlinear system:
+
+    * ``"ETDRK4"`` -- exponential time differencing Runge-Kutta scheme of
+      order 4 (the scheme of Cox and Matthews in the variant of Krogstad,
+      which is more accurate for stiff problems).  The linear part is
+      integrated exactly, the nonlinear part with four evaluations per
+      step.  The method of choice in most cases.
+    * ``"ETDRK2"``, ``"ETD1"`` -- the schemes of order 2 and 1 (exponential
+      Euler method) with two and one evaluations per step.
+    * ``"IMEX2"`` -- implicit-explicit Runge-Kutta scheme of order 2
+      (ARS(2,2,2) of Ascher, Ruuth and Spiteri): an L-stable diagonally
+      implicit scheme for the linear part, with two linear solves per
+      step, and an explicit scheme for the nonlinear part.  It needs no
+      matrix functions, only solutions of linear systems, and hence also
+      works for large problems.
+
+    On a grid that is periodic along all axes, a linear part with constant
+    coefficients (and no boundary conditions) is diagonal in Fourier space.
+    This is detected (or stated, by passing the Fourier symbol as
+    *linear*), and the time stepping is then done on the Fourier
+    coefficients with fast Fourier transforms: the functions of *L* are
+    evaluated for each mode separately, by their Taylor series for small
+    arguments and by the recurrence :math:`\varphi_{k+1}(z) = (\varphi_k(z)
+    - 1/k!)/z` otherwise (for a linear part that couples the fields, as
+    functions of one small matrix per mode).  Problems with many thousands
+    of unknowns are cheap this way.
+
+    Otherwise the ETD methods compute the matrix functions
+    :math:`\varphi_k(hL)` as dense matrices, once per step size: by an
+    eigendecomposition if the matrix is Hermitian or skew-Hermitian, else
+    by scaling and squaring (a Taylor polynomial of the matrix divided by
+    a power of two, followed by repeated doubling).  This is limited to
+    2500 unknowns; beyond that, use ``"IMEX2"``, which solves its linear
+    systems like :meth:`Operator.solve <numgrids.operators.Operator.solve>`
+    (single field) or by dense or sparse LU factorization (systems).
+
+    Boundary conditions are imposed as for the other methods; their
+    constant values and constant sources are part of the linear problem
+    that is solved exactly by the ETD methods.  With boundary values that
+    change in time, expect the order 3 instead of 4 from ``"ETDRK4"``.
+    Without a nonlinear part and with constant boundary values and
+    sources, the ETD methods reproduce ``"expm"``.
 
     Examples
     --------
@@ -337,6 +422,21 @@ def evolve(
     ...              method="BDF", rtol=1e-8, atol=1e-10)
     >>> round(grid.integrate(res.final), 6), round(grid.integrate(u0), 6)
     (1.0, 1.0)
+
+    A soliton of the Korteweg-de Vries equation :math:`u_t + 6 u u_x +
+    u_{xxx} = 0` moves with the speed *c* without changing its shape.  The
+    third derivative is the stiff linear part:
+
+    >>> from numgrids import periodic
+    >>> grid = Grid(x=periodic(128, -10, 10))
+    >>> x = grid.coords
+    >>> c = 4.0
+    >>> soliton = lambda x0: c / 2 / np.cosh(np.sqrt(c) / 2 * (x - x0)) ** 2
+    >>> D = grid.diff_operator()
+    >>> res = evolve(grid, lambda t, u: -3 * D(u ** 2), soliton(-2.0), (0, 1),
+    ...              linear=-grid.diff_operator(3), method="ETDRK4", dt=0.005)
+    >>> bool(np.allclose(res.final, soliton(2.0), atol=1e-4))
+    True
     """
     from numgrids.boundary import BoundaryCondition, resolve_bcs
     from numgrids.operators import Operator
@@ -369,51 +469,42 @@ def evolve(
         if con is not None:
             zero_rows[f] |= con.rows
     zero_rows = zero_rows.ravel()
-    constrained = any(con is not None for con in constraints)
     moving_bcs = any(con is not None and con.time_dependent for con in constraints)
 
     source_fn, constant_source = _source_function(grid, source, nfields, system, zero_rows)
 
+    if method in _SEMILINEAR:
+        from numgrids.etd import _evolve_semilinear
+
+        if linear is None:
+            raise ValueError(
+                f'method="{method}" needs the stiff linear part of the right-hand side as linear=: '
+                "an Operator, or a nested list of operator blocks for systems."
+            )
+        if kwargs:
+            raise TypeError(f'method="{method}" takes no solver options, got {sorted(kwargs)}.')
+        return _evolve_semilinear(grid, rhs, linear, fields, constraints, zero_rows, moving_bcs, source_fn,
+                                  constant_source, t_span, t_eval, method, dt, system)
+    if linear is not None:
+        raise ValueError(
+            f'linear= is only used by the methods {", ".join(_SEMILINEAR)}; '
+            f'with method="{method}", the right-hand side rhs has to contain the linear part.'
+        )
+    if dt is not None:
+        raise ValueError(
+            f'dt= is the time step of the fixed-step methods {", ".join(_SEMILINEAR)}; '
+            f'method="{method}" chooses its steps itself.'
+        )
+
     dtype = np.result_type(*fields, float)
     y0 = np.concatenate([f.astype(dtype).ravel() for f in fields])
 
-    linear = isinstance(rhs, (Operator, list, tuple))
     jac = None
-    if linear:
-        if isinstance(rhs, Operator):
-            if system:
-                raise TypeError(
-                    "An Operator right-hand side only works for a single field; "
-                    "for systems pass a nested list of blocks, e.g. [[None, 1], [L, None]]."
-                )
-            M = scipy.sparse.csr_matrix(rhs.matrix)
-        else:
-            from numgrids.nonlinear import _assemble_jacobian
-            if not system:
-                raise TypeError("A list of operator blocks needs a tuple of initial fields.")
-            M = scipy.sparse.csr_matrix(_assemble_jacobian(grid, rhs, nfields))
-        if zero_rows.any():
-            M = scipy.sparse.csr_matrix(scipy.sparse.diags((~zero_rows).astype(float)) @ M)
-        # Fold the boundary constraints u -> P u + d(t) into the matrix.
-        A = M
-        if constrained:
-            P = scipy.sparse.block_diag(
-                [scipy.sparse.identity(size) if con is None else con.matrix() for con in constraints],
-                format="csr")
-            A = scipy.sparse.csr_matrix(M @ P)
-
-        def inhomogeneity(t):
-            """The part of the right-hand side that does not depend on the solution."""
-            q = None
-            if constrained:
-                d = np.concatenate([np.zeros(size) if con is None else con.offset(t) for con in constraints])
-                q = M @ d
-            if source_fn is not None:
-                q = source_fn(t) if q is None else q + source_fn(t)
-            return q
-
+    if isinstance(rhs, (Operator, list, tuple)):
+        M, A, inhomogeneity = _linear_part(grid, rhs, nfields, system, constraints, zero_rows, source_fn,
+                                           "right-hand side")
         constant = not moving_bcs and constant_source
-        q0 = inhomogeneity(t0) if constant else None
+        q0 = inhomogeneity(t0) if constant and inhomogeneity is not None else None
         if q0 is not None and not np.any(q0):
             q0 = None
         y0 = y0.astype(np.result_type(y0, A.dtype, *([] if q0 is None else [q0])))
@@ -432,8 +523,7 @@ def evolve(
         def fun(t, y):
             if constant:
                 return A @ y if q0 is None else A @ y + q0
-            q = inhomogeneity(t)
-            return A @ y if q is None else A @ y + q
+            return A @ y + inhomogeneity(t)
 
         if method in _IMPLICIT:
             # Spectral matrices fill in under the sparse LU of the implicit solvers;
@@ -477,6 +567,75 @@ def evolve(
     sol = solve_ivp(fun, t_span, y0, method=method, t_eval=t_eval, **kwargs)
     return _result(grid, sol.t, sol.y.T, constraints, nfields, system,
                    bool(sol.success), str(sol.message), sol)
+
+
+def _check_linear_part(spec, system: bool, name: str) -> None:
+    """Check that a linear part is an Operator (one field) or a nested list of blocks (systems)."""
+    from numgrids.operators import Operator
+
+    if isinstance(spec, Operator):
+        if system:
+            raise TypeError(
+                f"An Operator {name} only works for a single field; "
+                "for systems pass a nested list of blocks, e.g. [[None, 1], [L, None]]."
+            )
+    elif isinstance(spec, (list, tuple)):
+        if not system:
+            raise TypeError("A list of operator blocks needs a tuple of initial fields.")
+    else:
+        raise TypeError(
+            f"The {name} must be an Operator or a nested list of operator blocks, not {type(spec).__name__}."
+        )
+
+
+def _linear_part(grid, spec, nfields: int, system: bool, constraints, zero_rows: NDArray, source_fn, name: str):
+    """``(M, A, q)`` for a linear part given as an Operator or as a nested list of blocks.
+
+    *M* is its matrix, with zero rows for the points that are not evolved,
+    and *A* the same with the boundary constraints ``u -> P u + d(t)``
+    folded in, so that the linear part of the right-hand side is
+    ``A y + q(t)`` in terms of the state *y*.  The function *q* collects
+    what does not depend on the solution: the contributions of the boundary
+    values and of the source (``None`` if there is neither).
+    """
+    from numgrids.nonlinear import _assemble_jacobian
+
+    size = grid.size
+    _check_linear_part(spec, system, name)
+    M = scipy.sparse.csr_matrix(_assemble_jacobian(grid, spec, nfields) if system else spec.matrix)
+    if zero_rows.any():
+        M = scipy.sparse.csr_matrix(scipy.sparse.diags((~zero_rows).astype(float)) @ M)
+    constrained = any(con is not None for con in constraints)
+    A = M
+    if constrained:
+        P = scipy.sparse.block_diag(
+            [scipy.sparse.identity(size) if con is None else con.matrix() for con in constraints],
+            format="csr")
+        A = scipy.sparse.csr_matrix(M @ P)
+    if not constrained and source_fn is None:
+        return M, A, None
+
+    def inhomogeneity(t):
+        q = None
+        if constrained:
+            d = np.concatenate([np.zeros(size) if con is None else con.offset(t) for con in constraints])
+            q = M @ d
+        if source_fn is not None:
+            q = source_fn(t) if q is None else q + source_fn(t)
+        return q
+
+    return M, A, inhomogeneity
+
+
+def _output_times(t_span, t_eval) -> NDArray:
+    """The output times of the methods that do not use ``solve_ivp``: *t_eval*, or start and end time."""
+    t0, t1 = float(t_span[0]), float(t_span[1])
+    t = np.array([t0, t1]) if t_eval is None else np.asarray(t_eval, dtype=float)
+    if t.ndim != 1 or (t.size and (t.min() < min(t0, t1) or t.max() > max(t0, t1))):
+        raise ValueError("Values in t_eval are not within t_span.")
+    if np.any(np.diff(t) * np.sign(t1 - t0) <= 0):
+        raise ValueError("Values in t_eval are not properly sorted.")
+    return t
 
 
 def _result(grid, t, Y, constraints, nfields, system, success, message, sol) -> EvolutionResult:
@@ -527,12 +686,8 @@ def _expm_solve(A, q, y0: NDArray, t_span, t_eval) -> tuple[NDArray, NDArray]:
     the problem is homogeneous, :math:`z' = \hat A z`, so
     :math:`z(t + \Delta t) = e^{\Delta t \hat A} z(t)`.
     """
-    t0, t1 = float(t_span[0]), float(t_span[1])
-    t = np.array([t0, t1]) if t_eval is None else np.asarray(t_eval, dtype=float)
-    if t.ndim != 1 or (t.size and (t.min() < min(t0, t1) or t.max() > max(t0, t1))):
-        raise ValueError("Values in t_eval are not within t_span.")
-    if np.any(np.diff(t) * np.sign(t1 - t0) <= 0):
-        raise ValueError("Values in t_eval are not properly sorted.")
+    t0 = float(t_span[0])
+    t = _output_times(t_span, t_eval)
     n = y0.size
     if q is not None:
         A = scipy.sparse.bmat([[A, scipy.sparse.csr_matrix(q.reshape(-1, 1))],

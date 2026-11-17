@@ -111,6 +111,8 @@ indices and scale factors.
    examples/spherical-harmonics
    examples/quantum-harmonic-oscillator
    examples/quantum-dynamics
+   examples/solitons
+   examples/pattern-formation
    examples/hydrogen-atom
    examples/heat-conduction
    examples/wave-equation-drum

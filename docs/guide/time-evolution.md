@@ -226,6 +226,180 @@ long series of outputs cheap. Larger problems use
 {func}`scipy.sparse.linalg.expm_multiply`, whose cost grows with the
 stiffness of the operator.
 
+## Stiff nonlinear problems
+
+Many nonlinear PDEs are *semilinear*,
+
+$$
+\partial_t u = L u + N(t, u),
+$$
+
+with a linear part $L$ that contains the highest derivatives and is
+therefore stiff, and a nonlinear part $N$ that is not: the Korteweg-de
+Vries, nonlinear Schrödinger, Kuramoto-Sivashinsky, Allen-Cahn and
+Swift-Hohenberg equations, and reaction-diffusion systems. Explicit
+methods need tiny time steps for $L$, and implicit methods have to solve
+nonlinear systems in every step. If you pass the linear part separately,
+as `linear=`, `evolve` can treat the two parts differently. The right-hand
+side `rhs` is then only the nonlinear part:
+
+```python
+# Korteweg-de Vries equation u_t + 6 u u_x + u_xxx = 0
+grid = Grid(x=periodic(256, -20, 20))
+x = grid.coords
+c = 4.0
+soliton = lambda t: c / 2 / np.cosh(np.sqrt(c) / 2 * (x + 10 - c * t))**2
+D = grid.diff_operator()
+
+result = evolve(
+    grid,
+    lambda t, u: -3 * D(u**2),            # nonlinear part: -6 u u_x
+    soliton(0),
+    t_span=(0, 5),
+    t_eval=np.linspace(0, 5, 11),
+    linear=-grid.diff_operator(3),        # stiff linear part: -u_xxx
+    method="ETDRK4",
+    dt=0.005,
+)
+abs(result.final - soliton(5)).max()      # 7e-5: the soliton has moved by 20
+```
+
+The methods integrate with a fixed time step `dt`:
+
+| Method | Order | Linear part | Cost per step |
+|---|---|---|---|
+| `"ETDRK4"` | 4 | exact | 4 evaluations of $N$ |
+| `"ETDRK2"` | 2 | exact | 2 evaluations of $N$ |
+| `"ETD1"` | 1 | exact | 1 evaluation of $N$ |
+| `"IMEX2"` | 2 | implicit (L-stable) | 2 evaluations of $N$, 2 linear solves |
+
+The *exponential time differencing* (ETD) methods integrate the linear
+part exactly, with the matrix exponential $e^{hL}$ and related functions,
+and the nonlinear part with an explicit Runge-Kutta scheme. The time step
+is limited by the nonlinear part only, not by the stiffness of $L$.
+`"ETDRK4"` is the method of choice in most cases. `"IMEX2"` is an
+implicit-explicit Runge-Kutta scheme: it only solves linear systems with
+the matrix $1 - \gamma h L$, which makes it suitable for large problems on
+grids with boundaries (see below).
+
+There is no error control: choose `dt` by comparing with a run with half
+the step. Every interval between two output times is divided into equal
+steps that are not longer than `dt`, so the times in `t_eval` are hit
+exactly; without `t_eval` the result holds the start and end time. If the
+solution blows up, `result.success` is `False`, `result.message` tells
+where, and the result ends with the last output time before that.
+
+Complex fields work as well. For the nonlinear Schrödinger equation
+$i\,\partial_t \psi + \tfrac12 \partial_x^2 \psi + |\psi|^2 \psi = 0$
+with the soliton $\psi = \operatorname{sech}(x)\, e^{it/2}$:
+
+```python
+grid = Grid(x=periodic(256, -20, 20))
+x = grid.coords
+result = evolve(grid, lambda t, psi: 1j * abs(psi)**2 * psi, 1 / np.cosh(x), (0, 10),
+                linear=0.5j * grid.diff_operator(2), method="ETDRK4", dt=0.05)
+abs(result.final - np.exp(5j) / np.cosh(x)).max()      # 3e-6
+grid.norm(result.final)**2                             # 2.0, as at t = 0
+```
+
+### Periodic grids: time stepping in Fourier space
+
+On a grid that is periodic along all axes, a linear part with constant
+coefficients is diagonal in Fourier space. `evolve` detects this and does
+the time stepping on the Fourier coefficients, with fast Fourier
+transforms and no matrices at all. Two-dimensional problems on large grids
+are cheap this way. For systems, `linear` is a nested list of blocks like
+a [linear right-hand side](#coupled-fields-the-wave-equation). Here is the
+Gray-Scott reaction-diffusion system, in which a small seed of the species
+$v$ grows into a labyrinth of stripes:
+
+```python
+grid = Grid(x=periodic(64, 0, 1.25), y=periodic(64, 0, 1.25))
+X, Y = grid.meshed_coords
+Lap = grid.laplacian_operator()
+F, k = 0.037, 0.06
+
+seed = np.exp(-((X - 0.6)**2 + (Y - 0.65)**2) / 0.005)
+result = evolve(
+    grid,
+    lambda t, u, v: (-u * v**2 + F * (1 - u), u * v**2 - (F + k) * v),
+    (1 - 0.5 * seed, 0.25 * seed),
+    t_span=(0, 2000),
+    linear=[[2e-5 * Lap, None], [None, 1e-5 * Lap]],
+    method="ETDRK4",
+    dt=2.0,
+)
+u, v = result.final
+```
+
+The blocks may also couple the fields, e.g. `[[None, 1], [L, None]]` for
+a nonlinear wave equation $\partial_t^2 u = \nabla^2 u + f(u)$; each
+Fourier mode then has a small matrix instead of a number.
+
+Operators with mixed derivatives, such as $\nabla^4 = \partial_x^4 +
+2\,\partial_x^2 \partial_y^2 + \partial_y^4$, have dense matrices in two
+dimensions: $N^4$ entries on an $N \times N$ grid. On periodic grids you
+can avoid the matrix and pass the *Fourier symbol* of the linear part
+instead, a function of the meshed wave numbers: the factor by which the
+operator multiplies $e^{i (k_x x + k_y y)}$ (so $\partial_x$ becomes
+$i k_x$ and $\nabla^2$ becomes $-k_x^2 - k_y^2$). For the Swift-Hohenberg
+equation $\partial_t u = r u - (1 + \nabla^2)^2 u - u^3$, which forms
+stripes with the wave number 1:
+
+```python
+grid = Grid(x=periodic(128, 0, 32 * np.pi), y=periodic(128, 0, 32 * np.pi))
+u0 = 0.1 * np.random.default_rng(0).standard_normal(grid.shape)
+result = evolve(grid, lambda t, u: -u**3, u0, (0, 100),
+                linear=lambda kx, ky: 0.3 - (1 - kx**2 - ky**2)**2,
+                method="ETDRK4", dt=0.5)
+```
+
+The eigenvalues of this linear part reach $-960$, so explicit methods
+would need steps of about 0.003 here. In a nested list for systems,
+symbols and operators can be mixed.
+
+### Grids with boundaries
+
+On other grids, with boundary conditions, or with coefficients that vary
+in space, the ETD methods compute the functions of the linear part as
+dense matrices, once per step size (for equally spaced output times:
+once). Dirichlet, Neumann and Robin conditions work as for the other
+methods. The Allen-Cahn equation
+$\partial_t u = \epsilon\, \partial_x^2 u + u - u^3$ forms plateaus
+$u = \pm 1$ that last for a long time:
+
+```python
+grid = Grid(x=chebyshev(64, -1, 1))
+x = grid.coords
+u0 = 0.53 * x + 0.47 * np.sin(-1.5 * np.pi * x)
+result = evolve(grid, lambda t, u: u - u**3, u0, (0, 30), t_eval=np.linspace(0, 30, 61),
+                bcs={"x_low": -1, "x_high": 1},
+                linear=0.01 * grid.diff_operator(2), method="ETDRK4", dt=0.25)
+```
+
+Constant boundary values and constant sources are part of the linear
+problem and are integrated exactly: without a nonlinear part, the ETD
+methods reproduce [`method="expm"`](#linear-problems-without-time-stepping-error).
+Boundary values and sources that change in time are treated like the
+nonlinear part; with [time-dependent boundary values](#boundary-values-that-change-in-time)
+the observed order of `"ETDRK4"` drops from 4 to about 3, while the
+second-order methods keep their order.
+
+Dense matrix functions limit the ETD methods to 2500 unknowns on such
+grids, and their setup takes about a hundred matrix products (a few
+seconds for 1500 unknowns). Larger problems are the domain of `"IMEX2"`,
+which solves its linear systems like [`Operator.solve`](operators.md):
+with sparse or dense factorizations, or decoupled into Fourier modes where
+the problem allows it (systems of several fields: with dense or sparse LU
+factorizations). Here on a disk:
+
+```python
+grid = PolarGrid(radial(24, 1.0), periodic(32))
+X, Y = grid.cartesian_coords
+result = evolve(grid, lambda t, u: u * (1 - u), np.exp(-10 * ((X - 0.3)**2 + Y**2)), (0, 5),
+                bcs=Neumann(0), linear=0.05 * grid.laplacian_operator(), method="IMEX2", dt=0.02)
+```
+
 ## Looking at the result
 
 `result.animate()` returns a matplotlib animation of the solution, and
@@ -237,4 +411,5 @@ stiffness of the operator.
 
 Additional keyword arguments (`rtol`, `atol`, `max_step`, `first_step`,
 ...) are passed on to {func}`scipy.integrate.solve_ivp`; the raw solver
-result is available as `result.sol`.
+result is available as `result.sol`. `method="expm"` and the fixed-step
+methods of the previous section take no further options.

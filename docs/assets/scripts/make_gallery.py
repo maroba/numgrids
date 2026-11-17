@@ -17,6 +17,8 @@ SELECTION = {
     "operators-and-solvers": 2,
     "nonlinear-problems": 1,
     "quantum-dynamics": 1,
+    "solitons": 1,
+    "pattern-formation": 1,
     "hydrogen-atom": 0,
     "heat-conduction": 2,
     "heat-equation-rod": 0,
