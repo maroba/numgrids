@@ -1,192 +1,156 @@
 <h1 align="center">numgrids</h1>
-<p align="center"> Working with numerical grids made easy. </p>
 
-<p align="center"><a href="https://badge.fury.io/py/numgrids"> <img src="https://badge.fury.io/py/numgrids.svg?branch=main&kill_cache=1" alt="PyPI version"></a> <a href="https://github.com/maroba/numgrids/actions/workflows/checks.yml"> <img src="https://github.com/maroba/numgrids/actions/workflows/checks.yml/badge.svg" alt="build"></a><a href="https://codecov.io/gh/maroba/numgrids"> <img src="https://codecov.io/gh/maroba/numgrids/branch/main/graph/badge.svg?token=JNH9SP7BRG" alt=""></a> <a href="https://maroba.github.io/numgrids/"><img src="https://img.shields.io/badge/docs-GitHub%20Pages-blue" alt="Documentation"></a></p>
+<p align="center">
+  <b>Numerical grids, spectral derivatives and PDE solvers in a few lines of NumPy-friendly Python.</b>
+</p>
 
-  <div align="center"><img src="docs/assets/torus.png" width="25%">  <img src="docs/assets/disk320.png" width="25%"> <img src="docs/assets/cubic.png" width="25%"></div>
+<p align="center">
+  <a href="https://pypi.org/project/numgrids/"><img src="https://img.shields.io/pypi/v/numgrids" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/numgrids/"><img src="https://img.shields.io/pypi/pyversions/numgrids" alt="Python versions"></a>
+  <a href="https://github.com/maroba/numgrids/actions/workflows/checks.yml"><img src="https://github.com/maroba/numgrids/actions/workflows/checks.yml/badge.svg" alt="Build status"></a>
+  <a href="https://codecov.io/gh/maroba/numgrids"><img src="https://codecov.io/gh/maroba/numgrids/branch/main/graph/badge.svg?token=JNH9SP7BRG" alt="Test coverage"></a>
+  <a href="https://maroba.github.io/numgrids/"><img src="https://img.shields.io/badge/docs-GitHub%20Pages-blue" alt="Documentation"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/maroba/numgrids" alt="License"></a>
+</p>
 
-Setting up numerical grids, differentiation matrices, and coordinate
-transformations by hand is tedious and error-prone.
-*numgrids* gives you a high-level, NumPy-friendly API that handles all of
-this — so you can focus on the physics or mathematics of your problem instead
-of bookkeeping grid indices and scale factors.
+<p align="center">
+  <img src="docs/assets/hero.png" width="100%" alt="A vibration mode of a circular drum, an eigenfunction of the Laplacian on the sphere, and the eigenstates of the quantum harmonic oscillator">
+  <br>
+  <sub>Computed with numgrids: a vibration mode of a circular drum, an eigenfunction of the Laplacian on the sphere,
+  and the eigenstates of the quantum harmonic oscillator
+  (<a href="docs/assets/scripts/make_hero.py">code</a>).</sub>
+</p>
 
-**Main Features**
+Setting up grids, differentiation matrices, boundary conditions and coordinate
+transformations by hand is tedious and error-prone. *numgrids* handles all of
+this, so you can focus on the physics or mathematics of your problem.
 
-- Numerical grids in any dimension from **equidistant**, **Chebyshev**, **logarithmic**, and **periodic** axes
-- High-precision **spectral methods** (FFT + Chebyshev) selected automatically where possible
-- Differentiation, integration (Clenshaw–Curtis, trapezoidal), and interpolation (spline or spectral)
-- **Curvilinear coordinates**: spherical (volume and surface), cylindrical, polar, elliptic cylindrical, prolate and oblate spheroidal — or your own via scale factors
-- **Full disks, cylinders, spheres and balls**: axes through the origin and the poles handle these points without coordinate singularities
-- **Vector calculus**: gradient, divergence, curl, and Laplacian on Cartesian and curvilinear grids; volume and surface integrals
-- **Operator algebra** — write `-0.5 * D2 + V` — with built-in `solve()` for boundary value problems and `eig()` for eigenvalue problems
-- **Boundary conditions**: Dirichlet, Neumann, and Robin, specified as compactly as `bcs={"x_low": 0, "x_high": Neumann(1)}`
-- **Time evolution** (method of lines) for heat, wave, and Schrödinger-type equations
-- **Adaptive mesh refinement**, convergence studies, multigrid hierarchies
-- **Plotting**, **save / load** to `.npz`, and **xarray / NetCDF** interoperability
-- Fully compatible with *NumPy* and *SciPy* (all operators export sparse matrices)
+## numgrids in 30 seconds
+
+What are the vibration frequencies of a circular drum? They are the square roots of the
+eigenvalues of the Laplacian on a disk, with the rim clamped:
+
+```python
+from numgrids import *
+
+drum = PolarGrid(radial(30, 1.0), periodic(40))     # the full disk, including its center
+eigenvalues, modes = (-drum.laplacian_operator()).eig(k=6, bcs=0)
+
+print(eigenvalues ** 0.5)
+# [2.40482556 3.83170597 3.83170597 5.1356223  5.1356223  5.52007811]
+```
+
+These are the zeros of the Bessel functions, correct to 13 digits on a 30 × 40 grid. There's
+no mesh generation, no hand-assembled matrices and no special treatment of the center.
+
+## Features
+
+**Grids and coordinates**
+- Grids in any dimension from Chebyshev, equidistant, periodic and logarithmic axes
+- Polar, cylindrical, spherical (volume and surface), elliptic and spheroidal coordinates, or your own via scale factors
+- Full disks, cylinders, spheres and balls: the center and the poles are handled without coordinate singularities
+
+**Calculus**
+- Derivatives with spectral accuracy (FFT, Chebyshev) or finite differences, chosen automatically per axis
+- Gradient, divergence, curl and Laplacian; volume and surface integrals; spectral interpolation
+
+**Solving equations**
+- Write operators like formulas (`-0.5 * D2 + V`), then `solve()` boundary value problems or `eig()` eigenvalue problems
+- Dirichlet, Neumann and Robin conditions in one line: `bcs={"x_low": 0, "x_high": Neumann(1)}`
+- Time evolution (method of lines) for heat, wave and Schrödinger-type equations
+
+**Tools**
+- Adaptive mesh refinement, convergence studies, multigrid hierarchies
+- Plotting, save/load, xarray/NetCDF; all operators export SciPy sparse matrices
 
 ## Installation
 
 ```shell
-pip install --upgrade numgrids
+pip install numgrids
 ```
 
 Optional extras: `numgrids[plot]` (matplotlib), `numgrids[xarray]` (xarray), or `numgrids[all]`.
 
-## Documentation
+## Examples
 
-Full documentation including user guide, API reference and example notebooks is available at
-**[maroba.github.io/numgrids](https://maroba.github.io/numgrids/)**.
-
-## Quick Start
-
-### Grids, derivatives, integrals
+### Derivatives and integrals
 
 ```python
-from numgrids import *
 import numpy as np
+from numgrids import *
 
-# A 2D grid: Chebyshev points in x, periodic in y. Keyword arguments name the axes.
-grid = Grid(x=chebyshev(30, 0, 1), y=periodic(40, 0, 2 * np.pi))
+grid = Grid(x=chebyshev(30, 0, 1), y=periodic(40))       # named axes
+f = grid.evaluate(lambda x, y: x**2 * np.sin(y))
 
-f = grid.evaluate(lambda x, y: x**2 * np.sin(y))   # sample a function
-
-df_dx = grid.diff(f, axis="x")          # partial derivatives (spectrally accurate)
-d2f_dy2 = grid.diff(f, order=2, axis="y")
-lap = grid.laplacian(f)
-total = grid.integrate(f**2)            # integral over the whole domain
-value = grid.interpolate(f, (0.3, 1.2), method="spectral")
+grid.diff(f, axis="x")             # spectrally accurate partial derivative
+grid.laplacian(f)                  # d²f/dx² + d²f/dy²
+grid.integrate(f**2)               # integral over the whole domain
+grid.interpolate(f, (0.3, 1.2), method="spectral")
 ```
 
-Axis types: `chebyshev(n, low, high)`, `equidistant(...)`, `periodic(...)`, `logarithmic(...)`.
-The differentiation method (FFT, Chebyshev, finite differences) is chosen automatically
-according to the axis type.
-
-### Solving PDEs
-
-Combine operators like formulas, then solve:
+### Boundary value problems and time evolution
 
 ```python
-# Poisson equation  ∇²u = -2π² sin(πx) sin(πy)  with u = 0 on the boundary
+# Poisson equation ∇²u = f on the unit square with u = 0 on the boundary
 grid = Grid(x=chebyshev(30, 0, 1), y=chebyshev(30, 0, 1))
-L = grid.laplacian_operator()
-u = L.solve(lambda x, y: -2 * np.pi**2 * np.sin(np.pi * x) * np.sin(np.pi * y), bcs=0)
+u = grid.laplacian_operator().solve(lambda x, y: np.sin(np.pi * x) * y, bcs=0)
 
-# Mixed boundary conditions per face
-u = L.solve(1.0, bcs={"x_low": 0, "x_high": Neumann(0), "y_low": 0, "y_high": Robin(1, 1, 0)})
+# Heat equation u_t = 0.1 u_xx on a rod with fixed ends
+rod = Grid(x=chebyshev(40, 0, 1))
+result = evolve(rod, 0.1 * rod.laplacian_operator(), np.sin(np.pi * rod.coords),
+                t_span=(0, 1), bcs=0, method="BDF")
+rod.plot(result.final)
 ```
 
-Eigenvalue problems — here the quantum harmonic oscillator — come without spurious modes:
+### A full ball
 
 ```python
-grid = Grid(x=chebyshev(80, -10, 10))
-x = grid.coords
-H = -0.5 * grid.diff_operator(2) + 0.5 * x**2
+ball = SphericalGrid(radial(16, 1.0), colatitude(16), periodic(32))
+X, Y, Z = ball.cartesian_coords
 
-energies, states = H.eig(k=4, bcs=0)     # [0.5, 1.5, 2.5, 3.5]
+ball.integrate(np.ones(ball.shape))      # 4.18879... = 4π/3, the volume element is built in
+ball.laplacian(X**2 + Y**2 + Z**2)       # 6 everywhere, including the center and the poles
+ball.faces["r_high"].integrate(Z**2)     # surface integral over the sphere: 4π/3
 ```
 
-Time-dependent problems are integrated with the method of lines:
+The [documentation](https://maroba.github.io/numgrids/) has a user guide for every feature and the full API reference.
 
-```python
-grid = Grid(x=chebyshev(40, 0, 1))
-result = evolve(grid, 0.1 * grid.laplacian_operator(),     # heat equation u_t = 0.1 u_xx
-                np.sin(np.pi * grid.coords), t_span=(0, 1), bcs=0, method="BDF")
-grid.plot(result.final)
-```
+## Example notebooks
 
-### Curvilinear grids & vector calculus
+<table>
+  <tr>
+    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/operators-and-solvers.html"><img src="docs/assets/gallery/operators-and-solvers.png" alt="Operators and solvers"><br><b>Operators and solvers</b></a><br><sub>Poisson, eigenmodes, time evolution</sub></td>
+    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/wave-equation-drum.html"><img src="docs/assets/gallery/wave-equation-drum.png" alt="Vibrations of a drum"><br><b>Vibrations of a drum</b></a><br><sub>Eigenmodes of the full disk</sub></td>
+    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/spherical-harmonics.html"><img src="docs/assets/gallery/spherical-harmonics.png" alt="Spherical harmonics"><br><b>Spherical harmonics</b></a><br><sub>Laplacian on the full sphere</sub></td>
+    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/quantum-harmonic-oscillator.html"><img src="docs/assets/gallery/quantum-harmonic-oscillator.png" alt="Quantum harmonic oscillator"><br><b>Quantum oscillator</b></a><br><sub>Schrödinger eigenvalue problem</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/poisson-equation-2d.html"><img src="docs/assets/gallery/poisson-equation-2d.png" alt="Poisson equation"><br><b>Poisson equation</b></a><br><sub>Boundary value problem in 2D</sub></td>
+    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/heat-equation-rod.html"><img src="docs/assets/gallery/heat-equation-rod.png" alt="Heat equation"><br><b>Heat equation</b></a><br><sub>Time evolution</sub></td>
+    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/convergence-study.html"><img src="docs/assets/gallery/convergence-study.png" alt="Convergence study"><br><b>Convergence study</b></a><br><sub>Spectral vs. finite differences</sub></td>
+    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/adaptive-refinement-demo.html"><img src="docs/assets/gallery/adaptive-refinement-demo.png" alt="Adaptive mesh refinement"><br><b>Adaptive refinement</b></a><br><sub>Resolution where it is needed</sub></td>
+  </tr>
+</table>
 
-```python
-grid = SphericalGrid(
-    chebyshev(25, 0.1, 5),          # r
-    chebyshev(20, 0.1, np.pi - 0.1),  # theta
-    periodic(30),                   # phi
-)
-R, Theta, Phi = grid.meshed_coords
-f = R**2
+## Citing numgrids
 
-grid.laplacian(f)                   # = 6
-gr, gt, gp = grid.gradient(f)       # (2r, 0, 0)
-grid.divergence(gr, gt, gp)         # div(grad f) = laplacian f
-grid.curl(gr, gt, gp)               # curl(grad f) = 0
-grid.integrate(np.ones(grid.shape)) # volume of the shell (volume element included)
-grid.faces["r_high"].integrate(f)   # surface integral over the outer sphere
-```
-
-`PolarGrid`, `CylindricalGrid`, `EllipticCylindricalGrid`, `ProlateSpheroidalGrid` and
-`OblateSpheroidalGrid` work the same way. Any other orthogonal coordinate system can be
-defined by its scale factors:
-
-```python
-grid = CurvilinearGrid(
-    axis_q1, axis_q2, axis_q3,
-    scale_factors=(
-        lambda c: np.ones_like(c[0]),          # h_1(q)
-        lambda c: c[0],                         # h_2(q) = q_1
-        lambda c: c[0] * np.sin(c[1]),          # h_3(q) = q_1 sin(q_2)
-    ),
-)
-```
-
-## Example Notebooks
-
-- [Operators and solvers: Poisson, eigenmodes, time evolution](examples/operators-and-solvers.ipynb)
-- [Heat equation in a rod](examples/heat-equation-rod.ipynb)
-- [Poisson equation in 2D](examples/poisson-equation-2d.ipynb)
-- [Quantum harmonic oscillator](examples/quantum-harmonic-oscillator.ipynb)
-- [Vibrations of a drum](examples/wave-equation-drum.ipynb)
-- [Spherical harmonics](examples/spherical-harmonics.ipynb)
-- [Convergence study](examples/convergence-study.ipynb)
-- [Adaptive mesh refinement](examples/adaptive-refinement-demo.ipynb)
-
-## How to Cite
-
-If you use *numgrids* in a publication, please cite it as:
-
-> M. Baer. *numgrids* software package. URL: https://github.com/maroba/numgrids. 2023
-
-BibTeX entry:
+If you use *numgrids* in a publication, please cite it. The *Cite this repository* button in
+the sidebar of the GitHub page provides APA and BibTeX entries, for example:
 
 ```bibtex
-@misc{numgrids,
-  title  = {{numgrids} Software Package},
-  author = {M. Baer},
+@software{numgrids,
+  author = {Baer, Matthias},
+  title  = {{numgrids}: Working with numerical grids made easy},
   url    = {https://github.com/maroba/numgrids},
-  key    = {numgrids},
-  note   = {\url{https://github.com/maroba/numgrids}},
   year   = {2023}
 }
 ```
 
-## Development
+## Contributing
 
-Clone the repository and install it in development mode with all extras:
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for how to report bugs,
+propose features and set up a development environment.
 
-```shell
-git clone https://github.com/maroba/numgrids.git
-cd numgrids
-pip install -e ".[dev]"
-```
+## License
 
-Run the tests (including the doctests in the docstrings) and the linter:
-
-```shell
-python -m pytest
-ruff check numgrids tests
-```
-
-Build the documentation:
-
-```shell
-sphinx-build -b html docs docs/_build/html
-```
-
-### Contributing
-
-1. Fork the repository
-2. Develop
-3. Write tests!
-4. Create an [issue](https://github.com/maroba/numgrids/issues)
-5. Create a pull request, when done
+*numgrids* is released under the [MIT License](LICENSE).
