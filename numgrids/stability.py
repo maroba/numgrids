@@ -80,6 +80,12 @@ _INFINITE = 1e6
 # A root between two points of the branch counts as located if it is enclosed within this
 # fraction of their distance (the interpolation error is of third order in the distance).
 _ENCLOSED = 2e-2
+# An eigenvalue jumps (instead of passing through zero) if it changes more than this many
+# times as fast as on average between two points of the branch.
+_JUMP = 20.0
+# ... and by more than this fraction of its change between the two points (a located root
+# is enclosed so tightly that only the rounding errors of the eigenvalues remain).
+_JUMP_MIN = 1e-3
 
 
 @dataclass
@@ -527,22 +533,34 @@ def _parabola_extremum(s: NDArray, lam: NDArray) -> float:
     return float(c[2] - c[1] ** 2 / (4 * c[0]))
 
 
-def _crossings(a: NDArray, b: NDArray) -> list[tuple[int, int, bool]]:
-    """Eigenvalues that cross the imaginary axis between two neighbouring points of a branch.
+def _assign(a: NDArray, b: NDArray) -> list[tuple[int, int]]:
+    """Assign the eigenvalues *a* at one point of a branch to those at a neighbouring point, *b*.
 
-    *a* and *b* are the leading eigenvalues at the two points.  Each
-    eigenvalue of *a* is assigned to one of *b* such that the eigenvalues
-    move as little as possible in total.  Returns ``(j, l, hopf)`` for
-    each pair ``a[j]``, ``b[l]`` with real parts of opposite sign; *hopf*
-    tells if the pair is complex.  Of a conjugate pair, only the member
-    with the positive imaginary part is returned.
+    Returns pairs of indices ``(j, l)``: ``b[l]`` continues ``a[j]``.  The
+    assignment minimizes the sum of the *squared* distances.  With plain
+    distances, real eigenvalues would have many equally good assignments
+    (every assignment that preserves their order, and others), and
+    rounding errors would pick one of them.  The squared distances have
+    one minimum: real eigenvalues are assigned in their order.
     """
     ja, jb = np.flatnonzero(np.isfinite(a)), np.flatnonzero(np.isfinite(b))
     if len(ja) == 0 or len(jb) == 0:
         return []
-    rows, cols = scipy.optimize.linear_sum_assignment(np.abs(a[ja][:, None] - b[jb][None, :]))
+    rows, cols = scipy.optimize.linear_sum_assignment(np.abs(a[ja][:, None] - b[jb][None, :]) ** 2)
+    return [(int(j), int(l)) for j, l in zip(ja[rows], jb[cols])]
+
+
+def _crossings(a: NDArray, b: NDArray) -> list[tuple[int, int, bool]]:
+    """Eigenvalues that cross the imaginary axis between two neighbouring points of a branch.
+
+    *a* and *b* are the leading eigenvalues at the two points, assigned to
+    each other by :func:`_assign`.  Returns ``(j, l, hopf)`` for each pair
+    ``a[j]``, ``b[l]`` with real parts of opposite sign; *hopf* tells if
+    the pair is complex.  Of a conjugate pair, only the member with the
+    positive imaginary part is returned.
+    """
     found = []
-    for j, l in zip(ja[rows], jb[cols]):
+    for j, l in _assign(a, b):
         za, zb = a[j], b[l]
         if (za.real > 0) == (zb.real > 0):
             continue
@@ -551,16 +569,16 @@ def _crossings(a: NDArray, b: NDArray) -> list[tuple[int, int, bool]]:
         hopf = bool(near.imag != 0)
         if hopf and (za.imag + zb.imag < 0 or near.imag < 0):
             continue
-        found.append((int(j), int(l), hopf))
+        found.append((j, l, hopf))
     return found
+
 
 def _follow(a: NDArray, j: int, b: NDArray) -> int:
     """Index of the eigenvalue in *b* that continues ``a[j]``, assigned as in :func:`_crossings`."""
-    ja, jb = np.flatnonzero(np.isfinite(a)), np.flatnonzero(np.isfinite(b))
-    rows, cols = scipy.optimize.linear_sum_assignment(np.abs(a[ja][:, None] - b[jb][None, :]))
-    for row, col in zip(ja[rows], jb[cols]):
+    for row, col in _assign(a, b):
         if row == j:
-            return int(col)
+            return col
+    jb = np.flatnonzero(np.isfinite(b))
     return int(jb[np.argmin(np.abs(b[jb] - a[j]))])
 
 
@@ -694,6 +712,18 @@ def _root_on_branch(first: _Sample, last: _Sample, step: Callable, dot: Callable
                     break
         if hi.s - lo.s <= _ENCLOSED * width:
             break
+    # Neither end of the bracket is close to a root, and the bracket is still wide: the
+    # secant steps crept towards a jump of the function from one side (or ran out of
+    # iterations).  Bisection encloses the sign change, so that the caller can tell a
+    # jump from a root.
+    scale = max(abs(first.f), abs(last.f))
+    for _ in range(maxiter):
+        if hi.s - lo.s <= _ENCLOSED * width / 2 or min(abs(lo.f), abs(hi.f)) <= 1e-3 * scale:
+            break
+        new = evaluate((lo.s + hi.s) / 2)
+        if new is None:
+            break
+        narrow(new)
     return converged or hi.s - lo.s <= _ENCLOSED * width, lo, hi, samples
 
 
@@ -847,10 +877,14 @@ def _analyze_branch(problem, ys, lams, tangents, eigenvalues, step, dot, lineari
                 converged, lo, hi, samples = False, first, last, [first, last]
                 if refine and first.ty is not None and last.s > 0:
                     converged, lo, hi, samples = _root_on_branch(first, last, step, dot, real_part)
-                    if len(samples) > 2 and min(abs(lo.f), abs(hi.f)) > 0.1 * max(abs(za.real), abs(zb.real)):
-                        # The real part jumps instead of passing through zero: these are two
-                        # different eigenvalues.  The set of computed eigenvalues has changed
-                        # (large problems: the eigenvalues closest to the shift), nothing crossed.
+                    width = (hi.s - lo.s) / (last.s - first.s)
+                    if (len(samples) > 2 and width <= _ENCLOSED
+                            and abs(hi.f - lo.f) > max(_JUMP * width, _JUMP_MIN) * abs(zb.real - za.real)):
+                        # The real part jumps instead of passing through zero: over the short
+                        # distance that encloses the sign change, it changes far more than a
+                        # continuous eigenvalue would.  These are two different eigenvalues.
+                        # The set of computed eigenvalues has changed (large problems: the
+                        # eigenvalues closest to the shift), nothing crossed.
                         continue
                 else:
                     first.ty = last.ty = None  # plain linear interpolation
