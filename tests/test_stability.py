@@ -320,7 +320,8 @@ class TestBranchPoints:
         assert branch.eigenvalues.shape == (101, 1)
         assert branch.n_unstable.max() == 1
 
-    def test_change_of_the_computed_eigenvalues_is_no_bifurcation(self, rod, monkeypatch):
+    @pytest.mark.parametrize("entering", [80.0, 0.5])
+    def test_change_of_the_computed_eigenvalues_is_no_bifurcation(self, rod, monkeypatch, entering):
         # For large problems, the computed eigenvalues are those closest to a shift.  An
         # eigenvalue that enters this set looks like a crossing, but does not pass through zero.
         original = numgrids.stability._Linearization.leading
@@ -328,7 +329,7 @@ class TestBranchPoints:
         def leading(self, y, args=(), vectors=False):
             vals, vecs = original(self, y, args, vectors)
             if args[0] > 5.5 and not vectors:
-                vals = np.concatenate([[80.0], vals[:-1]])
+                vals = np.concatenate([[entering], vals[:-1]])
             return vals, vecs
 
         monkeypatch.setattr(numgrids.stability._Linearization, "leading", leading)
@@ -674,3 +675,21 @@ class TestErrors:
         continuation(rod, F, 0, 3, bcs=0, jacobian=J, ds=0.3, max_steps=6, stability=2, verbose=True)
         out = capsys.readouterr().out
         assert "0 unstable mode(s)" in out and "1 unstable mode(s)" in out
+
+
+def test_eigenvalues_are_assigned_in_their_order():
+    # With plain distances as cost, these two sets have several equally good assignments
+    # (165.78 in total for both the pairing in order and the one that moves only the last
+    # eigenvalue), and rounding errors decided.  The pairing must not depend on them.
+    from numgrids.stability import _assign, _crossings, _follow
+    a = np.array([-4.87, -34.48, -83.83], dtype=complex)
+    b = np.array([80.0, -3.87, -33.48], dtype=complex)
+    for shift in (0.0, 1e-13, -1e-13):
+        assert _assign(a + shift, b) == [(0, 0), (1, 1), (2, 2)]
+        assert _crossings(a + shift, b) == [(0, 0, False)]
+        assert _follow(a + shift, 2, b) == 2
+    # Complex pairs keep their partners, and missing values are skipped.
+    c = np.array([0.1 + 2j, 0.1 - 2j, -5.0, np.nan])
+    d = np.array([-5.2, -0.1 - 2.1j, -0.1 + 2.1j, np.nan])
+    assert sorted(_assign(c, d)) == [(0, 2), (1, 1), (2, 0)]
+    assert _crossings(d, c) == [(2, 0, True)]
