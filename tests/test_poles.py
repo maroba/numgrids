@@ -17,6 +17,8 @@ from numgrids import (
     ColatitudeAxis,
     Diff,
     Interpolator,
+    Neumann,
+    PolarGrid,
     SphericalGrid,
     SphericalSurfaceGrid,
     chebyshev,
@@ -249,7 +251,7 @@ def test_sparse_eig_with_zero_eigenvalue_and_degeneracies():
     # clusters; the iterative solver must neither lose accuracy nor members.
     s = sphere(24, 48)
     expected = [l * (l + 1) for l in range(4) for _ in range(2 * l + 1)]
-    vals, _ = (-s.laplacian_operator()).eig(k=16, dense_threshold=10)
+    vals, _ = (-s.laplacian_operator()).eig(k=16, dense_threshold=10, method="direct")
     assert np.isrealobj(vals)
     npt.assert_allclose(vals, expected, atol=1e-9)
 
@@ -258,8 +260,35 @@ def test_sparse_eig_does_not_miss_degenerate_eigenvalues():
     b = ball()
     assert b.size > 2000      # uses the sparse (Arnoldi) path
     expected = [np.pi] + [4.493409457909064] * 3 + [5.763459196894550] * 5
-    vals, _ = (-b.laplacian_operator()).eig(k=9, bcs=0)
+    vals, _ = (-b.laplacian_operator()).eig(k=9, bcs=0, method="direct")
     npt.assert_allclose(np.sqrt(vals), expected, rtol=1e-10)
     # Results are reproducible:
-    vals2, _ = (-b.laplacian_operator()).eig(k=9, bcs=0)
+    vals2, _ = (-b.laplacian_operator()).eig(k=9, bcs=0, method="direct")
     npt.assert_array_equal(vals, vals2)
+
+
+def test_eig_by_fourier_decoupling_matches_direct_solver():
+    b = ball()
+    L = -b.laplacian_operator()
+    expected = [np.pi] + [4.493409457909064] * 3 + [5.763459196894550] * 5
+    vals, vecs = L.eig(k=9, bcs=0)                  # one small problem per azimuthal mode
+    npt.assert_allclose(np.sqrt(vals), expected, rtol=1e-10)
+    assert np.isrealobj(vecs)
+    for lam, v in zip(vals, vecs):
+        npt.assert_allclose(L(v)[b.interior], lam * v[b.interior], atol=1e-7)
+    # Orthonormal within the degenerate eigenspaces
+    flat = vecs.reshape(len(vecs), -1)
+    npt.assert_allclose(flat[1:4] @ flat[1:4].T, np.eye(3), atol=1e-10)
+
+
+def test_eig_by_fourier_decoupling_with_mass_and_neumann_conditions():
+    disk = PolarGrid(radial(16, 1.0), periodic(24))
+    L = -disk.laplacian_operator()
+    rho = 1 + disk.meshed_coords[0] ** 2
+    for kwargs in ({"bcs": Neumann(0)}, {"bcs": 0, "M": rho}, {"bcs": Neumann(0), "M": rho, "sigma": 20.0}):
+        vals, vecs = L.eig(k=7, **kwargs)
+        ref, _ = L.eig(k=7, method="direct", **kwargs)
+        npt.assert_allclose(vals, ref, rtol=1e-8, atol=1e-8)
+        M = kwargs.get("M", 1.0)
+        for lam, v in zip(vals, vecs):
+            npt.assert_allclose(L(v)[disk.interior], (lam * M * v)[disk.interior], atol=1e-6)

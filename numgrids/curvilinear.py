@@ -28,7 +28,7 @@ import numpy as np
 import scipy.sparse
 from numpy.typing import NDArray
 
-from numgrids.axes import Axis, ColatitudeAxis, RadialAxis
+from numgrids.axes import Axis, ColatitudeAxis, RadialAxis, UnboundedAxis
 from numgrids.grids import Grid
 
 if TYPE_CHECKING:
@@ -167,6 +167,8 @@ class CurvilinearGrid(Grid):
         self._h_arrays: tuple[NDArray, ...] | None = None
         self._jacobian: NDArray | None = None
         self._lap_coeffs: list | None = None
+        self._odd_diff_ops: dict = {}
+        self._parities: dict = {}
         # Fail early if an axis through the origin or the poles cannot be supported:
         for i, ax in enumerate(self.axes):
             if isinstance(ax, _FOLDED_AXES):
@@ -317,16 +319,142 @@ class CurvilinearGrid(Grid):
                 f"Expected {self.ndims} vector components, got {len(v)}."
             )
         v = [self._check_field(vi, f"v[{i}]") for i, vi in enumerate(v)]
-        self._ensure_diff_ops()
         h = self._evaluate_scale_factors()
         J = self._evaluate_jacobian()
-        result = np.zeros(self.shape)
+        result = np.zeros(self.shape, dtype=np.result_type(*v, float))
         with np.errstate(divide="ignore", invalid="ignore"):
             for i in range(self.ndims):
                 coeff = J / h[i]
-                result = result + self._diff_ops[i](coeff * v[i])
+                result = result + self._component_diff(i, i)(coeff * v[i])
             result = result / J
         return _finite_or_zero(result)
+
+    # ── derivatives of vector components across the origin and the poles ──
+
+    def _reflected_coords(self, axis_index: int) -> tuple[NDArray, ...]:
+        """Meshed coordinates continued across the origin (r -> -r) or a pole."""
+        coords = list(self.meshed_coords)
+        if isinstance(self.axes[axis_index], RadialAxis):
+            coords[axis_index] = -coords[axis_index]
+        else:
+            coords[axis_index] = 2 * np.pi - coords[axis_index]
+        return tuple(coords)
+
+    def _covariant_parity(self, axis_index: int, component: int) -> int:
+        r"""Parity of the covariant component :math:`h_k v_k` across a folded axis.
+
+        A radial axis through the origin and a colatitude axis through the
+        poles compute derivatives from the values at the antipodal points,
+        assuming that the differentiated quantity is the same function on
+        both sides (true for scalar fields).  Components of vector fields
+        refer to the local basis, which may flip when the coordinate line
+        is continued through the singular point:
+        :math:`h_k v_k = \mathbf{v}\cdot\partial\mathbf{x}/\partial q_k`
+        is even or odd, depending on whether the tangent vector
+        :math:`\partial\mathbf{x}/\partial q_k` at the continued
+        coordinates equals plus or minus the one at the antipodal point.
+        The tangent vectors are computed from the Cartesian mapping by
+        complex-step differentiation.
+        """
+        key = (axis_index, component)
+        if key not in self._parities:
+            if self._cartesian_fn is None:
+                raise NotImplementedError(
+                    "Vector calculus across the origin or the poles needs the Cartesian mapping."
+                )
+            antipodal = self._antipodal_map(axis_index)
+
+            def tangent(coords):
+                coords = list(coords)
+                step = 1e-30
+                coords[component] = coords[component] + 1j * step
+                return [np.imag(np.broadcast_to(np.asarray(x, dtype=complex), self.shape)) / step
+                        for x in self._cartesian_fn(tuple(coords))]
+
+            continued = tangent(self._reflected_coords(axis_index))
+            at_antipode = [antipodal(x) for x in tangent(self.meshed_coords)]
+            overlap = sum(float(np.sum(a * b)) for a, b in zip(continued, at_antipode))
+            self._parities[key] = 1 if overlap >= 0 else -1
+        return self._parities[key]
+
+    def _scalar_parity(self, axis_index: int, coeff: Callable) -> int:
+        """Parity across a folded axis of ``coeff(h)``, a function of the scale factors."""
+        antipodal = self._antipodal_map(axis_index)
+        coords = self._reflected_coords(axis_index)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            h_ref = [np.broadcast_to(np.asarray(fn(coords), dtype=float), self.shape)
+                     for fn in self._scale_factor_fns]
+            continued = _finite_or_zero(coeff(h_ref))
+            at_antipode = antipodal(_finite_or_zero(coeff(self._evaluate_scale_factors())))
+        return 1 if float(np.sum(continued * at_antipode)) >= 0 else -1
+
+    def _diff_parity(self, axis_index: int, component: int) -> int:
+        r"""Parity of the quantity differentiated along *axis_index* in divergence and curl.
+
+        Divergence: :math:`(J/h_i)\, v_i = (J/h_i^2)\,(h_i v_i)` along axis *i*;
+        curl: :math:`h_k v_k` along axis :math:`j \ne k`.
+        """
+        if not isinstance(self.axes[axis_index], _FOLDED_AXES):
+            return 1
+        key = ("diff", axis_index, component)
+        if key not in self._parities:
+            parity = self._covariant_parity(axis_index, component)
+            if component == axis_index:
+                def coeff(h):
+                    J = np.ones(self.shape)
+                    for hk in h:
+                        J = J * hk
+                    return J / h[axis_index] ** 2
+                parity *= self._scalar_parity(axis_index, coeff)
+            self._parities[key] = parity
+        return self._parities[key]
+
+    def _component_diff(self, axis_index: int, component: int):
+        """First derivative along an axis, for the term of divergence/curl with *component*."""
+        self._ensure_diff_ops()
+        if self._diff_parity(axis_index, component) == 1:
+            return self._diff_ops[axis_index]
+        if axis_index not in self._odd_diff_ops:
+            from numgrids.diff import ColatitudeDiff, RadialDiff
+            cls = RadialDiff if isinstance(self.axes[axis_index], RadialAxis) else ColatitudeDiff
+            self._odd_diff_ops[axis_index] = cls(self, 1, axis_index, parity=-1)
+        return self._odd_diff_ops[axis_index]
+
+    def gradient_operator(self) -> tuple[Operator, ...]:
+        r"""The components of the gradient as operators, :math:`G_i = h_i^{-1}\,\partial_i`."""
+        key = "gradient"
+        if key not in self.cache["operators"]:
+            from numgrids.operators import Operator
+            self._ensure_diff_ops()
+            h = self._evaluate_scale_factors()
+            ops = []
+            with np.errstate(divide="ignore", invalid="ignore"):
+                for i in range(self.ndims):
+                    inv_h = _finite_or_zero(1.0 / h[i]).ravel()
+                    ops.append(Operator(self, scipy.sparse.diags(inv_h) @ self._diff_ops[i].as_matrix()))
+            self.cache["operators"][key] = tuple(ops)
+        return self.cache["operators"][key]
+
+    def divergence_operator(self) -> tuple[Operator, ...]:
+        r"""The divergence as one operator per vector component.
+
+        :math:`\nabla\cdot\mathbf{v} = \sum_i D_i v_i` with
+        :math:`D_i = J^{-1}\,\partial_i\,(J/h_i)`.
+        """
+        key = "divergence"
+        if key not in self.cache["operators"]:
+            from numgrids.operators import Operator
+            h = self._evaluate_scale_factors()
+            J = self._evaluate_jacobian()
+            ops = []
+            with np.errstate(divide="ignore", invalid="ignore"):
+                inv_J = scipy.sparse.diags(_finite_or_zero(1.0 / J).ravel())
+                for i in range(self.ndims):
+                    coeff = scipy.sparse.diags(_finite_or_zero(J / h[i]).ravel())
+                    D = self._component_diff(i, i).as_matrix()
+                    ops.append(Operator(self, inv_J @ D @ coeff))
+            self.cache["operators"][key] = tuple(ops)
+        return self.cache["operators"][key]
 
     def laplacian(self, f: NDArray) -> NDArray:
         r"""Laplacian of a scalar field.
@@ -368,9 +496,11 @@ class CurvilinearGrid(Grid):
             with np.errstate(divide="ignore", invalid="ignore"):
                 for i in range(self.ndims):
                     c = _finite_or_zero(J / h[i] ** 2)
-                    if isinstance(self.axes[i], _FOLDED_AXES):
+                    if isinstance(self.axes[i], _FOLDED_AXES + (UnboundedAxis,)):
                         # The coefficient (e.g. c = r or sin(theta)) is not an even field
                         # across the origin/poles, so the folded derivative does not apply.
+                        # Nor can an unbounded axis differentiate a coefficient that grows
+                        # towards infinity (e.g. c = r^2).
                         dc = self._coefficient_derivative(i)
                     else:
                         dc = self.diff(c, 1, i)
@@ -385,7 +515,8 @@ class CurvilinearGrid(Grid):
         which is exact to round-off for analytic expressions.
         """
         coords = list(self.meshed_coords)
-        step = 1e-30 * max(1.0, abs(self.axes[i].high))
+        high = self.axes[i].high
+        step = 1e-30 * (max(1.0, abs(high)) if np.isfinite(high) else 1.0)
         coords[i] = coords[i] + 1j * step
         coords = tuple(coords)
         with np.errstate(divide="ignore", invalid="ignore"):
@@ -482,10 +613,9 @@ class CurvilinearGrid(Grid):
 
     def _curl_2d(self, v0: NDArray, v1: NDArray) -> NDArray:
         """Scalar curl for 2D curvilinear grids."""
-        self._ensure_diff_ops()
         h = self._evaluate_scale_factors()
-        d0 = self._diff_ops[0]
-        d1 = self._diff_ops[1]
+        d0 = self._component_diff(0, 1)
+        d1 = self._component_diff(1, 0)
         with np.errstate(divide="ignore", invalid="ignore"):
             result = (1.0 / (h[0] * h[1])) * (
                 d0(h[1] * v1) - d1(h[0] * v0)
@@ -494,17 +624,15 @@ class CurvilinearGrid(Grid):
 
     def _curl_3d(self, v0: NDArray, v1: NDArray, v2: NDArray) -> tuple[NDArray, NDArray, NDArray]:
         """Vector curl for 3D curvilinear grids."""
-        self._ensure_diff_ops()
         h = self._evaluate_scale_factors()
         v = (v0, v1, v2)
-        d = [self._diff_ops[i] for i in range(3)]
 
         components: list[NDArray] = []
         cyclic = [(0, 1, 2), (1, 2, 0), (2, 0, 1)]
         for _i, j, k in cyclic:
             with np.errstate(divide="ignore", invalid="ignore"):
                 comp = (1.0 / (h[j] * h[k])) * (
-                    d[j](h[k] * v[k]) - d[k](h[j] * v[j])
+                    self._component_diff(j, k)(h[k] * v[k]) - self._component_diff(k, j)(h[j] * v[j])
                 )
             components.append(_finite_or_zero(comp))
         return tuple(components)

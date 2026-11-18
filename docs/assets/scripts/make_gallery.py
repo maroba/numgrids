@@ -15,12 +15,19 @@ from PIL import Image, ImageChops
 #: notebook name -> index of the figure to use
 SELECTION = {
     "operators-and-solvers": 2,
+    "nonlinear-problems": 1,
+    "quantum-dynamics": 1,
+    "solitons": 1,
+    "pattern-formation": 1,
+    "hydrogen-atom": 0,
+    "heat-conduction": 2,
     "heat-equation-rod": 0,
     "poisson-equation-2d": 0,
     "quantum-harmonic-oscillator": 0,
     "wave-equation-drum": 0,
     "spherical-harmonics": 0,
     "convergence-study": 1,
+    "spectral-resolution": 1,
     "adaptive-refinement-demo": 0,
 }
 SIZE = (480, 360)

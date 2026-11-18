@@ -215,3 +215,11 @@ plus once for the global estimate). For expensive functions (e.g. PDE
 solvers), consider using a coarser initial grid or a larger tolerance to
 reduce the total number of function evaluations.
 ```
+
+```{tip}
+On spectral axes (Chebyshev, periodic, unbounded) there is a cheaper
+alternative: `grid.resolution(f)` reads the resolution of each axis off
+the spectral coefficients of a single evaluation and suggests the number
+of points. See
+[Spectral coefficients and resolution](spectral.md#relation-to-convergence-studies-and-adaptive-refinement).
+```

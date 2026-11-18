@@ -30,12 +30,16 @@ These are the zeros of the Bessel functions, correct to 13 digits on a 30 × 40 
 ## Features
 
 - **Grids and coordinates**: Chebyshev, equidistant, periodic and logarithmic axes in any dimension;
-  polar, cylindrical, spherical (volume and surface), elliptic and spheroidal coordinates, or your own;
-  full disks, cylinders, spheres and balls without coordinate singularities
+  unbounded domains (half line, whole line); polar, cylindrical, spherical (volume and surface), elliptic
+  and spheroidal coordinates, or your own; full disks, cylinders, spheres and balls without coordinate
+  singularities
 - **Calculus**: spectral (FFT, Chebyshev) or finite-difference derivatives; gradient, divergence, curl,
-  Laplacian; volume and surface integrals; spectral interpolation
-- **Solving equations**: operator algebra, `solve()` for boundary value problems, `eig()` for eigenvalue
-  problems, Dirichlet/Neumann/Robin conditions in one line, time evolution (method of lines)
+  Laplacian; volume and surface integrals; inner products and norms; spectral interpolation
+- **Solving equations**: operator algebra, `solve()` for boundary value problems with fast direct solvers
+  chosen automatically, `eig()` for (generalized) eigenvalue problems, `solve_nonlinear()` and
+  `continuation()` for nonlinear problems, Dirichlet/Neumann/Robin conditions in one line
+- **Time evolution**: method of lines for heat, wave, reaction-diffusion and Schrödinger-type equations,
+  time-dependent boundary values and sources, exponential integrator without time stepping error
 - **Tools**: adaptive mesh refinement, convergence studies, plotting, save/load, xarray/NetCDF;
   all operators export SciPy sparse matrices
 

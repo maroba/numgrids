@@ -34,6 +34,10 @@ periodic(64)                # FFT spectral, [0, 2*pi) by default
 logarithmic(40, 1e-3, 1.0)  # log-spaced points
 ```
 
+Special axes cover the origin and the poles of curvilinear grids (`radial`,
+`colatitude`) and unbounded domains (`semi_infinite` for a half line,
+`infinite` for the whole real line).
+
 See the [Axes guide](guide/axes.md) for details on when to pick which.
 
 ## 2. Build a grid
@@ -183,7 +187,18 @@ H = -0.5 * grid.diff_operator(2) + 0.5 * x**2
 energies, states = H.eig(k=4, bcs=0)    # [0.5, 1.5, 2.5, 3.5]
 ```
 
-## 9. Evolve in time
+## 9. Solve nonlinear problems
+
+Write down the residual $F(u)$; Newton's method does the rest. The Bratu problem
+$u'' + e^u = 0$, $u(0) = u(1) = 0$:
+
+```python
+grid = Grid(x=chebyshev(31, 0, 1))
+u = solve_nonlinear(grid, lambda u: grid.diff(u, 2) + np.exp(u), u0=0, bcs=0)
+u.max()    # 0.14053921...
+```
+
+## 10. Evolve in time
 
 ```python
 grid = Grid(x=chebyshev(40, 0, 1))
@@ -191,6 +206,8 @@ result = evolve(grid, 0.1 * grid.laplacian_operator(), np.sin(np.pi * grid.coord
                 t_span=(0, 1), bcs=0, method="BDF")
 grid.plot(result.final)   # requires matplotlib
 ```
+
+Neumann and Robin conditions work as well, e.g. an insulated rod: `bcs=Neumann(0)`.
 
 ## Where to go next
 
@@ -204,6 +221,7 @@ grid.plot(result.final)   # requires matplotlib
 | Spherical, cylindrical, polar, and custom coordinates | [Curvilinear grids](guide/curvilinear.md) |
 | Dirichlet, Neumann, and Robin boundary conditions | [Boundary conditions](guide/boundary-conditions.md) |
 | Operator algebra, `solve()` and `eig()` | [Operators and solvers](guide/operators.md) |
+| Nonlinear boundary value problems | [Nonlinear problems](guide/nonlinear.md) |
 | Heat, wave and Schrödinger equations | [Time evolution](guide/time-evolution.md) |
 | Plotting fields on grids | [Plotting](guide/plotting.md) |
 | Saving and loading grids, xarray | [I/O](guide/io.md) |

@@ -353,6 +353,65 @@ class Grid:
             self.cache["operators"][key] = Operator(self, M)
         return self.cache["operators"][key]
 
+    def gradient_operator(self) -> tuple[Operator, ...]:
+        r"""The components of the gradient as operators.
+
+        Returns one :class:`~numgrids.operators.Operator` per axis, so that
+        ``[G(f) for G in grid.gradient_operator()]`` equals
+        ``grid.gradient(f)``.  Together with :meth:`divergence_operator`
+        this builds operators in divergence form, e.g. diffusion with a
+        variable coefficient :math:`\nabla\cdot(k \nabla u)`:
+
+        >>> import numpy as np
+        >>> from numgrids import Grid, chebyshev
+        >>> grid = Grid(x=chebyshev(20, 0, 1))
+        >>> k = 1 + grid.coords
+        >>> (G,), (D,) = grid.gradient_operator(), grid.divergence_operator()
+        >>> L = D @ (k * G)                                   # u -> (k u')'
+        >>> bool(np.allclose(L(grid.coords ** 2), 2 + 4 * grid.coords))
+        True
+        """
+        return tuple(self.diff_operator(1, i) for i in range(self.ndims))
+
+    def divergence_operator(self) -> tuple[Operator, ...]:
+        r"""The divergence as one operator per vector component.
+
+        :math:`\nabla\cdot\mathbf{v} = \sum_i D_i v_i` for the returned
+        operators :math:`D_i`.  On curvilinear grids they act on the
+        physical components of the vector field and include the scale
+        factors.  See :meth:`gradient_operator` for an example.
+        """
+        return tuple(self.diff_operator(1, i) for i in range(self.ndims))
+
+    def diffusion_operator(self, k=1.0) -> Operator:
+        r"""The operator :math:`u \mapsto \nabla\cdot(k\,\nabla u)` in divergence form.
+
+        Parameters
+        ----------
+        k : float, NDArray or callable
+            The coefficient (e.g. a conductivity or diffusivity): a scalar,
+            an array of grid shape, or a callable evaluated on the grid.
+            With ``k = 1`` this is the Laplacian (but
+            :meth:`laplacian_operator` is the more accurate discretization
+            of it on curvilinear grids).
+
+        Examples
+        --------
+        Steady heat conduction :math:`(k u')' = 0` with
+        :math:`k = 1 + x`, :math:`u(0) = 0`, :math:`u(1) = 1`:
+
+        >>> import numpy as np
+        >>> from numgrids import Grid, chebyshev
+        >>> grid = Grid(x=chebyshev(20, 0, 1))
+        >>> u = grid.diffusion_operator(lambda x: 1 + x).solve(0, bcs={"x_low": 0, "x_high": 1})
+        >>> bool(np.allclose(u, np.log(1 + grid.coords) / np.log(2)))
+        True
+        """
+        if callable(k):
+            k = self.evaluate(k)
+        k = np.broadcast_to(np.asarray(k), self.shape)
+        return sum(D @ (k * G) for D, G in zip(self.divergence_operator(), self.gradient_operator()))
+
     def gradient(self, f: NDArray) -> tuple[NDArray, ...]:
         r"""Gradient :math:`\nabla f` of a scalar field (one array per axis)."""
         f = self._check_field(f)
@@ -391,6 +450,193 @@ class Grid:
         """
         from numgrids.api import integrate
         return integrate(self, f)
+
+    @property
+    def quadrature_weights(self) -> NDArray:
+        """Quadrature weights of all grid points, as an array of grid shape.
+
+        ``np.sum(grid.quadrature_weights * f)`` equals ``grid.integrate(f)``;
+        on curvilinear grids the weights include the volume element.
+
+        Examples
+        --------
+        >>> from numgrids import PolarGrid, radial, periodic
+        >>> disk = PolarGrid(radial(8, 1.0), periodic(16))
+        >>> round(float(disk.quadrature_weights.sum()), 10)         # area of the unit disk
+        3.1415926536
+        """
+        if "weights" not in self.cache:
+            from numgrids.integration import Integral
+            if self.cache["integral"] is None:
+                self.cache["integral"] = Integral(self)
+            W = self.cache["integral"].weight_array
+            W.setflags(write=False)
+            self.cache["weights"] = W
+        return self.cache["weights"]
+
+    def inner(self, f: NDArray, g: NDArray) -> float | complex:
+        r"""The :math:`L^2` inner product :math:`\langle f, g\rangle = \int \bar f\, g\, dV`.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from numgrids import Grid, periodic
+        >>> grid = Grid(x=periodic(16))
+        >>> x = grid.coords
+        >>> round(grid.inner(np.sin(x), np.sin(x)), 10), round(abs(grid.inner(np.sin(x), np.cos(x))), 10)
+        (3.1415926536, 0.0)
+        """
+        f = self._check_field(f, "f")
+        g = self._check_field(g, "g")
+        return self.integrate(np.conj(f) * g)
+
+    def norm(self, f: NDArray, ord: int | float | str = 2) -> float:
+        r"""Norm of a meshed function.
+
+        Parameters
+        ----------
+        f : NDArray
+            Meshed function of shape ``grid.shape``.
+        ord : 2, 1, ``"max"`` or ``numpy.inf``
+            ``2`` (default): the :math:`L^2` norm :math:`(\int |f|^2 dV)^{1/2}`;
+            ``1``: the :math:`L^1` norm :math:`\int |f|\, dV`;
+            ``"max"`` or ``numpy.inf``: the largest absolute value.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from numgrids import Grid, chebyshev
+        >>> grid = Grid(x=chebyshev(20, 0, 2))
+        >>> round(grid.norm(np.ones(grid.shape)), 10), grid.norm(grid.coords, "max")
+        (1.4142135624, 2.0)
+        """
+        f = self._check_field(f)
+        if ord == 2:
+            return float(np.sqrt(abs(self.integrate(np.abs(f) ** 2))))
+        if ord == 1:
+            return float(self.integrate(np.abs(f)))
+        if ord == "max" or ord == np.inf:
+            return float(np.max(np.abs(f)))
+        raise ValueError(f"Unknown norm: {ord!r}. Use 2, 1 or 'max'.")
+
+    def mean(self, f: NDArray) -> float | complex:
+        r"""The average :math:`\int f\, dV / \int dV` of a meshed function over the domain."""
+        return self.integrate(f) / self.integrate(np.ones(self.shape))
+
+    def coefficients(self, f: NDArray, axis: int | str | tuple | list | None = None) -> NDArray:
+        r"""Spectral expansion coefficients of a meshed function.
+
+        Fourier coefficients :math:`c_k` along periodic axes, Chebyshev
+        coefficients :math:`a_k` along Chebyshev and unbounded axes. See
+        :func:`numgrids.spectral.coefficients` and :mod:`numgrids.spectral`
+        for the conventions.
+
+        Parameters
+        ----------
+        f : NDArray
+            Meshed function of shape ``grid.shape``.
+        axis : int, str, sequence of those, or None
+            The axis or axes to transform (default: all axes, which gives
+            the coefficients of the tensor-product expansion).
+
+        Examples
+        --------
+        >>> from numgrids import Grid, chebyshev
+        >>> grid = Grid(x=chebyshev(5, -1, 1))
+        >>> grid.coefficients(grid.coords ** 2).round(12) + 0        # x^2 = (T_0 + T_2) / 2
+        array([0.5, 0. , 0.5, 0. , 0. ])
+        """
+        from numgrids.spectral import coefficients
+        return coefficients(self, f, axis=axis)
+
+    def from_coefficients(self, c: NDArray, axis: int | str | tuple | list | None = None) -> NDArray:
+        """Values on the grid of a function given by its expansion coefficients.
+
+        The inverse of :meth:`coefficients` (for the same *axis* argument);
+        see :func:`numgrids.spectral.from_coefficients`.
+        """
+        from numgrids.spectral import from_coefficients
+        return from_coefficients(self, c, axis=axis)
+
+    def resample(self, f: NDArray, target: Grid | int | tuple | list) -> NDArray:
+        """Transfer a meshed function to a grid with other numbers of points.
+
+        The spectral coefficients are padded with zeros (which is spectral
+        interpolation) or truncated; see :func:`numgrids.spectral.resample`.
+
+        Parameters
+        ----------
+        f : NDArray
+            Meshed function of shape ``grid.shape``.
+        target : Grid, int or sequence of int
+            The new numbers of points per axis, or a grid that differs
+            from this one in the numbers of points only.
+        """
+        from numgrids.spectral import resample
+        return resample(self, f, target)
+
+    def resolution(self, f: NDArray, tol: float = 1e-8):
+        """Check whether a meshed function is resolved on this grid.
+
+        Looks at the decay of the spectral coefficients along each axis
+        and returns a :class:`~numgrids.spectral.Resolution` with the
+        verdict and the number of points needed per axis; see
+        :func:`numgrids.spectral.resolution`.
+
+        Parameters
+        ----------
+        f : NDArray
+            Meshed function of shape ``grid.shape``.
+        tol : float
+            Tolerance for the highest modes, relative to the largest one.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from numgrids import Grid, chebyshev
+        >>> grid = Grid(x=chebyshev(30, 0, 1))
+        >>> grid.resolution(np.exp(grid.coords))
+        Resolution at tol=1e-08: resolved
+          axis x: resolved, 10 of 30 points needed
+        >>> grid.is_resolved(np.tanh(20 * (grid.coords - 0.5)))
+        False
+        """
+        from numgrids.spectral import resolution
+        return resolution(self, f, tol)
+
+    def is_resolved(self, f: NDArray, tol: float = 1e-8) -> bool:
+        """Whether a meshed function is resolved on this grid to the tolerance *tol*.
+
+        Short for ``grid.resolution(f, tol).resolved``.
+        """
+        from numgrids.spectral import is_resolved
+        return is_resolved(self, f, tol)
+
+    def filter(self, f: NDArray, method: str = "lowpass", *, keep: float | int = 2 / 3, alpha: float = 36.0,
+               order: float = 8, axis: int | str | tuple | list | None = None) -> NDArray:
+        """Damp or remove the high modes of a meshed function.
+
+        See :func:`numgrids.spectral.spectral_filter`.
+
+        Parameters
+        ----------
+        f : NDArray
+            Meshed function of shape ``grid.shape``.
+        method : str
+            ``"lowpass"`` (default): keep the lowest modes and remove the
+            others; ``"exponential"``: multiply mode *k* by
+            ``exp(-alpha * (k / k_max) ** order)``.
+        keep : float or int
+            For ``"lowpass"``: the fraction of the modes of each axis that
+            is kept (default 2/3, the rule for dealiasing products), or
+            their number.
+        alpha, order : float
+            Strength and exponent of the exponential filter.
+        axis : int, str, sequence of those, or None
+            The axis or axes to filter (default: all spectral axes).
+        """
+        from numgrids.spectral import spectral_filter
+        return spectral_filter(self, f, method, keep=keep, alpha=alpha, order=order, axis=axis)
 
     def interpolate(self, f: NDArray, locations, method: str = "cubic"):
         """Interpolate a meshed function at arbitrary locations.
@@ -449,6 +695,21 @@ class Grid:
                     ax.set_ylabel(f"axis-{j}")
 
         plt.show()
+
+    def animate(self, frames: NDArray, t: NDArray | None = None, **options):
+        """Animate a time-dependent meshed function on the grid (requires matplotlib).
+
+        *frames* has the shape ``(nt, *grid.shape)``, *t* holds the times
+        of the frames (shown in the title).  The frames are drawn like
+        :meth:`plot` draws a single function.  See
+        :func:`numgrids.plots.animate_field` for all options.
+
+        Returns
+        -------
+        matplotlib.animation.FuncAnimation
+        """
+        from numgrids.plots import animate_field
+        return animate_field(self, frames, t, **options)
 
     # ── boundary ────────────────────────────────────────────────
 
@@ -614,6 +875,36 @@ class Grid:
         from numgrids.io import to_xarray
         return to_xarray(self, **fields)
 
+    def to_vtk(self, path: str | Path, **fields) -> Path:
+        """Write meshed arrays on this grid to a VTK file (``.vts``) for ParaView.
+
+        Scalar fields are arrays of grid shape, vector fields tuples with
+        one array per axis.  See :func:`numgrids.vtk.write_vtk`.
+
+        Returns
+        -------
+        Path
+            The path of the file written.
+        """
+        from numgrids.vtk import write_vtk
+        return write_vtk(path, self, **fields)
+
+    def to_vtk_series(self, path: str | Path, frames=None, t=None, **fields) -> Path:
+        """Write a time series on this grid as VTK files with a ``.pvd`` collection file.
+
+        *frames* has the shape ``(nt, *grid.shape)`` and is stored under
+        the name given by ``name=`` (default ``"u"``), *t* holds the times.
+        Further fields can be passed by name.  See
+        :func:`numgrids.vtk.write_vtk_series`.
+
+        Returns
+        -------
+        Path
+            The path of the collection file.
+        """
+        from numgrids.vtk import write_vtk_series
+        return write_vtk_series(path, self, frames, t, **fields)
+
     @staticmethod
     def from_xarray(obj) -> tuple[Grid, dict[str, NDArray]]:
         """Reconstruct a grid (and data) from an xarray object.
@@ -628,9 +919,24 @@ class MultiGrid:
     """
     Represents a multigrid, a hierarchical set of grids of different resolutions
     for the same domain.
+
+    Besides holding the grids (:attr:`levels`) and transferring data between
+    them (:meth:`transfer`), a multigrid can solve linear boundary value
+    problems on its finest grid with the multigrid method (:meth:`solve`),
+    whose cost grows only linearly with the number of grid points.
+
+    Examples
+    --------
+    >>> from numgrids import MultiGrid, equidistant
+    >>> mg = MultiGrid(x=equidistant(33, 0, 1), y=equidistant(33, 0, 1), min_size=5)
+    >>> [level.shape for level in mg.levels]
+    [(33, 33), (17, 17), (9, 9), (5, 5)]
+    >>> u = mg.solve(lambda grid: grid.laplacian_operator(), rhs=1.0, bcs=0)   # lap u = 1
+    >>> round(float(u.min()), 4)
+    -0.0737
     """
 
-    def __init__(self, *axes, min_size: int = 2) -> None:
+    def __init__(self, *axes, min_size: int = 2, **named_axes) -> None:
         """
         Constructor.
 
@@ -650,8 +956,13 @@ class MultiGrid:
         min_size: positive int
             This parameter sets a lower bound for the coarsest grid in the multigrid.
             At the lowest resolution, each axis must have at least min_size grid points.
+
+        named_axes: Axis objects as keyword arguments
+            Further axes, appended after the positional ones.  The keyword
+            is used as the axis name, as for :class:`Grid`.
         """
-        grid = Grid(*axes)
+        grid = Grid(*axes, **named_axes)
+        axes = grid.axes
         self._levels = [grid]
         while True:
             sizes = np.array(grid.shape)
@@ -710,3 +1021,117 @@ class MultiGrid:
         f_trans = interp(grid_to)
 
         return f_trans
+
+    def solver(self, operator: Callable[[Grid], Operator], bcs=None, **options):
+        """Set up a reusable multigrid solver for an operator and boundary conditions.
+
+        Use this instead of :meth:`solve` to solve for several right-hand
+        sides: the setup is done only once.
+
+        Parameters
+        ----------
+        operator : callable
+            ``operator(grid)`` returns the operator on the given grid; see :meth:`solve`.
+        bcs : optional
+            Boundary conditions; see :meth:`solve`.
+        **options
+            ``pre``, ``post``, ``cycle`` and ``low_order``; see :meth:`solve`.
+
+        Returns
+        -------
+        numgrids.multigrid.MultiGridSolver
+            Call its :meth:`~numgrids.multigrid.MultiGridSolver.solve` method
+            with the right-hand side.
+        """
+        from numgrids.multigrid import MultiGridSolver
+        return MultiGridSolver(self, operator, bcs, **options)
+
+    def solve(
+        self,
+        operator: Callable[[Grid], Operator],
+        rhs=0.0,
+        bcs=None,
+        *,
+        u0=None,
+        tol: float = 1e-8,
+        maxiter: int = 100,
+        pre: int = 2,
+        post: int = 2,
+        cycle: str = "V",
+        method: str = "gmres",
+        low_order: bool = True,
+        return_info: bool = False,
+    ):
+        r"""Solve the linear problem ``L u = rhs`` on the finest grid with multigrid.
+
+        In contrast to :meth:`Operator.solve <numgrids.operators.Operator.solve>`
+        (sparse LU), time and memory grow only linearly with the number of
+        grid points, which makes large problems feasible, in particular in
+        3D.  The axes must be equidistant (non-periodic) or logarithmic.
+        See :class:`~numgrids.multigrid.MultiGridSolver` for the method and
+        its limitations.
+
+        Parameters
+        ----------
+        operator : callable
+            ``operator(grid)`` returns the operator *L* on the given grid as
+            an :class:`~numgrids.operators.Operator`, e.g. ``lambda grid:
+            grid.laplacian_operator()``.  It is called for every level, so
+            build coefficients from the grid passed in (``grid.evaluate``).
+        rhs : float, NDArray or callable
+            Right-hand side on the finest grid.  Scalars are broadcast;
+            callables are called with the meshed coordinates.
+        bcs : optional
+            Boundary conditions in any form accepted by
+            :func:`~numgrids.boundary.resolve_bcs`, e.g. ``0`` or
+            ``{"x_low": 0, "x_high": Neumann(1)}``.  Every boundary face
+            needs a condition.
+        u0 : float, NDArray or callable, optional
+            Initial guess (default zero).
+        tol : float
+            Tolerance for the residual norm relative to the norm of the
+            right-hand side.
+        maxiter : int
+            Maximum number of iterations (multigrid cycles).
+        pre, post : int
+            Number of smoothing sweeps before and after the coarse-grid
+            correction.
+        cycle : str
+            ``"V"`` (default) or ``"W"``.
+        method : str
+            ``"gmres"`` (default): the multigrid cycle preconditions GMRES;
+            ``"plain"``: the cycle is iterated on its own.
+        low_order : bool
+            Build the multigrid cycle from second-order stencils (default);
+            the solution is still that of the operator as given.
+        return_info : bool
+            Also return a :class:`~numgrids.multigrid.MultiGridInfo` with the
+            number of iterations and the residual history.
+
+        Returns
+        -------
+        NDArray or tuple of (NDArray, MultiGridInfo)
+            The solution on the finest grid.
+
+        Raises
+        ------
+        numgrids.multigrid.MultiGridError
+            If the iteration does not converge.  The exception holds the
+            last iterate and the residual history.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from numgrids import MultiGrid, equidistant
+        >>> mg = MultiGrid(equidistant(65, 0, 1), equidistant(65, 0, 1))
+        >>> exact = lambda x, y: np.sin(np.pi * x) * np.exp(y)
+        >>> f = lambda x, y: (1 - np.pi ** 2) * exact(x, y)
+        >>> u, info = mg.solve(lambda grid: grid.laplacian_operator(), f,
+        ...                    bcs=lambda coords: exact(*coords), return_info=True)
+        >>> bool(np.abs(u - mg.levels[0].evaluate(exact)).max() < 1e-7)
+        True
+        >>> info.converged
+        True
+        """
+        solver = self.solver(operator, bcs, pre=pre, post=post, cycle=cycle, low_order=low_order)
+        return solver.solve(rhs, u0=u0, tol=tol, maxiter=maxiter, method=method, return_info=return_info)

@@ -53,4 +53,7 @@ result.rate
 ```
 
 See also [Adaptive mesh refinement](amr.md), which uses similar error
-estimates to choose the resolution of each axis automatically.
+estimates to choose the resolution of each axis automatically. On
+spectral grids, the [resolution check](spectral.md#is-my-function-resolved)
+tells from the values on a single grid whether a function is resolved and
+how many points it needs.

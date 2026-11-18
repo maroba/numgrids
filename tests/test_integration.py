@@ -2,6 +2,7 @@ import unittest
 
 import numpy as np
 import numpy.testing as npt
+import pytest
 
 from numgrids import AxisType, Grid, create_axis
 from numgrids.integration import Integral
@@ -92,3 +93,58 @@ class TestIntegral(unittest.TestCase):
         actual = I(f)
 
         self.assertAlmostEqual(actual, expected)
+
+
+class TestInnerProductsAndNorms:
+    def grids(self):
+        from numgrids import PolarGrid, SphericalGrid, chebyshev, colatitude, equidistant, logarithmic, periodic, radial
+        return [
+            Grid(x=chebyshev(12, 0, 2), y=periodic(8)),
+            Grid(x=equidistant(11, 0, 1)),
+            Grid(logarithmic(12, 0.1, 2)),
+            PolarGrid(radial(8, 1.0), periodic(16)),
+            SphericalGrid(radial(6, 1.0), colatitude(6), periodic(12)),
+        ]
+
+    def test_quadrature_weights_reproduce_integrate(self):
+        for grid in self.grids():
+            f = grid.evaluate(lambda *c: np.exp(c[0]))
+            W = grid.quadrature_weights
+            assert W.shape == grid.shape
+            assert np.sum(W * f) == pytest.approx(grid.integrate(f), rel=1e-13)
+            assert not W.flags.writeable
+
+    def test_volumes(self):
+        disk, ball = self.grids()[3:]
+        assert disk.quadrature_weights.sum() == pytest.approx(np.pi, rel=1e-12)
+        assert ball.quadrature_weights.sum() == pytest.approx(4 * np.pi / 3, rel=1e-12)
+
+    def test_inner_product(self):
+        from numgrids import periodic
+        grid = Grid(x=periodic(16))
+        x = grid.coords
+        assert grid.inner(np.sin(x), np.sin(x)) == pytest.approx(np.pi)
+        assert grid.inner(np.sin(x), np.cos(x)) == pytest.approx(0.0, abs=1e-12)
+        # conjugate-linear in the first argument
+        f, g = np.exp(1j * x), np.exp(2j * x) + 3 * np.exp(1j * x)
+        assert grid.inner(f, g) == pytest.approx(6 * np.pi)
+        assert grid.inner(1j * f, g) == pytest.approx(-6j * np.pi)
+        with pytest.raises(ValueError):
+            grid.inner(f, g[:-1])
+
+    def test_norms_and_mean(self):
+        from numgrids import chebyshev
+        grid = Grid(x=chebyshev(20, 0, 2))
+        x = grid.coords
+        assert grid.norm(np.ones(grid.shape)) == pytest.approx(np.sqrt(2))
+        assert grid.norm(x - 1, 1) == pytest.approx(1.0, abs=1e-2)          # |x - 1| has a kink
+        assert grid.norm(-3 * x, "max") == 6.0
+        assert grid.norm(1j * x, np.inf) == 2.0
+        assert grid.mean(x ** 2) == pytest.approx(4 / 3)
+        with pytest.raises(ValueError, match="norm"):
+            grid.norm(x, 3)
+
+    def test_mean_on_the_ball(self):
+        ball = self.grids()[-1]
+        r = ball.meshed_coords[0]
+        assert ball.mean(r ** 2) == pytest.approx(3 / 5, rel=1e-10)

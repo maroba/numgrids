@@ -30,6 +30,8 @@ resolve_bcs
 
 from __future__ import annotations
 
+import copy
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -46,6 +48,9 @@ class BoundaryFace:
 
     For an *N*-dimensional grid, each non-periodic axis contributes two
     faces: ``"low"`` (index 0 along that axis) and ``"high"`` (last index).
+    Ends that are not a boundary have no face: the origin of a radial axis,
+    the poles of a colatitude axis and the ends at infinity of the axes on
+    unbounded domains.
 
     Parameters
     ----------
@@ -72,9 +77,11 @@ class BoundaryFace:
                 f"Axis {axis_index} is periodic and has no boundary faces"
             )
         if side not in axis.boundary_sides:
+            # e.g. the origin of a radial axis or an end at infinity
+            sides = " or ".join(repr(s) for s in axis.boundary_sides) or "none"
             raise ValueError(
-                f"Axis {axis_index} has no {side!r} boundary face (a radial axis through the "
-                "origin only has the outer face 'high')."
+                f"Axis {axis_index} ({type(axis).__name__}) has no {side!r} boundary face "
+                f"(its faces: {sides})."
             )
         self.grid = grid
         self.axis_index = axis_index
@@ -250,6 +257,47 @@ def _replace_rows(L: spmatrix, rows: NDArray, R: spmatrix) -> spmatrix:
 
 
 # ---------------------------------------------------------------------------
+# Time-dependent boundary values
+# ---------------------------------------------------------------------------
+
+class TimeDependent:
+    """A boundary value that changes in time, for :func:`~numgrids.evolve`.
+
+    Parameters
+    ----------
+    func : callable
+        ``func(t)`` returns the boundary value at time *t*: a scalar, an
+        array matching the face, or a callable of the face coordinates
+        (as for time-independent values).
+
+    Examples
+    --------
+    A rod whose left end is heated periodically, while the right end is
+    insulated:
+
+    >>> import numpy as np
+    >>> from numgrids import Grid, Neumann, TimeDependent, chebyshev, evolve
+    >>> grid = Grid(x=chebyshev(20, 0, 1))
+    >>> bcs = {"x_low": TimeDependent(lambda t: np.sin(t)), "x_high": Neumann(0)}
+    >>> result = evolve(grid, grid.laplacian_operator(), np.zeros(grid.shape), (0, 2),
+    ...                 bcs=bcs, method="BDF")
+    >>> bool(np.isclose(result.final[0], np.sin(2)))
+    True
+    """
+
+    def __init__(self, func: Callable) -> None:
+        if not callable(func):
+            raise TypeError("TimeDependent needs a function of time.")
+        self.func = func
+
+    def __call__(self, t):
+        return self.func(t)
+
+    def __repr__(self) -> str:
+        return f"TimeDependent({self.func!r})"
+
+
+# ---------------------------------------------------------------------------
 # Base class
 # ---------------------------------------------------------------------------
 
@@ -271,21 +319,40 @@ class BoundaryCondition:
         self.face = face
         self._value_spec = value
 
+    @property
+    def time_dependent(self) -> bool:
+        """Whether the boundary value changes in time (see :class:`TimeDependent`)."""
+        return isinstance(self._value_spec, TimeDependent)
+
+    def at_time(self, t: float) -> BoundaryCondition:
+        """The condition with its value at time *t* (the condition itself if constant)."""
+        if not self.time_dependent:
+            return self
+        frozen = copy.copy(self)
+        frozen._value_spec = self._value_spec(t)
+        return frozen
+
     def _resolve_value(self) -> NDArray:
         """Return a 1-D array of values, one per face point."""
         face = self.face
         n = len(face.flat_indices)
+        spec = self._value_spec
+        if isinstance(spec, TimeDependent):
+            raise ValueError(
+                "Time-dependent boundary values are only meaningful in evolve(). "
+                "Evaluate them at a fixed time first, e.g. Dirichlet(g(t))."
+            )
 
-        if callable(self._value_spec) or isinstance(self._value_spec, np.ndarray):
-            g = self._value_spec(face.coords) if callable(self._value_spec) else self._value_spec
+        if callable(spec) or isinstance(spec, np.ndarray):
+            g = spec(face.coords) if callable(spec) else spec
             g = np.asarray(g)
             if g.size == n:
                 return g.ravel()
             return np.broadcast_to(g, face.coords[0].shape).ravel()
-        elif np.iscomplexobj(self._value_spec):
-            return np.full(n, complex(self._value_spec))
+        elif np.iscomplexobj(spec):
+            return np.full(n, complex(spec))
         else:
-            return np.full(n, float(self._value_spec))
+            return np.full(n, float(spec))
 
     # Subclasses override these:
     def apply(self, u: NDArray) -> NDArray:
@@ -419,19 +486,24 @@ class NeumannBC(BoundaryCondition):
 class RobinBC(BoundaryCondition):
     r"""Robin boundary condition: :math:`a\,u + b\,\partial u/\partial n = g`.
 
+    The coefficients may vary along the face: like the value, they can be
+    arrays matching the face or callables of the face coordinates, e.g. for
+    Newton's law of cooling :math:`h\,u + k\,\partial u/\partial n = h\,u_\infty`
+    with a conductivity :math:`k` that depends on the position.
+
     Parameters
     ----------
     face : BoundaryFace
         The boundary face.
-    a : float
+    a : float, NDArray, or callable
         Coefficient of *u*.
-    b : float
+    b : float, NDArray, or callable
         Coefficient of the normal derivative.
     value : float, NDArray, or callable
         The prescribed value *g*.
     """
 
-    def __init__(self, face: BoundaryFace, a: float, b: float, value=0.0) -> None:
+    def __init__(self, face: BoundaryFace, a, b, value=0.0) -> None:
         super().__init__(face, value)
         self.a = a
         self.b = b
@@ -447,10 +519,19 @@ class RobinBC(BoundaryCondition):
 
     def apply_to_system(self, L: spmatrix, rhs: NDArray) -> tuple[spmatrix, NDArray]:
         """Replace boundary rows with ``a * I + b * sign * D``."""
-        n = self.face.grid.size
-        R = (self.a * scipy.sparse.identity(n, format="csr")
-             + self.b * self.face.normal_sign * scipy.sparse.csr_matrix(self._diff.as_matrix()))
+        D = self.face.normal_sign * scipy.sparse.csr_matrix(self._diff.as_matrix())
+        R = self._coefficient(self.a) + self._coefficient(self.b) @ D
         return _replace_rows(L, self.face.flat_indices, R), self._set_rhs(rhs)
+
+    def _coefficient(self, spec) -> spmatrix:
+        """Diagonal matrix with the values of a coefficient on the points of the face."""
+        n = self.face.grid.size
+        if np.isscalar(spec):
+            return spec * scipy.sparse.identity(n, format="csr")
+        values = BoundaryCondition(self.face, spec)._resolve_value()
+        diagonal = np.zeros(n, dtype=values.dtype)
+        diagonal[self.face.flat_indices] = values
+        return scipy.sparse.diags(diagonal, format="csr")
 
     def __repr__(self) -> str:
         return f"RobinBC({self.face!r}, a={self.a!r}, b={self.b!r}, value={self._value_spec!r})"
@@ -501,9 +582,13 @@ class Neumann(BCSpec):
 
 
 class Robin(BCSpec):
-    """Robin condition *a u + b du/dn = value*, to be bound to a face later."""
+    """Robin condition *a u + b du/dn = value*, to be bound to a face later.
 
-    def __init__(self, a: float, b: float, value=0.0) -> None:
+    *a*, *b* and *value* are numbers, arrays matching the face, or callables
+    of the face coordinates.
+    """
+
+    def __init__(self, a, b, value=0.0) -> None:
         self.a = a
         self.b = b
         self.value = value

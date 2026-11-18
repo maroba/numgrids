@@ -23,6 +23,8 @@ class Integral:
 
     * Chebyshev axes: Clenshaw--Curtis quadrature (spectral accuracy),
     * periodic equidistant axes: trapezoidal rule (spectral accuracy),
+    * unbounded axes (half line, whole line): the Chebyshev-type rule of the
+      mapped points (spectral accuracy for integrands that decay fast enough),
     * other axes: weights obtained by inverting the axis' differentiation
       matrix (same order of accuracy as differentiation).
 
@@ -60,6 +62,22 @@ class Integral:
         self.weights = [grid._quadrature_weights(i) for i in range(grid.ndims)]
         J = getattr(grid, "volume_element", None) if volume_element else None
         self._jacobian = None if J is None or np.isscalar(J) else np.asarray(J)
+
+    @property
+    def weight_array(self) -> NDArray:
+        """Quadrature weights of all grid points, as an array of grid shape.
+
+        The integral of a meshed function *f* is ``np.sum(weight_array * f)``.
+        The volume element is included (unless ``volume_element=False``).
+        """
+        W = np.ones(self.grid.shape)
+        for i, w in enumerate(self.weights):
+            shape = [1] * self.grid.ndims
+            shape[i] = len(w)
+            W = W * np.reshape(w, shape)
+        if self._jacobian is not None:
+            W = W * self._jacobian
+        return W
 
     def __call__(self, f: NDArray) -> float:
         """

@@ -17,6 +17,10 @@ Available axis types:
   cylindrical and spherical grids (full disks, cylinders and balls).
 - :class:`ColatitudeAxis` -- polar angle of spherical grids that passes
   through both poles (full spheres and balls).
+- :class:`SemiInfiniteAxis` -- a half line that extends to infinity (mapped
+  Chebyshev points, spectral accuracy).
+- :class:`InfiniteAxis` -- the whole real line (mapped Chebyshev points,
+  spectral accuracy).
 """
 
 from __future__ import annotations
@@ -63,10 +67,7 @@ class Axis:
             raise ValueError(f"num_points must be positive, not {num_points}")
         if num_points < 2:
             raise ValueError(f"An axis needs at least 2 points, got {num_points}")
-        if not (np.isfinite(low) and np.isfinite(high)):
-            raise ValueError(f"Axis bounds must be finite, got low={low}, high={high}")
-        if high <= low:
-            raise ValueError(f"high ({high}) must be greater than low ({low})")
+        self._check_bounds(low, high)
         unknown = set(kwargs) - {"name"}
         if unknown:
             raise TypeError(f"Unexpected keyword argument(s): {', '.join(sorted(unknown))}")
@@ -78,6 +79,19 @@ class Axis:
         self._coords = self._setup_external_coords(low, high)
         self.name: str | None = kwargs.get("name")
         self._quadrature_weights: NDArray | None = None
+
+    #: Names of constructor keyword arguments (stored as attributes) that
+    #: define the axis in addition to ``num_points``, ``low`` and ``high``.
+    _extra_param_names: tuple[str, ...] = ()
+
+    def _check_bounds(self, low: float, high: float) -> None:
+        if not (np.isfinite(low) and np.isfinite(high)):
+            raise ValueError(f"Axis bounds must be finite, got low={low}, high={high}")
+        if high <= low:
+            raise ValueError(f"high ({high}) must be greater than low ({low})")
+
+    def _extra_params(self) -> dict:
+        return {key: getattr(self, key) for key in self._extra_param_names}
 
     def resized(self, num_points: int) -> Axis:
         """Return a new axis of the same type and domain with a different number of points.
@@ -111,7 +125,7 @@ class Axis:
     _UNSET = object()
 
     def _clone(self, num_points: int | None = None, name=_UNSET) -> Axis:
-        kwargs: dict = {}
+        kwargs: dict = self._extra_params()
         if self.periodic:
             kwargs["periodic"] = True
         name = self.name if name is Axis._UNSET else name
@@ -130,10 +144,12 @@ class Axis:
             and self.high == other.high
             and self.periodic == other.periodic
             and self.name == other.name
+            and self._extra_params() == other._extra_params()
         )
 
     def __hash__(self) -> int:
-        return hash((type(self).__name__, len(self), self.low, self.high, self.periodic, self.name))
+        extra = tuple(self._extra_params().values())
+        return hash((type(self).__name__, len(self), self.low, self.high, self.periodic, self.name, *extra))
 
     @property
     def period(self) -> float:
@@ -251,7 +267,9 @@ class Axis:
 
         ``("low", "high")`` for ordinary axes, ``()`` for periodic axes and
         ``("high",)`` for :class:`RadialAxis`, whose low end is the
-        coordinate origin rather than a boundary.
+        coordinate origin rather than a boundary.  Ends at infinity are not
+        part of the boundary either: :class:`SemiInfiniteAxis` has
+        ``("low",)`` and :class:`InfiniteAxis` has ``()``.
         """
         return () if self.periodic else ("low", "high")
 
@@ -699,3 +717,389 @@ class ColatitudeAxis(Axis):
         # Weights for the integral of g(theta) = sin(theta) * f(theta) dtheta
         # (spherical grids multiply the integrand by a volume element ~ sin(theta)).
         return self.sine_quadrature_weights() / np.sin(self.coords)
+
+
+# ---------------------------------------------------------------------------
+# Unbounded domains
+# ---------------------------------------------------------------------------
+
+class UnboundedAxis(Axis):
+    r"""Common base class of :class:`SemiInfiniteAxis` and :class:`InfiniteAxis`.
+
+    The physical coordinate :math:`x` is the image of a computational
+    variable :math:`\xi \in [-1, 1]` under an algebraic map with a scale
+    length :math:`L`; infinity corresponds to :math:`\xi = \pm 1`. The grid
+    points are Chebyshev-type nodes in :math:`\xi` that leave out the points
+    at infinity, and functions are represented by polynomials in :math:`\xi`
+    (the "rational Chebyshev functions" of :math:`x`). Derivatives follow
+    from the chain rule,
+
+    .. math::
+        \frac{d}{dx} = \frac{d\xi}{dx}\,\frac{d}{d\xi},
+
+    with the polynomial differentiation matrix on the nodes. This is
+    spectrally accurate for smooth functions that decay (or tend to a
+    constant) at infinity.
+
+    There is no grid point at infinity and no boundary condition can (or
+    has to) be imposed there. Solutions of a differential equation that grow
+    or keep oscillating at infinity are not polynomials in :math:`\xi`, so
+    the discretization only finds the solution that is regular there, e.g.
+    the decaying solution of :math:`u'' - u = f` or the bound states of a
+    Schrödinger operator. Only if the equation has two solutions that are
+    regular at infinity (such as :math:`1` and :math:`1/r` for the Laplace
+    equation outside a sphere), it is not uniquely solvable without a
+    condition at infinity; reformulate such problems for a decaying
+    unknown.
+
+    Reference: Boyd, *Chebyshev and Fourier Spectral Methods*, 2nd ed.,
+    Dover, 2001, ch. 17.
+    """
+
+    _extra_param_names: tuple[str, ...] = ("scale",)
+
+    def __init__(self, num_points: int, low: float, high: float, scale: float, **kwargs) -> None:
+        if not np.isfinite(scale) or scale <= 0:
+            raise ValueError(f"scale must be a positive, finite length, got {scale}")
+        self.scale = float(scale)
+        super().__init__(num_points, float(low), float(high), periodic=False, **kwargs)
+
+    def to_internal(self, x) -> NDArray:
+        r"""Map physical coordinates to the computational variable :math:`\xi \in [-1, 1]`.
+
+        Infinite values are mapped to :math:`\pm 1`.
+        """
+        raise NotImplementedError("Must be implemented by child class.")
+
+    def from_internal(self, xi) -> NDArray:
+        r"""Map the computational variable :math:`\xi \in [-1, 1]` to physical coordinates."""
+        raise NotImplementedError("Must be implemented by child class.")
+
+    @property
+    def dxi_dx(self) -> NDArray:
+        r"""The metric factor :math:`d\xi/dx` at the grid points."""
+        return self._chain_rule_coefficients(1)[0]
+
+    def _chain_rule_coefficients(self, order: int) -> NDArray:
+        r"""Coefficients :math:`c_k` of :math:`d^n/dx^n = \sum_{k=1}^n c_k(\xi)\, d^k/d\xi^k`.
+
+        Returns an array of shape ``(order, len(self))`` with the values at
+        the grid points (row ``k - 1`` holds :math:`c_k`).
+        """
+        raise NotImplementedError("Must be implemented by child class.")
+
+    @property
+    def barycentric_weights(self) -> NDArray:
+        r"""Barycentric weights of the nodes in :math:`\xi` (up to a common factor)."""
+        raise NotImplementedError("Must be implemented by child class.")
+
+    def _internal_differences(self, x: NDArray) -> NDArray:
+        r"""Array of :math:`\xi(x_m) - \xi_j`, shape ``(len(x), len(self))``.
+
+        Computed from differences of the physical coordinates rather than by
+        subtracting two values of :math:`\xi`: where the nodes cluster
+        towards :math:`\xi = \pm 1`, that would lose most significant digits.
+        The result is exactly zero if (and only if) *x* is a grid point.
+        """
+        raise NotImplementedError("Must be implemented by child class.")
+
+    def _check_domain(self, x) -> NDArray:
+        x = np.asarray(x, dtype=float)
+        tol = 1e-12 * max(1.0, abs(self.low)) if np.isfinite(self.low) else 0.0
+        if np.any(np.isnan(x)) or np.any(x < self.low - tol):
+            raise ValueError(f"Point(s) outside the domain {self._interval()} of the axis.")
+        return np.maximum(x, self.low)
+
+    def _interval(self) -> str:
+        return f"[{self.low}, inf)" if np.isfinite(self.low) else "(-inf, inf)"
+
+    def create_diff_operator(self, grid: Grid, order: int, axis_index: int, acc: int = 4) -> GridDiff:
+        """Create the mapped Chebyshev differentiation operator (``acc`` is ignored)."""
+        from numgrids.diff import MappedChebyshevDiff
+        return MappedChebyshevDiff(grid, order, axis_index)
+
+    def __str__(self) -> str:
+        params = "".join(f", {key}={value}" for key, value in self._extra_params().items())
+        return f"{type(self).__name__}({len(self)} points on {self._interval()}{params})"
+
+    def __repr__(self) -> str:
+        params = "".join(f", {key}={value}" for key, value in self._extra_params().items())
+        name = f", name={self.name!r}" if self.name is not None else ""
+        return f"{type(self).__name__}(num_points={len(self)}, low={self.low}, high={self.high}{params}{name})"
+
+
+class SemiInfiniteAxis(UnboundedAxis):
+    r"""Axis on the half line :math:`[a, \infty)` with spectral accuracy.
+
+    The half line is the image of :math:`\xi \in [-1, 1)` under the
+    algebraic map
+
+    .. math::
+        x = a + L\,\frac{1 + \xi}{1 - \xi},
+
+    and the grid points are the images of the Chebyshev--Gauss--Radau points
+    :math:`\xi_j = -\cos\bigl(2\pi j / (2n - 1)\bigr)`, :math:`j = 0, \ldots,
+    n - 1`. The first point is :math:`x_0 = a`, so that boundary conditions
+    can be imposed there; there is no point at infinity. Half of the points
+    lie in :math:`[a, a + L]`, the outermost one at about
+    :math:`a + 1.6\, n^2 L`.
+
+    Functions are represented by polynomials in :math:`\xi`, i.e. by
+    rational functions of :math:`x`. This is spectrally accurate for smooth
+    functions that decay or tend to a constant as :math:`x \to \infty`, but
+    not for functions that grow there, and it converges slowly for functions
+    that oscillate many times while they decay. The scale :math:`L` should
+    be several times the decay length of the function (5 to 20 times is a
+    good choice for an exponential decay); too small a value costs more
+    accuracy than too large a one.
+
+    Only the finite end is a boundary (face ``"low"``). No condition is
+    imposed at infinity: the solution of a differential equation that is
+    regular there is selected automatically (see :class:`UnboundedAxis`).
+
+    Integration (:attr:`quadrature_weights`) is exact for all functions
+    :math:`(1 - \xi)^2\, p(\xi)` with a polynomial :math:`p` of degree
+    :math:`< n`; integrands must decay faster than :math:`1/x`.
+
+    Parameters
+    ----------
+    num_points : int
+        Number of grid points.
+    low : float
+        The finite end :math:`a` of the half line.
+    high : float
+        Must be ``inf`` (kept for a uniform axis signature).
+    scale : float
+        The scale length :math:`L > 0` of the map.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from numgrids import SemiInfiniteAxis
+    >>> ax = SemiInfiniteAxis(5, 0.0, scale=1.0)
+    >>> ax.coords.round(4)
+    array([ 0.    ,  0.1325,  0.7041,  3.    , 32.1634])
+    >>> ax.boundary_sides
+    ('low',)
+    >>> ax = SemiInfiniteAxis(40, 0.0, scale=4.0)
+    >>> x = ax.coords
+    >>> bool(abs(ax.quadrature_weights @ (x ** 2 * np.exp(-x)) - 2) < 1e-10)
+    True
+    """
+
+    def __init__(self, num_points: int, low: float = 0.0, high: float = np.inf,
+                 scale: float = 1.0, **kwargs) -> None:
+        super().__init__(num_points, low, high, scale, **kwargs)
+
+    def _check_bounds(self, low: float, high: float) -> None:
+        if not np.isfinite(low):
+            raise ValueError(f"The lower end of a SemiInfiniteAxis must be finite, got low={low}")
+        if high != np.inf:
+            raise ValueError(
+                f"A SemiInfiniteAxis always extends to +infinity (high=inf), got high={high}. "
+                "Use e.g. a ChebyshevAxis for a finite interval."
+            )
+
+    def _angles(self) -> NDArray:
+        n = len(self)
+        return 2 * np.pi * np.arange(n) / (2 * n - 1)
+
+    def _setup_internal_coords(self, *args) -> NDArray:
+        # sin form of -cos(theta): exactly -1 at the first point
+        return np.sin(self._angles() - np.pi / 2)
+
+    def _setup_external_coords(self, low: float, high: float) -> NDArray:
+        # (1 + xi) / (1 - xi) = tan(theta / 2)^2 without cancellation
+        return low + self.scale * np.tan(self._angles() / 2) ** 2
+
+    @property
+    def boundary(self) -> slice:
+        return slice(1, None)
+
+    @property
+    def boundary_sides(self) -> tuple[str, ...]:
+        return ("low",)
+
+    def to_internal(self, x) -> NDArray:
+        y = self._check_domain(x) - self.low
+        return 1 - 2 * self.scale / (y + self.scale)
+
+    def from_internal(self, xi) -> NDArray:
+        xi = np.asarray(xi, dtype=float)
+        with np.errstate(divide="ignore"):
+            return self.low + self.scale * (1 + xi) / (1 - xi)
+
+    def _chain_rule_coefficients(self, order: int) -> NDArray:
+        # With q = 1 - xi and d/dx = q^2 / (2 L) d/dxi:
+        #   d^n/dx^n = (2 L)^-n sum_k a[n, k] q^(n + k) d^k/dxi^k,
+        #   a[n + 1, k] = a[n, k - 1] - (n + k) a[n, k].
+        a = np.zeros((order + 1, order + 2))
+        a[1, 1] = 1.0
+        for n in range(1, order):
+            for k in range(1, n + 2):
+                a[n + 1, k] = a[n, k - 1] - (n + k) * a[n, k]
+        q = 2 * self.scale / (self.coords - self.low + self.scale)
+        k = np.arange(1, order + 1)[:, None]
+        return a[order, 1:order + 1, None] * q[None, :] ** (order + k) / (2 * self.scale) ** order
+
+    @property
+    def barycentric_weights(self) -> NDArray:
+        w = (-1.0) ** np.arange(len(self)) * np.cos(self._angles() / 2)
+        w[0] *= 0.5
+        return w
+
+    def _internal_differences(self, x: NDArray) -> NDArray:
+        L = self.scale
+        y = self._check_domain(x) - self.low
+        yj = self.coords - self.low
+        with np.errstate(invalid="ignore"):
+            ratio = (y[:, None] - yj[None, :]) / (y[:, None] + L)
+        ratio[np.isinf(y)] = 1.0
+        return ratio * (2 * L / (yj + L))[None, :]
+
+    def _compute_quadrature_weights(self) -> NDArray:
+        # Interpolatory rule in xi (weight function 1) times dx/dxi.
+        k = np.arange(len(self))
+        V = (-1.0) ** k * np.cos(np.outer(self._angles(), k))      # T_k(xi_j)
+        moments = np.zeros(len(self))                               # integrals of T_k over [-1, 1]
+        moments[::2] = 2.0 / (1.0 - k[::2] ** 2)
+        dx_dxi = (self.coords - self.low + self.scale) ** 2 / (2 * self.scale)
+        return np.linalg.solve(V.T, moments) * dx_dxi
+
+
+class InfiniteAxis(UnboundedAxis):
+    r"""Axis on the whole real line :math:`(-\infty, \infty)` with spectral accuracy.
+
+    The real line is the image of :math:`\xi \in (-1, 1)` under the algebraic
+    map
+
+    .. math::
+        x = x_c + \frac{L\,\xi}{\sqrt{1 - \xi^2}},
+
+    and the grid points are the images of the Chebyshev--Gauss points
+    :math:`\xi_j = -\cos\bigl((2j + 1)\pi / (2n)\bigr)`, i.e.
+    :math:`x_j = x_c - L \cot\bigl((2j + 1)\pi / (2n)\bigr)`. Half of the
+    points lie in :math:`[x_c - L, x_c + L]`, the outermost ones at about
+    :math:`x_c \pm 0.64\, n L`. There are no points at infinity.
+
+    Functions are represented by polynomials in
+    :math:`\xi = (x - x_c) / \sqrt{L^2 + (x - x_c)^2}`. This is spectrally
+    accurate for smooth functions that decay exponentially or have an
+    expansion in powers of :math:`1/x^2` at infinity, but not for functions
+    that keep oscillating or grow there. The scale :math:`L` should be about
+    the half-width of the region in which the function differs appreciably
+    from its limits (3 to 5 standard deviations of a Gaussian); values that
+    are much smaller or much larger cost accuracy.
+
+    The axis has no boundary faces. No condition is imposed at infinity: the
+    solution of a differential equation that is regular there is selected
+    automatically (see :class:`UnboundedAxis`).
+
+    Integration (:attr:`quadrature_weights`) uses the Gauss--Chebyshev rule
+    in :math:`\xi`, which is exact for all functions
+    :math:`(1 - \xi^2)\, p(\xi)` with a polynomial :math:`p` of degree
+    :math:`< 2n`; integrands must decay like :math:`1/x^2` or faster.
+
+    Parameters
+    ----------
+    num_points : int
+        Number of grid points.
+    low, high : float
+        Must be ``-inf`` and ``inf`` (kept for a uniform axis signature).
+    scale : float
+        The scale length :math:`L > 0` of the map.
+    center : float
+        The point :math:`x_c` around which the grid points cluster.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from numgrids import InfiniteAxis
+    >>> ax = InfiniteAxis(5, scale=2.0)
+    >>> ax.coords.round(4)
+    array([-6.1554, -1.4531,  0.    ,  1.4531,  6.1554])
+    >>> ax.boundary_sides
+    ()
+    >>> ax = InfiniteAxis(40, scale=3.0)
+    >>> bool(abs(ax.quadrature_weights @ np.exp(-ax.coords ** 2) - np.sqrt(np.pi)) < 1e-12)
+    True
+    """
+
+    _extra_param_names = ("scale", "center")
+
+    def __init__(self, num_points: int, low: float = -np.inf, high: float = np.inf,
+                 scale: float = 1.0, center: float = 0.0, **kwargs) -> None:
+        if not np.isfinite(center):
+            raise ValueError(f"center must be finite, got {center}")
+        self.center = float(center)
+        super().__init__(num_points, low, high, scale, **kwargs)
+
+    def _check_bounds(self, low: float, high: float) -> None:
+        if low != -np.inf or high != np.inf:
+            raise ValueError(
+                f"An InfiniteAxis always spans the whole real line, got low={low}, high={high}. "
+                "Use `center` and `scale` to place the grid points."
+            )
+
+    def _angles(self) -> NDArray:
+        # phi = arcsin(xi): antisymmetric, so that the points are exactly symmetric
+        n = len(self)
+        return np.pi * (2 * np.arange(n) + 1 - n) / (2 * n)
+
+    def _setup_internal_coords(self, *args) -> NDArray:
+        return np.sin(self._angles())
+
+    def _setup_external_coords(self, low: float, high: float) -> NDArray:
+        return self.center + self.scale * np.tan(self._angles())
+
+    @property
+    def boundary(self) -> slice:
+        return slice(None, None)
+
+    @property
+    def boundary_sides(self) -> tuple[str, ...]:
+        return ()
+
+    def to_internal(self, x) -> NDArray:
+        return np.sin(np.arctan((self._check_domain(x) - self.center) / self.scale))
+
+    def from_internal(self, xi) -> NDArray:
+        xi = np.asarray(xi, dtype=float)
+        with np.errstate(divide="ignore"):
+            return self.center + self.scale * xi / np.sqrt(1 - xi ** 2)
+
+    def _chain_rule_coefficients(self, order: int) -> NDArray:
+        # With s = sqrt(1 - xi^2) and d/dx = s^3 / L d/dxi:
+        #   d^n/dx^n = L^-n sum_k P[n, k](xi) s^(n + 2 k) d^k/dxi^k,
+        #   P[n + 1, k] = (1 - xi^2) P[n, k]' - (n + 2 k) xi P[n, k] + P[n, k - 1].
+        from numpy.polynomial import Polynomial
+
+        xi_poly, zero = Polynomial([0.0, 1.0]), Polynomial([0.0])
+        P = {1: Polynomial([1.0])}
+        for n in range(1, order):
+            P = {
+                k: (1 - xi_poly ** 2) * P.get(k, zero).deriv() - (n + 2 * k) * xi_poly * P.get(k, zero)
+                + P.get(k - 1, zero)
+                for k in range(1, n + 2)
+            }
+        xi, s = self.coords_internal, np.cos(self._angles())
+        return np.array([P[k](xi) * s ** (order + 2 * k) for k in range(1, order + 1)]) / self.scale ** order
+
+    @property
+    def barycentric_weights(self) -> NDArray:
+        return (-1.0) ** np.arange(len(self)) * np.cos(self._angles())
+
+    def _internal_differences(self, x: NDArray) -> NDArray:
+        t = (self._check_domain(x) - self.center) / self.scale
+        tj = (self.coords - self.center) / self.scale
+        phi, phij = np.arctan(t), self._angles()
+        # xi - xi_j = sin(phi) - sin(phi_j), with tan(phi - phi_j) = (t - t_j) / (1 + t t_j)
+        with np.errstate(invalid="ignore"):
+            delta = np.arctan2(t[:, None] - tj[None, :], 1 + t[:, None] * tj[None, :])
+        far = np.isinf(t)
+        delta[far] = phi[far, None] - phij[None, :]
+        return 2 * np.cos((phi[:, None] + phij[None, :]) / 2) * np.sin(delta / 2)
+
+    def _compute_quadrature_weights(self) -> NDArray:
+        # Gauss--Chebyshev: dx = L / (1 - xi^2) * dxi / sqrt(1 - xi^2)
+        return np.pi / len(self) * self.scale / np.cos(self._angles()) ** 2

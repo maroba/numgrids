@@ -47,21 +47,28 @@ no mesh generation, no hand-assembled matrices and no special treatment of the c
 
 **Grids and coordinates**
 - Grids in any dimension from Chebyshev, equidistant, periodic and logarithmic axes
+- Unbounded domains: the half line and the whole real line, without cutting the domain off
 - Polar, cylindrical, spherical (volume and surface), elliptic and spheroidal coordinates, or your own via scale factors
 - Full disks, cylinders, spheres and balls: the center and the poles are handled without coordinate singularities
 
 **Calculus**
 - Derivatives with spectral accuracy (FFT, Chebyshev) or finite differences, chosen automatically per axis
-- Gradient, divergence, curl and Laplacian; volume and surface integrals; spectral interpolation
+- Gradient, divergence, curl and Laplacian; volume and surface integrals; inner products and norms; spectral interpolation
+- Spectral coefficients and a resolution check that tells whether a function is resolved and how many points it needs
 
 **Solving equations**
-- Write operators like formulas (`-0.5 * D2 + V`), then `solve()` boundary value problems or `eig()` eigenvalue problems
+- Write operators like formulas (`-0.5 * D2 + V`), then `solve()` boundary value problems or `eig()` eigenvalue problems (also generalized: `L u = λ M u`)
+- Fast direct solvers, chosen automatically: problems on disks, spheres and balls decouple into small problems per Fourier mode; `factorize()` reuses a factorization for many right-hand sides
+- Nonlinear boundary value problems with Newton's method: `solve_nonlinear()` only needs the residual, and `continuation()` follows solution branches around folds
 - Dirichlet, Neumann and Robin conditions in one line: `bcs={"x_low": 0, "x_high": Neumann(1)}`
-- Time evolution (method of lines) for heat, wave and Schrödinger-type equations
+- Time evolution (method of lines) for heat, wave, reaction-diffusion and Schrödinger-type equations, with time-dependent boundary values and sources, and an exponential integrator without time stepping error
+- Stiff nonlinear equations (Korteweg–de Vries, nonlinear Schrödinger, pattern formation) with exponential and implicit-explicit integrators
+- Stability of steady states; `continuation()` detects folds, branch points and Hopf bifurcations
+- Functions of operators, e.g. the fractional Laplacian `(-L).power(0.5, bcs=0)`
 
 **Tools**
-- Adaptive mesh refinement, convergence studies, multigrid hierarchies
-- Plotting, save/load, xarray/NetCDF; all operators export SciPy sparse matrices
+- Adaptive mesh refinement, convergence studies, a multigrid solver for large finite-difference problems
+- Plotting and animations, save/load, xarray/NetCDF, VTK export for ParaView; all operators export SciPy sparse matrices
 
 ## Installation
 
@@ -113,22 +120,59 @@ ball.laplacian(X**2 + Y**2 + Z**2)       # 6 everywhere, including the center an
 ball.faces["r_high"].integrate(Z**2)     # surface integral over the sphere: 4π/3
 ```
 
+### Unbounded domains
+
+```python
+atom = Grid(r=semi_infinite(48, scale=10))          # the half line [0, ∞): no cutoff radius
+r = atom.coords
+V = np.append(0, -1 / r[1:])                        # Coulomb potential (the node r = 0 is a boundary point)
+H = -0.5 * atom.diff_operator(2) + V
+
+energies, states = H.eig(k=3, bcs=0, which="SR")
+# [-0.5, -0.125, -0.05555556]: the levels -1/(2n²) of the hydrogen atom, correct to 12 digits
+```
+
+### Quantum dynamics
+
+```python
+grid = Grid(x=periodic(512, -60, 60))
+x = grid.coords
+H = -0.5 * grid.diff_operator(2) + 2.5 * np.exp(-x**2)          # a potential barrier
+psi0 = np.exp(-(x + 20)**2 / 9 + 2j * x)                        # a wave packet moving towards it
+
+result = evolve(grid, -1j * H, psi0, t_span=(0, 24), method="expm")   # exact in time, conserves the norm
+grid.norm(result.final) / grid.norm(psi0)                             # 1.0
+```
+
 The [documentation](https://maroba.github.io/numgrids/) has a user guide for every feature and the full API reference.
 
 ## Example notebooks
 
 <table>
   <tr>
-    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/operators-and-solvers.html"><img src="docs/assets/gallery/operators-and-solvers.png" alt="Operators and solvers"><br><b>Operators and solvers</b></a><br><sub>Poisson, eigenmodes, time evolution</sub></td>
-    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/wave-equation-drum.html"><img src="docs/assets/gallery/wave-equation-drum.png" alt="Vibrations of a drum"><br><b>Vibrations of a drum</b></a><br><sub>Eigenmodes of the full disk</sub></td>
-    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/spherical-harmonics.html"><img src="docs/assets/gallery/spherical-harmonics.png" alt="Spherical harmonics"><br><b>Spherical harmonics</b></a><br><sub>Laplacian on the full sphere</sub></td>
-    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/quantum-harmonic-oscillator.html"><img src="docs/assets/gallery/quantum-harmonic-oscillator.png" alt="Quantum harmonic oscillator"><br><b>Quantum oscillator</b></a><br><sub>Schrödinger eigenvalue problem</sub></td>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/operators-and-solvers.html"><img src="docs/assets/gallery/operators-and-solvers.png" alt="Operators and solvers"><br><b>Operators and solvers</b></a><br><sub>Poisson, eigenmodes, time evolution</sub></td>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/nonlinear-problems.html"><img src="docs/assets/gallery/nonlinear-problems.png" alt="Nonlinear problems"><br><b>Nonlinear problems</b></a><br><sub>Newton's method, continuation, stability</sub></td>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/wave-equation-drum.html"><img src="docs/assets/gallery/wave-equation-drum.png" alt="Vibrations of a drum"><br><b>Vibrations of a drum</b></a><br><sub>Eigenmodes of the full disk</sub></td>
   </tr>
   <tr>
-    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/poisson-equation-2d.html"><img src="docs/assets/gallery/poisson-equation-2d.png" alt="Poisson equation"><br><b>Poisson equation</b></a><br><sub>Boundary value problem in 2D</sub></td>
-    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/heat-equation-rod.html"><img src="docs/assets/gallery/heat-equation-rod.png" alt="Heat equation"><br><b>Heat equation</b></a><br><sub>Time evolution</sub></td>
-    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/convergence-study.html"><img src="docs/assets/gallery/convergence-study.png" alt="Convergence study"><br><b>Convergence study</b></a><br><sub>Spectral vs. finite differences</sub></td>
-    <td align="center" width="25%"><a href="https://maroba.github.io/numgrids/examples/adaptive-refinement-demo.html"><img src="docs/assets/gallery/adaptive-refinement-demo.png" alt="Adaptive mesh refinement"><br><b>Adaptive refinement</b></a><br><sub>Resolution where it is needed</sub></td>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/quantum-dynamics.html"><img src="docs/assets/gallery/quantum-dynamics.png" alt="Quantum dynamics"><br><b>Quantum dynamics</b></a><br><sub>Wave packets and tunneling</sub></td>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/solitons.html"><img src="docs/assets/gallery/solitons.png" alt="Solitons"><br><b>Solitons</b></a><br><sub>Korteweg–de Vries and nonlinear Schrödinger</sub></td>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/pattern-formation.html"><img src="docs/assets/gallery/pattern-formation.png" alt="Pattern formation"><br><b>Pattern formation</b></a><br><sub>Gray–Scott and Swift–Hohenberg</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/hydrogen-atom.html"><img src="docs/assets/gallery/hydrogen-atom.png" alt="Hydrogen atom"><br><b>Hydrogen atom</b></a><br><sub>Unbounded domains</sub></td>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/spherical-harmonics.html"><img src="docs/assets/gallery/spherical-harmonics.png" alt="Spherical harmonics"><br><b>Spherical harmonics</b></a><br><sub>Laplacian on the full sphere</sub></td>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/quantum-harmonic-oscillator.html"><img src="docs/assets/gallery/quantum-harmonic-oscillator.png" alt="Quantum oscillator"><br><b>Quantum oscillator</b></a><br><sub>Schrödinger eigenvalue problem</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/heat-conduction.html"><img src="docs/assets/gallery/heat-conduction.png" alt="Heat conduction"><br><b>Heat conduction</b></a><br><sub>Variable conductivity, moving boundary data</sub></td>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/poisson-equation-2d.html"><img src="docs/assets/gallery/poisson-equation-2d.png" alt="Poisson equation"><br><b>Poisson equation</b></a><br><sub>Boundary value problem in 2D</sub></td>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/heat-equation-rod.html"><img src="docs/assets/gallery/heat-equation-rod.png" alt="Heat equation"><br><b>Heat equation</b></a><br><sub>Insulated, cooled and fixed ends</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/spectral-resolution.html"><img src="docs/assets/gallery/spectral-resolution.png" alt="Is my function resolved?"><br><b>Is my function resolved?</b></a><br><sub>Spectral coefficients</sub></td>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/convergence-study.html"><img src="docs/assets/gallery/convergence-study.png" alt="Convergence study"><br><b>Convergence study</b></a><br><sub>Spectral vs. finite differences</sub></td>
+    <td align="center" width="33%"><a href="https://maroba.github.io/numgrids/examples/adaptive-refinement-demo.html"><img src="docs/assets/gallery/adaptive-refinement-demo.png" alt="Adaptive refinement"><br><b>Adaptive refinement</b></a><br><sub>Resolution where it is needed</sub></td>
   </tr>
 </table>
 

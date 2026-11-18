@@ -21,13 +21,23 @@ from .api import (
     create_axis,
     diff,
     equidistant,
+    infinite,
     integrate,
     interpolate,
     logarithmic,
     periodic,
     radial,
+    semi_infinite,
 )
-from .axes import ChebyshevAxis, ColatitudeAxis, EquidistantAxis, LogAxis, RadialAxis
+from .axes import (
+    ChebyshevAxis,
+    ColatitudeAxis,
+    EquidistantAxis,
+    InfiniteAxis,
+    LogAxis,
+    RadialAxis,
+    SemiInfiniteAxis,
+)
 from .boundary import (
     BoundaryFace,
     Dirichlet,
@@ -36,6 +46,7 @@ from .boundary import (
     NeumannBC,
     Robin,
     RobinBC,
+    TimeDependent,
     apply_bcs,
     resolve_bcs,
 )
@@ -55,7 +66,11 @@ from .grids import Grid, MultiGrid
 from .integration import Integral
 from .interpol import Interpolator
 from .io import from_xarray, load_grid, save_grid, to_xarray
+from .linalg import LinearSolver
+from .multigrid import MultiGridError, MultiGridInfo, MultiGridSolver
+from .nonlinear import ContinuationResult, NonlinearSolverError, continuation, solve_nonlinear
 from .operators import Operator
+from .stability import Bifurcation, StabilityResult, linear_stability
 
 
 def Axis(*args, **kwargs):
@@ -81,9 +96,11 @@ __all__ = [
     "AdaptationResult",
     "Axis",
     "AxisType",
+    "Bifurcation",
     "BoundaryFace",
     "ChebyshevAxis",
     "ColatitudeAxis",
+    "ContinuationResult",
     "ConvergenceResult",
     "CurvilinearGrid",
     "CylindricalGrid",
@@ -95,11 +112,17 @@ __all__ = [
     "ErrorEstimator",
     "EvolutionResult",
     "Grid",
+    "InfiniteAxis",
     "Integral",
     "Interpolator",
+    "LinearSolver",
     "LogAxis",
     "MultiGrid",
+    "MultiGridError",
+    "MultiGridInfo",
+    "MultiGridSolver",
     "Neumann",
+    "NonlinearSolverError",
     "NeumannBC",
     "OblateSpheroidalGrid",
     "Operator",
@@ -108,12 +131,16 @@ __all__ = [
     "RadialAxis",
     "Robin",
     "RobinBC",
+    "SemiInfiniteAxis",
     "SphericalGrid",
     "SphericalSurfaceGrid",
+    "StabilityResult",
+    "TimeDependent",
     "adapt",
     "apply_bcs",
     "chebyshev",
     "colatitude",
+    "continuation",
     "convergence_study",
     "create_axis",
     "diff",
@@ -121,13 +148,17 @@ __all__ = [
     "estimate_error",
     "evolve",
     "from_xarray",
+    "infinite",
     "integrate",
     "interpolate",
+    "linear_stability",
     "load_grid",
     "logarithmic",
     "periodic",
     "radial",
     "resolve_bcs",
     "save_grid",
+    "semi_infinite",
+    "solve_nonlinear",
     "to_xarray",
 ]

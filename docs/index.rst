@@ -18,7 +18,8 @@ indices and scale factors.
       :link: guide/axes
       :link-type: doc
 
-      Equidistant, Chebyshev, logarithmic, and periodic axes.
+      Equidistant, Chebyshev, logarithmic, and periodic axes,
+      and axes for unbounded domains.
       Tensor-product grids in any dimension.
 
    .. grid-item-card:: Spectral Differentiation
@@ -47,14 +48,25 @@ indices and scale factors.
       :link-type: doc
 
       Combine operators like formulas, then ``solve()`` boundary
-      value problems or ``eig()`` eigenvalue problems.
+      value problems or ``eig()`` eigenvalue problems, with fast
+      direct solvers chosen automatically.
+
+   .. grid-item-card:: Nonlinear Problems
+      :link: guide/nonlinear
+      :link-type: doc
+
+      Newton's method for nonlinear boundary value problems:
+      just write down the residual. Continuation follows
+      solution branches around folds.
 
    .. grid-item-card:: Time Evolution
       :link: guide/time-evolution
       :link-type: doc
 
       Method-of-lines time stepping for heat, wave and
-      Schrödinger equations with a single call.
+      Schrödinger equations, with Dirichlet, Neumann and Robin
+      boundaries, time-dependent boundary values and an
+      exponential integrator.
 
 
 .. toctree::
@@ -78,10 +90,12 @@ indices and scale factors.
    guide/curvilinear
    guide/boundary-conditions
    guide/operators
+   guide/nonlinear
    guide/time-evolution
    guide/plotting
    guide/io
    guide/convergence
+   guide/spectral
    guide/multigrid
    guide/amr
 
@@ -91,13 +105,20 @@ indices and scale factors.
    :hidden:
 
    examples/operators-and-solvers
+   examples/nonlinear-problems
    examples/heat-equation-rod
    examples/poisson-equation-2d
    examples/spherical-harmonics
    examples/quantum-harmonic-oscillator
+   examples/quantum-dynamics
+   examples/solitons
+   examples/pattern-formation
+   examples/hydrogen-atom
+   examples/heat-conduction
    examples/wave-equation-drum
    examples/adaptive-refinement-demo
    examples/convergence-study
+   examples/spectral-resolution
 
 .. toctree::
    :maxdepth: 2

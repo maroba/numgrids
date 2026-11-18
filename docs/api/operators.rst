@@ -29,3 +29,71 @@ Operator algebra and solvers
 
 .. autoclass:: numgrids.Operator
    :members:
+
+Functions of operators
+----------------------
+
+.. automodule:: numgrids.funm
+   :no-members:
+
+.. autoclass:: numgrids.funm.FourierOperator
+   :members: matrix
+
+Linear solvers
+--------------
+
+.. automodule:: numgrids.linalg
+   :no-members:
+
+.. autoclass:: numgrids.LinearSolver
+   :members:
+
+Nonlinear problems
+------------------
+
+.. automodule:: numgrids.nonlinear
+   :no-members:
+
+.. autofunction:: numgrids.solve_nonlinear
+
+.. autoexception:: numgrids.NonlinearSolverError
+
+.. autofunction:: numgrids.continuation
+
+.. autoclass:: numgrids.ContinuationResult
+   :members:
+
+.. automodule:: numgrids.stability
+   :no-members:
+
+.. autofunction:: numgrids.linear_stability
+
+.. autoclass:: numgrids.StabilityResult
+
+.. autoclass:: numgrids.Bifurcation
+
+Spectral coefficients
+---------------------
+
+.. automodule:: numgrids.spectral
+   :no-members:
+
+.. autofunction:: numgrids.spectral.coefficients
+
+.. autofunction:: numgrids.spectral.from_coefficients
+
+.. autofunction:: numgrids.spectral.mode_numbers
+
+.. autofunction:: numgrids.spectral.resample
+
+.. autofunction:: numgrids.spectral.resolution
+
+.. autofunction:: numgrids.spectral.is_resolved
+
+.. autoclass:: numgrids.spectral.Resolution
+   :members:
+
+.. autoclass:: numgrids.spectral.AxisResolution
+   :members:
+
+.. autofunction:: numgrids.spectral.spectral_filter

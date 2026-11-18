@@ -163,6 +163,10 @@ print(grid.faces.keys())
 # dict_keys(['0_low', '0_high'])
 ```
 
+Ends at infinity are not faces either: a `semi_infinite` axis only
+contributes its `"low"` face and an `infinite` axis none (see
+[Unbounded domains](axes.md#unbounded-domains)).
+
 The `faces` dictionary is the starting point for applying
 [boundary conditions](boundary-conditions.md).
 

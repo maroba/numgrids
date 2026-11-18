@@ -56,6 +56,9 @@ its discretization:
 * **Chebyshev axes** -- barycentric polynomial interpolation through all
   nodes (spectrally accurate, numerically stable),
 * **periodic axes** -- trigonometric (Fourier) interpolation,
+* **unbounded axes** (`semi_infinite`, `infinite`) -- barycentric
+  interpolation in the computational variable, valid in the whole domain,
+  also beyond the outermost grid point,
 * **equidistant and logarithmic axes** -- local polynomial interpolation of
   degree 5 (in $\ln x$ for logarithmic axes).
 

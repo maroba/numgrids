@@ -221,6 +221,18 @@ u = L.solve(1.0, bcs=0)                        # Poisson problem, u = 0 on both 
 vals, modes = (-L).eig(k=6, bcs=0)             # Laplace eigenmodes
 ```
 
+Gradient and divergence are available as operators, too, and combine to
+operators in divergence form such as $\nabla\cdot(k\,\nabla u)$ (see
+[Operators](operators.md#gradient-divergence-and-operators-in-divergence-form)):
+
+```python
+G_r, G_phi = annulus.gradient_operator()       # physical components of the gradient
+D_r, D_phi = annulus.divergence_operator()     # div v = D_r(v_r) + D_phi(v_phi)
+
+R, _ = annulus.meshed_coords
+L_k = annulus.diffusion_operator(1 + R**2)     # u -> div((1 + r^2) grad u)
+```
+
 `grid.integrate(f)` includes the volume element, i.e. it computes
 $\int f\, dV$; see [Integration](integration.md).
 
@@ -284,6 +296,26 @@ Requirements: the azimuthal axis must be periodic over $2\pi$ with an even
 number of points, and on a `SphericalGrid` with a radial axis the polar axis
 must be symmetric about $\pi/2$ (`colatitude(n)` always is). A `ValueError`
 explains what is missing otherwise.
+
+## Exterior domains
+
+For the region *outside* a disk, cylinder or ball, use a half line as the
+radial axis: `semi_infinite(n, scale, low=R)`. The only boundary is the inner
+surface $r = R$, and nothing is imposed at infinity:
+
+```python
+shell = SphericalGrid(semi_infinite(20, scale=2.0, low=1.0), colatitude(8), periodic(8))
+R, Theta, Phi = shell.meshed_coords
+list(shell.faces)                                  # ['0_low']
+
+# Screened Poisson equation lap u - u = 0 with u = 1 on the unit sphere
+u = (shell.laplacian_operator() - 1).solve(0, bcs=1.0)
+np.abs(u - np.exp(-(R - 1)) / R).max()             # 2e-08
+```
+
+This requires that the equation has only one solution that is regular at
+infinity; see [Unbounded domains](axes.md#unbounded-domains) for this and for
+the choice of `scale`.
 
 ## Singularity handling
 

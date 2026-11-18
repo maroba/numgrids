@@ -28,7 +28,10 @@ print(grid.faces.keys())
 
 The key format is `"{axis_index}_{side}"`, where `side` is either `"low"`
 (first point along that axis) or `"high"` (last point). Periodic axes have
-no boundary faces and are automatically excluded. For named axes, the key
+no boundary faces and are automatically excluded; so are ends that are not a
+boundary, such as the ends at infinity of
+[unbounded axes](axes.md#unbounded-domains), where no condition is imposed.
+For named axes, the key
 `"{name}_{side}"` works as well:
 
 ```python
@@ -47,7 +50,8 @@ Each `BoundaryFace` exposes:
 ## Compact boundary condition specifications
 
 Most of the time you do not need to construct `DirichletBC` objects by
-hand. [`Operator.solve`](operators.md), `Operator.eig`, `evolve` and
+hand. [`Operator.solve`](operators.md), `Operator.eig`,
+[`solve_nonlinear`](nonlinear.md), [`evolve`](time-evolution.md) and
 `apply_bcs(..., grid=grid)` accept compact specifications:
 
 ```python
@@ -145,6 +149,15 @@ Calling `apply()` raises `NotImplementedError`.
 
 ```python
 L, rhs = bc.apply_to_system(L, rhs)
+```
+
+The coefficients `a` and `b` may vary along the face. Like the value, they
+can be arrays matching the face or functions of the face coordinates. An
+example is Newton's law of cooling, $h\,u + k\,\partial u/\partial n = h\,u_\infty$,
+at a surface whose conductivity $k$ depends on the position:
+
+```python
+bcs = {"y_high": Robin(2.0, lambda c: 1 + c[0], 0.0)}      # k = 1 + x along the face y = y_max
 ```
 
 ## Applying multiple BCs at once
